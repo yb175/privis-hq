@@ -16,6 +16,7 @@ import type {
   ExecuteResponseMessage,
 } from "../types/index.js";
 import { collectBrowserState, extractElements } from "../utils/dom-extractor.js";
+import { isPrivisMessage } from "../utils/messaging.js";
 
 /**
  * Capture Layer content-script half: visible elements + browser state.
@@ -34,11 +35,24 @@ const localValues: Record<string, string> = {};
  * @param target Element ID or CSS selector
  */
 export function resolveTarget(target: string): HTMLElement | null {
-  return (
-    document.getElementById(target) ??
-    document.querySelector<HTMLElement>(target) ??
-    document.querySelector<HTMLElement>(`[data-privis-id="${CSS.escape(target)}"]`)
-  );
+  const byId = document.getElementById(target);
+  if (byId) return byId;
+
+  let bySelector: HTMLElement | null = null;
+  try {
+    bySelector = document.querySelector<HTMLElement>(target);
+  } catch {
+    // Invalid CSS selector: fall through to the attribute lookup instead of throwing.
+  }
+  if (bySelector) return bySelector;
+
+  // data-privis-id carries the element_id (DOM id, or the generated id for
+  // id-less controls once the Sanitizer exposes it). Unknown values simply
+  // don't match; no selector parsing, so no escaping concerns.
+  for (const el of document.querySelectorAll<HTMLElement>("[data-privis-id]")) {
+    if (el.getAttribute("data-privis-id") === target) return el;
+  }
+  return null;
 }
 
 // Stable per-category placeholder tokens produced by the Sanitizer (EMAIL_1, PAN_1, ...).
@@ -62,8 +76,10 @@ export async function executeAction(action: Action): Promise<ActionResult> {
       if (PLACEHOLDER_RE.test(value)) {
         // Substitute the placeholder with the real value only when the Sanitizer
         // already stored one for this element; otherwise type what was sent.
-        const real = el.id ? localValues[el.id] : undefined;
-        if (real !== undefined) value = real;
+        const elementId = el.id || el.dataset.privisId || "";
+        // Own-property check so page ids like "constructor"/"toString" never
+        // resolve to inherited Object.prototype members.
+        if (Object.hasOwn(localValues, elementId)) value = localValues[elementId];
       }
       if (!("value" in el)) {
         return { ok: false, error: `Cannot type into non-form element: ${action.target}` };
@@ -81,11 +97,9 @@ export async function executeAction(action: Action): Promise<ActionResult> {
 }
 
 function isExecuteRequest(message: unknown): message is ExecuteRequestMessage {
-  return (
-    typeof message === "object" &&
-    message !== null &&
-    (message as { type?: unknown }).type === "execute.request"
-  );
+  // Reuse the shared validator: rejects malformed execute messages (missing
+  // payload, non-array/malformed actions) before payload.actions is touched.
+  return isPrivisMessage(message) && message.type === "execute.request";
 }
 
 async function executeActions(actions: Action[]): Promise<ExecuteResponseMessage> {
