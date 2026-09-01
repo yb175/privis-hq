@@ -23,17 +23,30 @@ PRIVIS is a browser extension that lets an AI agent operate a web page without e
 ## Development
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 npm install
 
-# Build TypeScript to dist/
+# 2. Typecheck (no emit)
+npm run typecheck
+
+# 3. Compile TypeScript to dist/
 npm run build
 
 # Or watch mode
 npm run watch
-
-# Load as unpacked MV3 extension in chrome://extensions pointing to this folder
 ```
+
+### Load the extension in Chrome
+
+1. Run `npm install && npm run build` (a fresh clone has no `dist/` yet).
+2. Open `chrome://extensions`, enable **Developer mode**.
+3. Click **Load unpacked** and select **this repository root** — `manifest.json` lives here and points at the compiled `dist/` output.
+4. Chrome 91+ loads the background service worker as an ES module (`"type": "module"`).
+
+Notes:
+
+- `dist/` is git-ignored by design; it is a build artifact, never committed. Load unpacked always targets the repo root, never `dist/` itself.
+- Output is plain `tsc` — no bundler. Modules currently only use `import type` (erased at compile time), so each emitted file is self-contained. Any runtime cross-file imports between content scripts will need a bundler or dynamic `import()`; that comes with the capture pipeline (issues #3/#4).
 
 ## Contributing
 

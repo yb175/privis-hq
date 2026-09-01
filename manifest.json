@@ -6,7 +6,8 @@
   "permissions": ["activeTab", "tabs", "scripting"],
   "host_permissions": ["<all_urls>"],
   "background": {
-    "service_worker": "background/service-worker.js"
+    "service_worker": "dist/background/service-worker.js",
+    "type": "module"
   },
   "action": {
     "default_title": "PRIVIS: run one step"
@@ -15,9 +16,9 @@
     {
       "matches": ["<all_urls>"],
       "js": [
-        "utils/dom-extractor.js",
-        "privacy/sanitizer/structural-redact.js",
-        "content/capture-content.js"
+        "dist/utils/dom-extractor.js",
+        "dist/privacy/sanitizer/structural-redact.js",
+        "dist/content/capture-content.js"
       ]
     }
   ]
