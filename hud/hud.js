@@ -198,6 +198,9 @@ async function runLivePipeline() {
       return;
     }
 
+    // Bring the target tab to the front
+    await chrome.tabs.update(targetTab.id, { active: true });
+
     PIPELINE.replaceChildren(el("p", "hud-idle", `Running live pipeline on Tab ${targetTab.id} (${targetTab.title || targetTab.url})…`));
 
     const response = await chrome.runtime.sendMessage({
