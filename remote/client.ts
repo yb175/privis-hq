@@ -5,7 +5,7 @@
 // - Sends ONLY sanitized screenshot and tokenized DOM context to remote server.
 // - Returns planned actions array from remote agent.
 
-import type { Action, SanitizedPackage } from "../types/index.js";
+import type { Action, ElementMeta, SanitizedPackage } from "../types/index.js";
 
 // Last-line defense: the Sanitizer should have replaced these before anything
 // reaches this file. If they appear, something upstream broke — refuse to send.
@@ -64,6 +64,34 @@ export async function sendSanitized(pkg: SanitizedPackage): Promise<Action[]> {
 
   // v0 stub: no network call yet. A real VLM agent plugs in here — it would
   // POST { goal, sanitizedScreenshot, sanitizedContext } and parse Action[]
-  // from the response. Until then, return the fixture action.
-  return [{ type: "click", target: "#submit" }];
+  // from the response. Until then, derive a sensible action from the real
+  // sanitized DOM so the demo behaves correctly on any tab.
+  return stubPlan(pkg.sanitizedContext.elements);
+}
+
+/**
+ * Picks the first real clickable control from the sanitized DOM. No AI — just
+ * the same kind of rule a lightweight agent would use: click a submit button,
+ * a regular button, or a button/link role in document order.
+ */
+function stubPlan(elements: ElementMeta[]): Action[] {
+  const isClickable = (el: ElementMeta): boolean =>
+    el.tag === "button" ||
+    el.role === "button" ||
+    el.role === "link" ||
+    (el.tag === "input" && (el.type === "submit" || el.type === "button"));
+
+  const target = elements.find(isClickable);
+  if (!target) return [];
+  return [{ type: "click", target: selectorFor(target) }];
+}
+
+/**
+ * Builds a resolver-friendly target. Real DOM ids resolve via getElementById;
+ * generated ids (el-<tag>-<n>) fall back to a tag/attribute CSS selector.
+ */
+function selectorFor(el: ElementMeta): string {
+  if (!/^el-/.test(el.element_id)) return `#${el.element_id}`;
+  if (el.tag === "input" && el.type) return `input[type="${el.type}"]`;
+  return el.tag;
 }

@@ -90,11 +90,15 @@ body {
 
 .hud-thumbs { display: flex; gap: 8px; }
 .hud-thumb { flex: 1; text-align: center; }
-.hud-thumb canvas {
+.hud-thumb canvas,
+.hud-thumb img {
   width: 100%;
+  max-height: 130px;
+  object-fit: contain;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: #111;
+  display: block;
 }
 .hud-thumb figcaption { font-size: 10px; margin-top: 3px; }
 
@@ -125,6 +129,30 @@ body {
   padding: 1px 5px;
   border-radius: 4px;
   color: var(--ink);
+}
+
+.hud-map {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 11px;
+}
+.hud-map th,
+.hud-map td {
+  text-align: left;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  word-break: break-all;
+}
+.hud-map th {
+  background: var(--panel-2);
+  color: var(--ink);
+  font-weight: 600;
+}
+.hud-map td.hud-mono {
+  color: var(--accent);
+  font-weight: 600;
+  background: transparent;
 }
 
 .hud-footer {
