@@ -7,6 +7,57 @@ function isObject(val: unknown): val is Record<string, unknown> {
   return typeof val === "object" && val !== null;
 }
 
+function isBoundingBox(val: unknown): boolean {
+  return (
+    Array.isArray(val) &&
+    val.length === 4 &&
+    val.every((n) => typeof n === "number" && !Number.isNaN(n))
+  );
+}
+
+function isElementMeta(val: unknown): boolean {
+  if (!isObject(val)) return false;
+  return (
+    typeof val.element_id === "string" &&
+    typeof val.tag === "string" &&
+    (val.type === null || typeof val.type === "string") &&
+    (val.role === null || typeof val.role === "string") &&
+    (val.label === null || typeof val.label === "string") &&
+    typeof val.text === "string" &&
+    isBoundingBox(val.bbox)
+  );
+}
+
+function isBrowserState(val: unknown): boolean {
+  if (!isObject(val)) return false;
+  return (
+    typeof val.url === "string" &&
+    typeof val.title === "string" &&
+    isObject(val.viewport) &&
+    typeof val.viewport.w === "number" &&
+    !Number.isNaN(val.viewport.w) &&
+    typeof val.viewport.h === "number" &&
+    !Number.isNaN(val.viewport.h)
+  );
+}
+
+function isAction(val: unknown): boolean {
+  if (!isObject(val)) return false;
+  return (
+    typeof val.type === "string" &&
+    typeof val.target === "string" &&
+    (val.value === undefined || typeof val.value === "string")
+  );
+}
+
+function isActionResult(val: unknown): boolean {
+  if (!isObject(val)) return false;
+  return (
+    typeof val.ok === "boolean" &&
+    (val.error === undefined || typeof val.error === "string")
+  );
+}
+
 /**
  * Type guard to validate whether an unknown value is a valid PrivisMessage and has valid payloads.
  */
@@ -30,23 +81,19 @@ export function isPrivisMessage(message: unknown): message is PrivisMessage {
       const payload = candidate.payload;
       return (
         Array.isArray(payload.elements) &&
-        isObject(payload.browserState) &&
-        typeof payload.browserState.url === "string" &&
-        typeof payload.browserState.title === "string" &&
-        isObject(payload.browserState.viewport) &&
-        typeof payload.browserState.viewport.w === "number" &&
-        typeof payload.browserState.viewport.h === "number"
+        payload.elements.every(isElementMeta) &&
+        isBrowserState(payload.browserState)
       );
     }
 
     case "execute.request": {
       if (!isObject(candidate.payload)) return false;
-      return Array.isArray(candidate.payload.actions);
+      return Array.isArray(candidate.payload.actions) && candidate.payload.actions.every(isAction);
     }
 
     case "execute.response": {
       if (!isObject(candidate.payload)) return false;
-      return Array.isArray(candidate.payload.results);
+      return Array.isArray(candidate.payload.results) && candidate.payload.results.every(isActionResult);
     }
 
     default:
