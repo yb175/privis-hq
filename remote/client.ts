@@ -10,7 +10,7 @@ import type { Action, SanitizedPackage } from "../types/index.js";
 // Last-line defense: the Sanitizer should have replaced these before anything
 // reaches this file. If they appear, something upstream broke — refuse to send.
 const PII_PATTERNS: { name: string; re: RegExp }[] = [
-  { name: "PAN", re: /\b[A-Z]{5}[0-9]{4}[A-Z]\b/ },
+  { name: "PAN", re: /[a-z]{5}[0-9]{4}[a-z]/i },
   { name: "AADHAAR", re: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/ },
   { name: "EMAIL", re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/ },
 ];
@@ -39,23 +39,17 @@ function assertSanitized(pkg: SanitizedPackage): void {
     throw new Error("Refusing to send: missing sanitizedContext");
   }
 
-  // Scan every string that would leave the device for PII.
-  const texts = [
-    pkg.goal,
-    pkg.sanitizedContext.browserState.url,
-    pkg.sanitizedContext.browserState.title,
-    ...pkg.sanitizedContext.elements.flatMap((el) => [
-      el.text,
-      el.label ?? "",
-    ]),
-  ];
-  for (const text of texts) {
-    for (const { name, re } of PII_PATTERNS) {
-      if (re.test(text)) {
-        throw new Error(
-          `Refusing to send: ${name} pattern found in sanitized package — Sanitizer leaked`
-        );
-      }
+  // Scan the full serialized context (every element field, browser state, goal)
+  // so no unscanned metadata field can carry PII across the wire.
+  const serialized = JSON.stringify({
+    goal: pkg.goal,
+    ...pkg.sanitizedContext,
+  });
+  for (const { name, re } of PII_PATTERNS) {
+    if (re.test(serialized)) {
+      throw new Error(
+        `Refusing to send: ${name} pattern found in sanitized package — Sanitizer leaked`
+      );
     }
   }
 }
