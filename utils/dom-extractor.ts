@@ -27,7 +27,7 @@ function elementId(el: Element): string {
 
 function isVisible(el: Element): boolean {
   const rect = el.getBoundingClientRect();
-  if (rect.width === 0 && rect.height === 0) return false;
+  if (rect.width === 0 || rect.height === 0) return false;
   const style = getComputedStyle(el);
   return style.display !== "none" && style.visibility !== "hidden";
 }
@@ -54,8 +54,13 @@ export function labelFor(el: HTMLElement): string | null {
   if (wrapped?.textContent?.trim()) return wrapped.textContent.trim();
   const labelledby = el.getAttribute("aria-labelledby");
   if (labelledby) {
-    const ref = document.getElementById(labelledby);
-    if (ref?.textContent?.trim()) return ref.textContent.trim();
+    const text = labelledby
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
+      .join(" ")
+      .trim();
+    if (text) return text;
   }
   return (
     el.getAttribute("aria-label") ??
@@ -74,13 +79,23 @@ export function extractElements(): ElementMeta[] {
     if (!isVisible(el)) continue;
     const rect = el.getBoundingClientRect();
     const input = el as HTMLInputElement;
+    // Password values are never extracted (contract rule); other controls
+    // report .value so DOM detection can see what the field holds.
+    const isControl =
+      el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT";
+    const text =
+      el.tagName === "INPUT" && input.type === "password"
+        ? ""
+        : isControl
+          ? (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
+          : (el.textContent ?? "").trim();
     out.push({
       element_id: elementId(el),
       tag: el.tagName.toLowerCase(),
       type: el.tagName === "INPUT" ? (input.type || null) : null,
       role: el.getAttribute("role"),
       label: labelFor(el),
-      text: (el.textContent ?? "").trim(),
+      text,
       bbox: roundBBox(rect),
     });
   }
