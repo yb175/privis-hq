@@ -9,6 +9,7 @@
 // 5. Local Executor: Execute actions locally on DOM.
 
 import type { CapturePackage, StepResult } from "../types/index.js";
+import { takeScreenshot } from "../utils/screenshot.js";
 
 /**
  * Coordinates tab screenshot and DOM extraction from content script.
@@ -29,4 +30,14 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
   throw new Error("Not implemented");
 }
 
-// TODO: Extension click and message listener hooks
+// Thin manual-test hook: { type: "PRIVIS_CAPTURE_SCREENSHOT", tabId } → { dataUrl }.
+// In-memory only; full runStep pipeline lands in its own issue.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "PRIVIS_CAPTURE_SCREENSHOT" && typeof msg.tabId === "number") {
+    takeScreenshot(msg.tabId)
+      .then((r) => sendResponse(r))
+      .catch((err: unknown) => sendResponse({ error: err instanceof Error ? err.message : String(err) }));
+    return true; // async response
+  }
+  return false;
+});
