@@ -1,26 +1,57 @@
 // utils/messaging.ts
 // Typed message passing helpers between background service worker and content scripts
 
-import type { PrivisMessage, PrivisMessageType } from "../types/index.js";
+import type { PrivisMessage } from "../types/index.js";
 
-const VALID_MESSAGE_TYPES: ReadonlySet<PrivisMessageType> = new Set<PrivisMessageType>([
-  "capture.request",
-  "capture.response",
-  "execute.request",
-  "execute.response",
-  "ping",
-  "pong",
-]);
+function isObject(val: unknown): val is Record<string, unknown> {
+  return typeof val === "object" && val !== null;
+}
 
 /**
- * Type guard to validate whether an unknown value is a valid PrivisMessage.
+ * Type guard to validate whether an unknown value is a valid PrivisMessage and has valid payloads.
  */
 export function isPrivisMessage(message: unknown): message is PrivisMessage {
-  if (!message || typeof message !== "object") {
+  if (!isObject(message)) {
     return false;
   }
-  const candidate = message as { type?: unknown };
-  return typeof candidate.type === "string" && VALID_MESSAGE_TYPES.has(candidate.type as PrivisMessageType);
+  const candidate = message as { type?: unknown; payload?: unknown };
+  if (typeof candidate.type !== "string") {
+    return false;
+  }
+
+  switch (candidate.type) {
+    case "ping":
+    case "pong":
+    case "capture.request":
+      return true;
+
+    case "capture.response": {
+      if (!isObject(candidate.payload)) return false;
+      const payload = candidate.payload;
+      return (
+        Array.isArray(payload.elements) &&
+        isObject(payload.browserState) &&
+        typeof payload.browserState.url === "string" &&
+        typeof payload.browserState.title === "string" &&
+        isObject(payload.browserState.viewport) &&
+        typeof payload.browserState.viewport.w === "number" &&
+        typeof payload.browserState.viewport.h === "number"
+      );
+    }
+
+    case "execute.request": {
+      if (!isObject(candidate.payload)) return false;
+      return Array.isArray(candidate.payload.actions);
+    }
+
+    case "execute.response": {
+      if (!isObject(candidate.payload)) return false;
+      return Array.isArray(candidate.payload.results);
+    }
+
+    default:
+      return false;
+  }
 }
 
 /**
