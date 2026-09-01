@@ -176,14 +176,62 @@ async function playFixture() {
   }
 }
 
+const RUN_LIVE_BTN = document.getElementById("run-live");
+
+async function runLivePipeline() {
+  if (RUN_LIVE_BTN) RUN_LIVE_BTN.disabled = true;
+  PLAY_BTN.disabled = true;
+  PIPELINE.replaceChildren(el("p", "hud-idle", "Finding active tab…"));
+
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    let targetTab = tabs[0];
+    if (!targetTab || !targetTab.id || targetTab.url?.startsWith("chrome://")) {
+      const demoTabs = await chrome.tabs.query({ url: "http://localhost:8000/*" });
+      targetTab = demoTabs[0];
+    }
+
+    if (!targetTab || !targetTab.id) {
+      PIPELINE.replaceChildren(
+        el("p", "hud-idle", "No target tab found. Please open http://localhost:8000 in a tab.")
+      );
+      return;
+    }
+
+    PIPELINE.replaceChildren(el("p", "hud-idle", `Running live pipeline on Tab ${targetTab.id} (${targetTab.title || targetTab.url})…`));
+
+    const response = await chrome.runtime.sendMessage({
+      type: "privis.runStep",
+      tabId: targetTab.id,
+      goal: "Submit the employee portal form",
+    });
+
+    if (response?.error) {
+      PIPELINE.append(el("p", "hud-idle", `Error: ${response.error}`));
+    }
+  } catch (err) {
+    PIPELINE.replaceChildren(
+      el("p", "hud-idle", `Pipeline failed: ${err instanceof Error ? err.message : String(err)}`)
+    );
+  } finally {
+    if (RUN_LIVE_BTN) RUN_LIVE_BTN.disabled = false;
+    PLAY_BTN.disabled = false;
+  }
+}
+
+if (RUN_LIVE_BTN) {
+  RUN_LIVE_BTN.addEventListener("click", runLivePipeline);
+}
 PLAY_BTN.addEventListener("click", playFixture);
 
-// Live mode: when the orchestrator (#15) starts broadcasting step events from
-// the service worker, they land here and paint the same six-step panel.
-// detail is rendered with textContent, never innerHTML — the orchestrator must
-// send a sanitized summary; page-derived strings must never inject markup.
+// Live mode step listener
+const existingSteps = new Set();
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "hud.step" && typeof msg.step === "number" && STEPS[msg.step - 1]) {
+    // Clear initial idle message if first step arrives
+    const idle = PIPELINE.querySelector(".hud-idle");
+    if (idle) idle.remove();
+
     addStep(msg.step, STEPS[msg.step - 1], (b) => {
       b.append(el("p", null, typeof msg.detail === "string" ? msg.detail : ""));
     });

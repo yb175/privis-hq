@@ -73,13 +73,35 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
   );
 }
 
+// Helper to broadcast step updates to the popup HUD if open
+function broadcastHudStep(step: number, detail: string) {
+  try {
+    chrome.runtime.sendMessage({ type: "hud.step", step, detail }).catch(() => {
+      // HUD popup might be closed; safe to ignore
+    });
+  } catch {
+    // Ignore if no receiver
+  }
+}
+
 /**
  * Executes a full step of the privacy-preserving agent loop.
  * @param tabId Target tab ID
  * @param goal Human prompt or task instruction
  */
 export async function runStep(tabId: number, goal: string): Promise<StepResult> {
+  broadcastHudStep(1, `Capture Layer: Snapshotting tab ${tabId} and extracting DOM elements.`);
   const pkg = await capturePackage(tabId);
+  broadcastHudStep(
+    1,
+    `Capture Layer: Extracted ${pkg.elements.length} DOM elements and in-memory screenshot.`
+  );
+
+  // Vision Engine Detections
+  broadcastHudStep(
+    2,
+    `Local Privacy Vision Engine: Found ${pkg.detections.length} sensitive items (${pkg.detections.map((d) => d.category).join(", ")}).`
+  );
 
   // Sanitizer: structural placeholders + in-memory visual redaction.
   const { sanitized } = applyPlaceholders(pkg.elements, pkg.detections);
@@ -88,9 +110,14 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
     pkg.detections,
     pkg.browserState.viewport
   );
+  broadcastHudStep(
+    3,
+    `Sanitizer: Pixels redacted on canvas. Text values replaced with tokens (EMAIL_1, PAN_1, etc.).`
+  );
 
   // Policy Gate: never call the remote unless the package is allowed out.
   const gate = decide({ detections: pkg.detections, browserState: pkg.browserState });
+  broadcastHudStep(4, `Policy Gate: Decision is [${gate.decision.toUpperCase()}] — ${gate.reason}`);
   if (gate.decision !== "allow") {
     return { decision: gate.decision, reason: gate.reason };
   }
@@ -100,14 +127,22 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
   // only `text`, so strip the user-controlled `label` (accessible label /
   // placeholder / title) to keep any raw value out of the remote context.
   const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
+  broadcastHudStep(5, `Remote Agent: Sending sanitized package with goal "${goal}"...`);
   const actions: Action[] = await sendSanitized({
     goal,
     sanitizedScreenshot,
     sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
   });
+  broadcastHudStep(5, `Remote Agent: Received ${actions.length} action(s): ${JSON.stringify(actions)}`);
 
   // Local Executor: apply the returned actions on the real page DOM.
+  broadcastHudStep(6, `Local Executor: Resolving and applying actions on real DOM.`);
   const results = await applyActions(tabId, actions);
+  broadcastHudStep(
+    6,
+    `Local Executor: Action execution finished with status: ${results.map((r) => (r.ok ? "OK" : r.error)).join(", ")}`
+  );
+
   return { decision: gate.decision, reason: gate.reason, actions: results };
 }
 
@@ -122,7 +157,18 @@ chrome.action.onClicked.addListener((tab) => {
   });
 });
 
-// Manual-test hook: { type: "privis.runStep", tabId, goal? } → StepResult.
+// Expose on self and globalThis for DevTools service worker console testing
+const privisAPI = {
+  takeScreenshot,
+  capturePackage,
+  runStep,
+};
+(globalThis as unknown as { privis: unknown }).privis = privisAPI;
+if (typeof self !== "undefined") {
+  (self as unknown as { privis: unknown }).privis = privisAPI;
+}
+
+
 // Plus the pre-existing { type: "PRIVIS_CAPTURE_SCREENSHOT", tabId } → { dataUrl }.
 // Both are in-memory only.
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
