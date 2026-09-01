@@ -3,21 +3,74 @@
 //
 // Pipeline Flow:
 // 1. Capture Layer: Tab screenshot (memory-only) + Content script DOM package.
-// 2. Policy Gate: Evaluate risk (Allow / Human Approval / Block).
-// 3. Sanitizer: Redact screenshot pixels via OffscreenCanvas + swap structural DOM placeholders.
-// 4. Remote Agent: Transmit sanitized package only.
-// 5. Local Executor: Execute actions locally on DOM.
+// 2. Local Privacy Vision Engine (DOM path): detectSensitive on extracted elements.
+// 3. Sanitizer: structural placeholders (applyPlaceholders) + pixel redaction (redactVisual).
+// 4. Policy Gate: Evaluate risk (Allow / Human Approval / Block).
+// 5. Remote Agent: Transmit sanitized package only (never called unless the gate allows).
+// 6. Local Executor: Execute actions locally on DOM.
 
-import type { CapturePackage, StepResult } from "../types/index.js";
+import type {
+  Action,
+  CapturePackage,
+  CaptureResponseMessage,
+  ElementMeta,
+  StepResult,
+} from "../types/index.js";
 import { takeScreenshot } from "../utils/screenshot.js";
+import { sendToContent } from "../utils/messaging.js";
+import {
+  detectSensitive,
+  applyPlaceholders,
+} from "../privacy/sanitizer/structural-redact.js";
+import { redactVisual } from "../privacy/sanitizer/visual-redact.js";
+import { decide } from "../privacy/policy-gate/policy-gate.js";
+import { sendSanitized } from "../remote/client.js";
+import { applyActions } from "../executor/local-executor.js";
+
+// Toolbar clicks carry no typed goal; run with the demo default.
+const DEFAULT_GOAL = "Submit the employee portal form";
 
 /**
- * Coordinates tab screenshot and DOM extraction from content script.
+ * Coordinates tab screenshot and DOM extraction from content script,
+ * then fuses DOM detections (Local Privacy Vision Engine, DOM path).
  * @param tabId Target tab ID
  */
+// Snapshot the content-script DOM package for a tab.
+function domPackage(tabId: number): Promise<CaptureResponseMessage> {
+  return sendToContent<CaptureResponseMessage>(tabId, { type: "capture.request" });
+}
+
+// Cheap, deterministic fingerprint of the DOM package. Element ids are stable
+// across extractions (the content script keys them by DOM node), so equality
+// here means the page did not change between snapshots.
+function packageFingerprint(dom: CaptureResponseMessage): string {
+  return JSON.stringify(dom.payload);
+}
+
 export async function capturePackage(tabId: number): Promise<CapturePackage> {
-  // TODO: Implement in chunks
-  throw new Error("Not implemented");
+  const MAX_TRIES = 3;
+  for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
+    // Snapshot the DOM first, capture the screenshot of that same state, then
+    // re-snapshot the DOM and require it to be unchanged. This guarantees the
+    // detections always describe the pixels we redact — never detections from
+    // one page state applied to another state's screenshot.
+    const before = await domPackage(tabId);
+    const { dataUrl } = await takeScreenshot(tabId);
+    const after = await domPackage(tabId);
+    if (packageFingerprint(before) === packageFingerprint(after)) {
+      const { elements, browserState } = before.payload;
+      return {
+        tabId,
+        dataUrl,
+        elements,
+        detections: detectSensitive(elements),
+        browserState,
+      };
+    }
+  }
+  throw new Error(
+    "capturePackage: page state kept changing between DOM snapshot and screenshot"
+  );
 }
 
 /**
@@ -26,17 +79,68 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
  * @param goal Human prompt or task instruction
  */
 export async function runStep(tabId: number, goal: string): Promise<StepResult> {
-  // TODO: Implement in chunks
-  throw new Error("Not implemented");
+  const pkg = await capturePackage(tabId);
+
+  // Sanitizer: structural placeholders + in-memory visual redaction.
+  const { sanitized } = applyPlaceholders(pkg.elements, pkg.detections);
+  const sanitizedScreenshot = await redactVisual(
+    pkg.dataUrl,
+    pkg.detections,
+    pkg.browserState.viewport
+  );
+
+  // Policy Gate: never call the remote unless the package is allowed out.
+  const gate = decide({ detections: pkg.detections, browserState: pkg.browserState });
+  if (gate.decision !== "allow") {
+    return { decision: gate.decision, reason: gate.reason };
+  }
+
+  // Remote Agent: only the sanitized package crosses the wire — never the raw
+  // dataUrl, never the element_id -> real value map. applyPlaceholders swaps
+  // only `text`, so strip the user-controlled `label` (accessible label /
+  // placeholder / title) to keep any raw value out of the remote context.
+  const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
+  const actions: Action[] = await sendSanitized({
+    goal,
+    sanitizedScreenshot,
+    sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
+  });
+
+  // Local Executor: apply the returned actions on the real page DOM.
+  const results = await applyActions(tabId, actions);
+  return { decision: gate.decision, reason: gate.reason, actions: results };
 }
 
-// Thin manual-test hook: { type: "PRIVIS_CAPTURE_SCREENSHOT", tabId } → { dataUrl }.
-// In-memory only; full runStep pipeline lands in its own issue.
+// Toolbar click → one full step on the active tab, default goal.
+chrome.action.onClicked.addListener((tab) => {
+  if (typeof tab.id !== "number") return;
+  runStep(tab.id, DEFAULT_GOAL).catch((err: unknown) => {
+    console.error(
+      "PRIVIS runStep (toolbar) failed:",
+      err instanceof Error ? err.message : String(err)
+    );
+  });
+});
+
+// Manual-test hook: { type: "privis.runStep", tabId, goal? } → StepResult.
+// Plus the pre-existing { type: "PRIVIS_CAPTURE_SCREENSHOT", tabId } → { dataUrl }.
+// Both are in-memory only.
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "privis.runStep" && typeof msg.tabId === "number") {
+    const goal = typeof msg.goal === "string" && msg.goal ? msg.goal : DEFAULT_GOAL;
+    runStep(msg.tabId, goal)
+      .then(sendResponse)
+      .catch((err: unknown) =>
+        sendResponse({ error: err instanceof Error ? err.message : String(err) })
+      );
+    return true; // async response
+  }
   if (msg?.type === "PRIVIS_CAPTURE_SCREENSHOT" && typeof msg.tabId === "number") {
     takeScreenshot(msg.tabId)
       .then((r) => sendResponse(r))
-      .catch((err: unknown) => sendResponse({ error: err instanceof Error ? err.message : String(err) }));
+      .catch((err: unknown) =>
+        sendResponse({ error: err instanceof Error ? err.message : String(err) })
+      );
     return true; // async response
   }
   return false;
