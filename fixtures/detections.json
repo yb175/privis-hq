@@ -1,0 +1,58 @@
+[
+  {
+    "element_id": "email",
+    "category": "EMAIL",
+    "bbox": [320, 96, 240, 28],
+    "confidence": 0.99,
+    "source": "dom"
+  },
+  {
+    "element_id": "pan",
+    "category": "PAN",
+    "bbox": [320, 148, 240, 28],
+    "confidence": 0.99,
+    "source": "dom"
+  },
+  {
+    "element_id": "aadhaar",
+    "category": "AADHAAR",
+    "bbox": [320, 200, 240, 28],
+    "confidence": 0.99,
+    "source": "dom"
+  },
+  {
+    "element_id": "amount",
+    "category": "AMOUNT",
+    "bbox": [320, 252, 240, 28],
+    "confidence": 0.98,
+    "source": "dom"
+  },
+  {
+    "element_id": "phone",
+    "category": "PHONE",
+    "bbox": [320, 304, 240, 28],
+    "confidence": 0.99,
+    "source": "dom"
+  },
+  {
+    "element_id": "name",
+    "category": "NAME",
+    "bbox": [320, 356, 240, 28],
+    "confidence": 0.97,
+    "source": "dom"
+  },
+  {
+    "element_id": "pwd",
+    "category": "PASSWORD",
+    "bbox": [320, 408, 240, 28],
+    "confidence": 0.99,
+    "source": "dom"
+  },
+  {
+    "element_id": "avatar",
+    "category": "FACE",
+    "bbox": [920, 96, 64, 64],
+    "confidence": 0.88,
+    "source": "dom"
+  }
+]

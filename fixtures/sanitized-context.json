@@ -1,0 +1,90 @@
+{
+  "elements": [
+    {
+      "element_id": "email",
+      "tag": "input",
+      "type": "email",
+      "role": "textbox",
+      "label": "Work email",
+      "text": "EMAIL_1",
+      "bbox": [320, 96, 240, 28]
+    },
+    {
+      "element_id": "pan",
+      "tag": "input",
+      "type": "text",
+      "role": "textbox",
+      "label": "PAN",
+      "text": "PAN_1",
+      "bbox": [320, 148, 240, 28]
+    },
+    {
+      "element_id": "aadhaar",
+      "tag": "input",
+      "type": "text",
+      "role": "textbox",
+      "label": "Aadhaar number",
+      "text": "AADHAAR_1",
+      "bbox": [320, 200, 240, 28]
+    },
+    {
+      "element_id": "amount",
+      "tag": "input",
+      "type": "text",
+      "role": "textbox",
+      "label": "Amount (INR)",
+      "text": "AMOUNT_1",
+      "bbox": [320, 252, 240, 28]
+    },
+    {
+      "element_id": "phone",
+      "tag": "input",
+      "type": "tel",
+      "role": "textbox",
+      "label": "Mobile number",
+      "text": "PHONE_1",
+      "bbox": [320, 304, 240, 28]
+    },
+    {
+      "element_id": "name",
+      "tag": "input",
+      "type": "text",
+      "role": "textbox",
+      "label": "Full name",
+      "text": "NAME_1",
+      "bbox": [320, 356, 240, 28]
+    },
+    {
+      "element_id": "pwd",
+      "tag": "input",
+      "type": "password",
+      "role": null,
+      "label": "Password",
+      "text": "",
+      "bbox": [320, 408, 240, 28]
+    },
+    {
+      "element_id": "avatar",
+      "tag": "img",
+      "type": null,
+      "role": null,
+      "label": null,
+      "text": "",
+      "bbox": [920, 96, 64, 64]
+    },
+    {
+      "element_id": "submit",
+      "tag": "button",
+      "type": "submit",
+      "role": "button",
+      "label": "Submit",
+      "text": "Submit",
+      "bbox": [320, 470, 240, 36]
+    }
+  ],
+  "browserState": {
+    "url": "https://hr.internal.example/employee-portal",
+    "title": "Employee Portal — Reimbursement",
+    "viewport": { "w": 1280, "h": 800 }
+  }
+}
