@@ -1,0 +1,15 @@
+{
+  "name": "privacy-browser-agent",
+  "version": "0.1.0",
+  "description": "PRIVIS: On-device Visual Perception for Light-weight Browser Agents",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.2.7",
+    "typescript": "^7.0.2"
+  }
+}

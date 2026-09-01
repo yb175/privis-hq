@@ -5,12 +5,20 @@
   "version": "0.1.0",
   "permissions": ["activeTab", "tabs", "scripting"],
   "host_permissions": ["<all_urls>"],
-  "background": { "service_worker": "background/service-worker.js" },
-  "action": { "default_title": "PRIVIS: run one step" },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "action": {
+    "default_title": "PRIVIS: run one step"
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["utils/dom-extractor.js", "privacy/sanitizer/structural-redact.js", "content/capture-content.js"]
+      "js": [
+        "utils/dom-extractor.js",
+        "privacy/sanitizer/structural-redact.js",
+        "content/capture-content.js"
+      ]
     }
   ]
 }

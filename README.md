@@ -20,11 +20,19 @@ PRIVIS is a browser extension that lets an AI agent operate a web page without e
 5. **Remote Agent** — receives only sanitized screenshot + sanitized JSON + goal; returns actions like `{ "type": "click", "target": "#submit" }`.
 6. **Local Executor** — content script resolves targets and clicks/types on the real page, then loops back to Capture.
 
-## Run (later)
+## Development
 
 ```bash
-# Load as unpacked MV3 extension in chrome://extensions (placeholder)
-# Remote agent server: TBD
+# Install dependencies
+npm install
+
+# Build TypeScript to dist/
+npm run build
+
+# Or watch mode
+npm run watch
+
+# Load as unpacked MV3 extension in chrome://extensions pointing to this folder
 ```
 
 ## Contributing

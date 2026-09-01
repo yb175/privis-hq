@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="100%" height="100%">
+  <defs>
+    <style>
+      .box { fill: #1e1e24; stroke: #4f5d75; stroke-width: 2; rx: 8; }
+      .accent-box { fill: #2d3142; stroke: #ef8354; stroke-width: 2; rx: 8; }
+      .gate-box { fill: #2d3142; stroke: #48bfe3; stroke-width: 2; rx: 8; }
+      .remote-box { fill: #2d3142; stroke: #f72585; stroke-width: 2; rx: 8; }
+      .title { font-family: system-ui, sans-serif; font-size: 14px; font-weight: 600; fill: #ffffff; }
+      .sub { font-family: system-ui, sans-serif; font-size: 11px; fill: #bfc0c0; }
+      .arrow { stroke: #ef8354; stroke-width: 2; marker-end: url(#arrowhead); fill: none; }
+      .boundary { stroke: #6c757d; stroke-dasharray: 6,6; fill: none; stroke-width: 1.5; }
+      .boundary-text { font-family: system-ui, sans-serif; font-size: 12px; fill: #adb5bd; font-style: italic; }
+    </style>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#ef8354" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="400" fill="#0f1117" rx="12" />
+
+  <!-- Boundaries -->
+  <rect x="20" y="30" width="580" height="340" class="boundary" rx="8" />
+  <text x="35" y="55" class="boundary-text">On-Device Security Boundary (Local Eyes + Local Eraser)</text>
+
+  <rect x="640" y="30" width="240" height="340" class="boundary" rx="8" />
+  <text x="655" y="55" class="boundary-text">Remote / Cloud Boundary</text>
+
+  <!-- 1. Capture Layer -->
+  <g transform="translate(40, 80)">
+    <rect width="160" height="70" class="box" />
+    <text x="15" y="30" class="title">Capture Layer</text>
+    <text x="15" y="50" class="sub">DOM + In-Memory Screenshot</text>
+  </g>
+
+  <!-- 2. Local Vision / Detection -->
+  <g transform="translate(240, 80)">
+    <rect width="160" height="70" class="accent-box" />
+    <text x="15" y="30" class="title">Detection Engine</text>
+    <text x="15" y="50" class="sub">DOM Rules / Vision boxes</text>
+  </g>
+
+  <!-- 3. Sanitizer -->
+  <g transform="translate(430, 80)">
+    <rect width="150" height="70" class="accent-box" />
+    <text x="15" y="30" class="title">Sanitizer</text>
+    <text x="15" y="50" class="sub">Visual Mask + Placeholders</text>
+  </g>
+
+  <!-- 4. Policy Gate -->
+  <g transform="translate(430, 240)">
+    <rect width="150" height="70" class="gate-box" />
+    <text x="15" y="30" class="title">Policy Gate</text>
+    <text x="15" y="50" class="sub">Allow / Human / Block</text>
+  </g>
+
+  <!-- 5. Remote Agent -->
+  <g transform="translate(680, 160)">
+    <rect width="160" height="80" class="remote-box" />
+    <text x="15" y="35" class="title">Remote Agent</text>
+    <text x="15" y="55" class="sub">Sanitized View Only</text>
+  </g>
+
+  <!-- 6. Local Executor -->
+  <g transform="translate(40, 240)">
+    <rect width="160" height="70" class="box" />
+    <text x="15" y="30" class="title">Local Executor</text>
+    <text x="15" y="50" class="sub">Resolves &amp; executes actions</text>
+  </g>
+
+  <!-- Connectors -->
+  <path d="M 200 115 L 235 115" class="arrow" />
+  <path d="M 400 115 L 425 115" class="arrow" />
+  <path d="M 505 150 L 505 235" class="arrow" />
+  <path d="M 580 275 L 760 275 L 760 245" class="arrow" />
+  <path d="M 760 160 L 760 130 L 120 130 L 120 235" class="arrow" />
+  <path d="M 120 240 L 120 155" class="arrow" />
+</svg>
