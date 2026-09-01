@@ -10,6 +10,29 @@
  * @param tabId Target tab ID
  */
 export async function takeScreenshot(tabId: number): Promise<{ dataUrl: string }> {
-  // TODO: Implement in chunks
-  throw new Error("Not implemented");
+  // captureVisibleTab works on the active tab of a window; resolve the tab's window.
+  let tab: chrome.tabs.Tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch {
+    throw new Error(`takeScreenshot: tab ${tabId} not found`);
+  }
+
+  if (!tab.active) {
+    throw new Error(
+      `takeScreenshot: tab ${tabId} is not the active tab in its window; captureVisibleTab would capture a different tab`,
+    );
+  }
+  const windowId = tab.windowId;
+
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
+    if (!dataUrl) {
+      throw new Error("takeScreenshot: captureVisibleTab returned empty data");
+    }
+    return { dataUrl };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`takeScreenshot: capture failed: ${detail}`);
+  }
 }
