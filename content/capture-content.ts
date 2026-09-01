@@ -7,7 +7,16 @@
 // - Holds local mapping { element_id: real_value } strictly in memory.
 // - Executes real DOM actions (clicks, keyboard input) on behalf of local executor.
 
-import type { Action, ActionResult } from "../types/index.js";
+import type { Action, ActionResult, BrowserState, ElementMeta } from "../types/index.js";
+import { collectBrowserState, extractElements } from "../utils/dom-extractor.js";
+
+/**
+ * Capture Layer content-script half: visible elements + browser state.
+ * No placeholders, no clicks — those live elsewhere (Sanitizer / Local Executor).
+ */
+export function captureDom(): { elements: ElementMeta[]; browserState: BrowserState } {
+  return { elements: extractElements(), browserState: collectBrowserState() };
+}
 
 // In-memory real value store for placeholder resolution (never sent upstream)
 // let localValues: Record<string, string> = {};
