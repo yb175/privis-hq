@@ -162,8 +162,10 @@ async function playFixture() {
     });
 
     addStep(++n, STEPS[5], (b) => {
-      note(b, `Resolved <span class="hud-mono">${action.target}</span> against the real page DOM and clicked it.
-        Real values (if any) come from the on-device mapping table — never from the network.`);
+      note(b, `Planned action: <span class="hud-mono">${JSON.stringify(action)}</span> —
+        resolve <span class="hud-mono">${action.target}</span> against the real page DOM and click it.
+        <strong>Playback only:</strong> no click happens here; the Local Executor runs it in a live step,
+        typing real values from the on-device mapping table — never from the network.`);
     });
   } catch (err) {
     PIPELINE.replaceChildren(
@@ -178,10 +180,12 @@ PLAY_BTN.addEventListener("click", playFixture);
 
 // Live mode: when the orchestrator (#15) starts broadcasting step events from
 // the service worker, they land here and paint the same six-step panel.
+// detail is rendered with textContent, never innerHTML — the orchestrator must
+// send a sanitized summary; page-derived strings must never inject markup.
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "hud.step" && typeof msg.step === "number" && STEPS[msg.step - 1]) {
     addStep(msg.step, STEPS[msg.step - 1], (b) => {
-      note(b, msg.detail ?? "");
+      b.append(el("p", null, typeof msg.detail === "string" ? msg.detail : ""));
     });
     return false;
   }
