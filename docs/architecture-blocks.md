@@ -1,49 +1,91 @@
 # PRIVIS — Architecture Block Diagram (with technologies)
 
-## Block diagram
+```
+                        PRIVIS — END-TO-END ARCHITECTURE
+                    (local eyes · local eraser · remote brain)
 
-```mermaid
-flowchart TB
-    subgraph DEVICE["🟢 ON-DEVICE — PRIVIS Chrome Extension (TypeScript · Manifest V3 · esbuild)"]
-        direction TB
+  ╔══════════════════════════════════════════════════════════════════════╗
+  ║  ON-DEVICE — Chrome Extension (TypeScript · Manifest V3 · esbuild)    ║
+  ╚══════════════════════════════════════════════════════════════════════╝
 
-        subgraph CAPTURE["1 · Capture Layer"]
-            BG["Background Service Worker<br/>chrome.tabs.captureVisibleTab() → in-memory PNG"]
-            DOM["Content Script<br/>DOM extractor → elements · bbox · browserState"]
-        end
+  ┌────────────────────────────────────┐
+  │  1. CAPTURE LAYER                  │
+  │  • Background service worker:      │
+  │    chrome.tabs.captureVisibleTab   │
+  │    -> in-memory PNG screenshot     │
+  │  • Content script (DOM extractor): │
+  │    elements · bbox · browser state │
+  └─────────────────┬──────────────────┘
+                    │  CapturePackage { dataUrl, elements, browserState }
+                    ▼
+  ┌────────────────────────────────────┐
+  │  2. LOCAL PRIVACY VISION ENGINE    │
+  │  • DOM perception rules:           │
+  │    regex · input[type] · aria label│
+  │  • ML inference (ON-DEVICE):       │
+  │    ONNX Runtime Web + WebGPU       │
+  │    faces, cards, signatures        │
+  └─────────────────┬──────────────────┘
+                    │  Detection[] { element_id, category, bbox, confidence }
+                    ▼
+  ┌────────────────────────────────────┐
+  │  3. SANITIZER                      │
+  │  • Visual redaction (Canvas API):  │
+  │    blackout + pixelate FACE        │
+  │  • Structural redaction:           │
+  │    strings -> EMAIL_1 · PAN_1 ·    │
+  │    AADHAAR_1 · AMOUNT_1 · PHONE_1  │
+  │    NAME_1 (PASSWORD/FACE destroyed)│
+  └─────────┬───────────────┬──────────┘
+            │               │ writes map (element_id -> real value)
+            │               ▼
+            │   ┌──────────────────────────────┐
+            │   │  MAPPING TABLE (in-memory)   │
+            │   │  element_id -> real value    │
+            │   │  NEVER leaves the device     │
+            │   └──────────────┬───────────────┘
+            │  SanitizedPackage│ reads real value
+            ▼                  ▼
+  ┌────────────────────────────────────┐
+  │  4. POLICY GATE                    │
+  │  Deterministic rules engine:       │
+  │    allow / human_approval / block  │
+  │  (demo exception · PASSWORD block ·│
+  │   low-confidence · FACE on login)  │
+  └─────────────────┬──────────────────┘
+                    │  ONLY IF allow: sanitized screenshot + placeholders + goal
+                    ▼
+  ══════════════════ DEVICE / NETWORK BOUNDARY ══════════════════
+                    │
+                    ▼
+  ┌────────────────────────────────────┐
+  │  5. REMOTE AGENT          (NETWORK)│
+  │  Multimodal VLM API:               │
+  │    Gemini 2.5 / GPT-4o (HTTPS)     │
+  │  Sees ONLY sanitized data          │
+  │  -> returns Action[]               │
+  └─────────────────┬──────────────────┘
+                    │  Action[] { type, target, value? }
+                    ▼
+  ┌────────────────────────────────────┐
+  │  6. LOCAL EXECUTOR      (ON-DEVICE)│
+  │  Content script:                   │
+  │  resolve target on real DOM        │
+  │  click / type real values          │
+  │  (from on-device mapping table)    │
+  └─────────────────┬──────────────────┘
+                    │  loop: capture next state
+                    └────────────▶ back to 1. Capture Layer
 
-        subgraph VISION["2 · Local Privacy Vision Engine"]
-            RULES["DOM perception rules<br/>regex · input[type] · aria labels"]
-            ONNX["ONNX Runtime Web + WebGPU<br/>on-device visual inference"]
-        end
 
-        subgraph SAN["3 · Sanitizer"]
-            PIXEL["Visual redaction<br/>Canvas API — blackout + pixelate FACE"]
-            STRUCT["Structural redaction<br/>strings → EMAIL_1 · PAN_1 · NAME_1 · ..."]
-        end
-
-        GATE["4 · Policy Gate<br/>deterministic rules — allow / human_approval / block"]
-        MAP[("On-device mapping table<br/>element_id → real value<br/>in-memory · never leaves device")]
-        EXEC["6 · Local Executor<br/>content script — resolves targets · clicks · types"]
-        HUD["HUD popup<br/>HTML + CSS + vanilla JS · live pipeline view"]
-    end
-
-    subgraph NETWORK["🔴 NETWORK — Remote Brain"]
-        AGENT["5 · Remote Agent<br/>multimodal VLM API<br/>(Gemini 2.5 / GPT-4o) over HTTPS"]
-    end
-
-    BG -->|"CapturePackage: dataUrl + elements + browserState"| VISION
-    DOM --> VISION
-    RULES -->|fuse| DET{"Detection[]"}
-    ONNX -->|fuse| DET
-    DET -->|"element_id · category · bbox · confidence"| SAN
-    SAN -->|"SanitizedPackage"| GATE
-    GATE -->|"only if allow — sanitized img + placeholders + goal"| AGENT
-    AGENT -->|"Action[] { type, target, value? }"| EXEC
-    SAN -.->|"writes map"| MAP
-    MAP -.->|"reads real value"| EXEC
-    EXEC -->|"loop: capture next state"| BG
-    GATE -.->|"live step events"| HUD
+  ┌────────────────────────────────────┐
+  │  HUD POPUP (side channel)          │
+  │  HTML + CSS + vanilla JS           │
+  │  live 6-step pipeline view:        │
+  │  raw vs sanitized screenshots,     │
+  │  detection chips, mapping table    │
+  │  (receives hud.liveStep events)    │
+  └────────────────────────────────────┘
 ```
 
 ## Technology stack per module
