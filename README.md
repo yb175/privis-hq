@@ -27,6 +27,28 @@ PRIVIS is a browser extension that lets an AI agent operate a web page without e
 # Remote agent server: TBD
 ```
 
+## Contributing
+
+1. **Fork** the repository to your GitHub account.
+2. **Clone** your fork locally:
+   ```bash
+   git clone https://github.com/<your-username>/privis-hq.git
+   cd privis-hq
+   ```
+3. **Create a branch** for your change:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+4. **Make your changes** and commit with a clear message:
+   ```bash
+   git commit -m "feat: brief description of change"
+   ```
+5. **Push** to your fork:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+6. **Open a Pull Request**: Navigate to the original repository on GitHub, click **Compare & pull request**, describe your changes, and submit.
+
 ## Research
 
 Idea lock and research brief: [privis-idea-research](https://github.com/yb175/privis-idea-research).
