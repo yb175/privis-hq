@@ -12,12 +12,12 @@
 
 ## Decision Rules (`decide({ detections, browserState })`)
 
-1. **Demo Exception (v0 pragmatic rule):**
-   - Returns `allow` if all detections have confidence $\ge 0.8$ and the URL is `file://`, `localhost`, `127.0.0.1`, or `demo-portal`.
+1. **Block (Password Presence):**
+   - Returns `block` if any `PASSWORD` category detection is present (remote agent is blocked from password pages in v0).
 2. **Block (Sensitive Host + Low Confidence):**
    - Returns `block` if URL host matches bank/payroll/tax deny list (`onlinesbi`, `incometax`, `epfo`) AND any detection confidence $< 0.5$.
-3. **Block (Password Presence):**
-   - Returns `block` if any `PASSWORD` category detection is present (remote agent is blocked from password pages in v0).
+3. **Demo Exception (v0 pragmatic rule):**
+   - Returns `allow` if all detections have confidence $\ge 0.8$ and the URL is `file://` or trusted demo host (`localhost`, `127.0.0.1`, `[::1]`, `demo-portal.local`, `demo-portal.internal`, `hr.internal.example`) with no `PASSWORD` detections.
 4. **Human Approval (Low Confidence):**
    - Returns `human_approval` if any detection confidence $< 0.6$.
 5. **Human Approval (Face on Login):**

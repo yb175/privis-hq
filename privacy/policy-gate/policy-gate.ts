@@ -10,6 +10,14 @@ import type { BrowserState, Detection, PolicyGateResult } from "../../types/inde
 
 const DENY_HOST_KEYWORDS = ["onlinesbi", "incometax", "epfo"];
 const LOGIN_KEYWORDS = ["login", "signin", "sign-in", "auth", "authenticate"];
+const TRUSTED_DEMO_HOSTS = new Set([
+  "localhost",
+  "127.0.0.1",
+  "[::1]",
+  "demo-portal.local",
+  "demo-portal.internal",
+  "hr.internal.example",
+]);
 
 function isDemoOrLocalUrl(rawUrl: string): boolean {
   if (!rawUrl) return false;
@@ -17,15 +25,10 @@ function isDemoOrLocalUrl(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl);
     if (parsed.protocol === "file:") return true;
-    const host = parsed.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1" || host === "[::1]") return true;
-    if (host.includes("demo-portal") || parsed.pathname.includes("demo-portal")) return true;
+    return TRUSTED_DEMO_HOSTS.has(parsed.hostname.toLowerCase());
   } catch {
-    if (rawUrl.includes("demo-portal") || rawUrl.includes("localhost") || rawUrl.includes("127.0.0.1")) {
-      return true;
-    }
+    return false;
   }
-  return false;
 }
 
 function isDenyListedHost(rawUrl: string): boolean {
@@ -59,20 +62,17 @@ export function decide(params: {
 }): PolicyGateResult {
   const { detections, browserState } = params;
 
-  // v0 pragmatic demo rule: allow when all detections >= 0.8 and URL is file:// or localhost / demo-portal
-  const isDemoOrLocal = isDemoOrLocalUrl(browserState.url);
-  const allHighConfidence =
-    detections.length === 0 || detections.every((d) => d.confidence >= 0.8);
-
-  if (isDemoOrLocal && allHighConfidence) {
+  // 1. Block if a PASSWORD detection exists (cannot prove redaction to remote in v0)
+  const hasPassword = detections.some((d) => d.category === "PASSWORD");
+  if (hasPassword) {
     return {
-      decision: "allow",
+      decision: "block",
       reason:
-        "Allowed under v0 demo exception: all detections have confidence >= 0.8 on local/demo URL",
+        "Blocked: PASSWORD category detection present (password pages blocked from remote in v0)",
     };
   }
 
-  // 1. Block if URL host matches bank/payroll/tax deny list AND any detection confidence < 0.5
+  // 2. Block if URL host matches bank/payroll/tax deny list AND any detection confidence < 0.5
   const hasLowConfidenceUnder05 = detections.some((d) => d.confidence < 0.5);
   if (isDenyListedHost(browserState.url) && hasLowConfidenceUnder05) {
     const lowest = detections.reduce(
@@ -85,17 +85,20 @@ export function decide(params: {
     };
   }
 
-  // 2. Block if a PASSWORD detection exists (cannot prove redaction to remote in v0)
-  const hasPassword = detections.some((d) => d.category === "PASSWORD");
-  if (hasPassword) {
+  // 3. v0 pragmatic demo rule: allow when all detections >= 0.8 and URL is file:// or trusted local/demo host (no PASSWORD)
+  const isDemoOrLocal = isDemoOrLocalUrl(browserState.url);
+  const allHighConfidence =
+    detections.length === 0 || detections.every((d) => d.confidence >= 0.8);
+
+  if (isDemoOrLocal && allHighConfidence) {
     return {
-      decision: "block",
+      decision: "allow",
       reason:
-        "Blocked: PASSWORD category detection present (password pages blocked from remote in v0)",
+        "Allowed under v0 demo exception: all detections have confidence >= 0.8 on local/demo URL",
     };
   }
 
-  // 3. Human approval if any detection confidence < 0.6
+  // 4. Human approval if any detection confidence < 0.6
   const lowConfidenceDetection = detections.find((d) => d.confidence < 0.6);
   if (lowConfidenceDetection) {
     return {
@@ -104,7 +107,7 @@ export function decide(params: {
     };
   }
 
-  // 4. Human approval if category FACE on a login page
+  // 5. Human approval if category FACE on a login page
   const hasFace = detections.some((d) => d.category === "FACE");
   if (hasFace && isLoginPage(browserState)) {
     return {
@@ -113,7 +116,7 @@ export function decide(params: {
     };
   }
 
-  // 5. Allow otherwise
+  // 6. Allow otherwise
   return {
     decision: "allow",
     reason: "Allowed: all safety and confidence checks passed",
