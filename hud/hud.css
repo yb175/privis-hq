@@ -131,6 +131,30 @@ body {
   color: var(--ink);
 }
 
+.hud-map {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 11px;
+}
+.hud-map th,
+.hud-map td {
+  text-align: left;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  word-break: break-all;
+}
+.hud-map th {
+  background: var(--panel-2);
+  color: var(--ink);
+  font-weight: 600;
+}
+.hud-map td.hud-mono {
+  color: var(--accent);
+  font-weight: 600;
+  background: transparent;
+}
+
 .hud-footer {
   margin-top: 10px;
   padding-top: 8px;

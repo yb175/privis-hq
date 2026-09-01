@@ -115,10 +115,15 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
     pkg.detections,
     pkg.browserState.viewport
   );
+  // Real value -> placeholder pairs, so the HUD can show the swap happening.
+  // The map itself never leaves this device; only placeholders go to the agent.
+  const swaps = sanitized
+    .filter((el) => typeof map[el.element_id] === "string")
+    .map((el) => ({ real: map[el.element_id], placeholder: el.text }));
   broadcastHudStep(3, {
     sanitizedScreenshot,
     rawScreenshot: pkg.dataUrl,
-    placeholders: Object.values(map),
+    swaps,
     detectionsCount: pkg.detections.length,
   });
 

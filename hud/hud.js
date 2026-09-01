@@ -247,6 +247,32 @@ function imageThumbs(container, rawUrl, sanitizedUrl) {
   container.append(fig);
 }
 
+// Renders the on-device mapping table: real value -> stable placeholder.
+// These real values never leave the device; only placeholders go to the agent.
+function swapTable(container, swaps) {
+  if (!Array.isArray(swaps) || swaps.length === 0) {
+    note(container, "No sensitive strings found on this page — nothing to swap.");
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "hud-map";
+  const head = document.createElement("tr");
+  head.append(
+    el("th", null, "Real value (stays on device)"),
+    el("th", null, "Placeholder (sent to AI)")
+  );
+  table.append(head);
+  for (const s of swaps) {
+    const row = document.createElement("tr");
+    const real = el("td", null, String(s.real ?? ""));
+    const ph = el("td", null, String(s.placeholder ?? ""));
+    ph.className = "hud-mono";
+    row.append(real, ph);
+    table.append(row);
+  }
+  container.append(table);
+}
+
 // Live mode step renderer
 const seenLiveSteps = new Set();
 
@@ -293,9 +319,12 @@ function renderLiveStep(msg) {
         }
         note(
           b,
-          `Pixels blacked out on canvas. Sensitive strings swapped for placeholders:<br />` +
-            `<span class="hud-mono">${(msg.placeholders || []).join(", ") || "EMAIL_1, PAN_1, AMOUNT_1, PHONE_1, NAME_1"}</span>.<br />` +
-            `<span class="hud-mono">PASSWORD</span> and <span class="hud-mono">FACE</span> redacted directly.`
+          `Pixels blacked out on canvas. Structural redaction swapped real strings for stable placeholders:`
+        );
+        swapTable(b, msg.swaps);
+        note(
+          b,
+          `<span class="hud-mono">PASSWORD</span> and <span class="hud-mono">FACE</span> are redacted directly (no placeholder).`
         );
         break;
 
