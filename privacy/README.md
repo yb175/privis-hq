@@ -1,11 +1,11 @@
 # privacy/
 
-**Owner:** shared — background runs the pipeline stages; detection helpers may run in either context. No page interaction here.
+**Owner:** shared — detection + placeholder swap run in the content script (values never leave the page); canvas redaction and the gate run in the background.
 
 ## Responsibility
 
 - `engine/` — Local Privacy Vision Engine: fuse DOM detections with (later) vision boxes into a detection list. **README only — no code files yet.**
-- `sanitizer/` — visual redaction on a canvas copy (`visual-redact.js`) + structural placeholders (`structural-redact.js`).
+- `sanitizer/` — visual redaction on a canvas copy (`visual-redact.js`) + DOM-rule detection and placeholders (`structural-redact.js`).
 - `policy-gate/` — Allow / Human Approval / Block decision (`policy-gate.js`).
 
 ## Inputs

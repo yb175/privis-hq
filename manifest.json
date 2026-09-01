@@ -3,14 +3,14 @@
   "name": "PRIVIS",
   "description": "Local eyes, local eraser, remote brain. SIH26171 — On-device Visual Perception for Light-weight Browser Agents.",
   "version": "0.1.0",
-  "permissions": ["activeTab", "scripting", "tabs", "storage"],
+  "permissions": ["activeTab", "tabs", "scripting"],
   "host_permissions": ["<all_urls>"],
-  "background": { "service_worker": "background/service-worker.js", "type": "module" },
+  "background": { "service_worker": "background/service-worker.js" },
+  "action": { "default_title": "PRIVIS: run one step" },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content/capture-content.js"]
+      "js": ["utils/dom-extractor.js", "privacy/sanitizer/structural-redact.js", "content/capture-content.js"]
     }
-  ],
-  "action": { "default_title": "PRIVIS" }
+  ]
 }
