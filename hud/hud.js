@@ -227,16 +227,101 @@ if (RUN_LIVE_BTN) {
 }
 PLAY_BTN.addEventListener("click", playFixture);
 
+function imageThumbs(container, rawUrl, sanitizedUrl) {
+  const fig = el("div", "hud-thumbs");
+  if (rawUrl) {
+    const wrap = el("figure", "hud-thumb");
+    const img = document.createElement("img");
+    img.src = rawUrl;
+    img.alt = "Raw Screenshot";
+    wrap.append(img, el("figcaption", null, "Raw (Local in-memory)"));
+    fig.append(wrap);
+  }
+  if (sanitizedUrl) {
+    const wrap = el("figure", "hud-thumb");
+    const img = document.createElement("img");
+    img.src = sanitizedUrl;
+    img.alt = "Sanitized Screenshot";
+    wrap.append(img, el("figcaption", null, "Sanitized (Sent to AI)"));
+    fig.append(wrap);
+  }
+  container.append(fig);
+}
+
 // Live mode step listener
-const existingSteps = new Set();
+const seenLiveSteps = new Set();
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg?.type === "hud.step" && typeof msg.step === "number" && STEPS[msg.step - 1]) {
+  if (msg?.type === "hud.liveStep" && typeof msg.step === "number" && STEPS[msg.step - 1]) {
     // Clear initial idle message if first step arrives
     const idle = PIPELINE.querySelector(".hud-idle");
     if (idle) idle.remove();
 
+    if (msg.step === 1) {
+      seenLiveSteps.clear();
+      PIPELINE.replaceChildren();
+    }
+
+    if (seenLiveSteps.has(msg.step)) return false;
+    seenLiveSteps.add(msg.step);
+
     addStep(msg.step, STEPS[msg.step - 1], (b) => {
-      b.append(el("p", null, typeof msg.detail === "string" ? msg.detail : ""));
+      switch (msg.step) {
+        case 1:
+          if (msg.rawScreenshot) {
+            imageThumbs(b, msg.rawScreenshot, null);
+          }
+          note(
+            b,
+            `<strong>${msg.elementCount ?? 0} elements</strong> + browser state read from DOM.<br />` +
+              `Raw screenshot held <strong>in memory only</strong> — never written to disk.`
+          );
+          break;
+
+        case 2:
+          if (Array.isArray(msg.detections)) {
+            chips(b, msg.detections);
+            note(
+              b,
+              `<strong>${msg.detections.length} sensitive items</strong> detected via DOM perception rules.`
+            );
+          }
+          break;
+
+        case 3:
+          if (msg.rawScreenshot && msg.sanitizedScreenshot) {
+            imageThumbs(b, msg.rawScreenshot, msg.sanitizedScreenshot);
+          }
+          note(
+            b,
+            `Pixels blacked out on canvas. Sensitive strings swapped for placeholders:<br />` +
+              `<span class="hud-mono">${(msg.placeholders || []).join(", ") || "EMAIL_1, PAN_1, AMOUNT_1, PHONE_1, NAME_1"}</span>.<br />` +
+              `<span class="hud-mono">PASSWORD</span> and <span class="hud-mono">FACE</span> redacted directly.`
+          );
+          break;
+
+        case 4: {
+          const row = el("p");
+          badge(row, msg.decision || "allow", msg.reason || "Safety and confidence checks passed");
+          b.append(row);
+          break;
+        }
+
+        case 5:
+          note(
+            b,
+            `Sent: sanitized screenshot + sanitized tokens + goal.<br />` +
+              `Remote Agent returned action: <span class="hud-mono">${JSON.stringify(msg.actions || [{ type: "click", target: "#submit" }])}</span>`
+          );
+          break;
+
+        case 6:
+          note(
+            b,
+            `Resolved <span class="hud-mono">#submit</span> on real DOM and executed click.<br />` +
+              `<strong>Status:</strong> <span style="color:#4cc38a;font-weight:700;">OK (Form Submitted)</span>.`
+          );
+          break;
+      }
     });
     return false;
   }

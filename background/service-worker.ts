@@ -73,10 +73,10 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
   );
 }
 
-// Helper to broadcast step updates to the popup HUD if open
-function broadcastHudStep(step: number, detail: string) {
+// Helper to broadcast step updates with rich data to the popup HUD
+function broadcastHudStep(step: number, data: Record<string, unknown>) {
   try {
-    chrome.runtime.sendMessage({ type: "hud.step", step, detail }).catch(() => {
+    chrome.runtime.sendMessage({ type: "hud.liveStep", step, ...data }).catch(() => {
       // HUD popup might be closed; safe to ignore
     });
   } catch {
@@ -90,34 +90,38 @@ function broadcastHudStep(step: number, detail: string) {
  * @param goal Human prompt or task instruction
  */
 export async function runStep(tabId: number, goal: string): Promise<StepResult> {
-  broadcastHudStep(1, `Capture Layer: Snapshotting tab ${tabId} and extracting DOM elements.`);
   const pkg = await capturePackage(tabId);
-  broadcastHudStep(
-    1,
-    `Capture Layer: Extracted ${pkg.elements.length} DOM elements and in-memory screenshot.`
-  );
+  broadcastHudStep(1, {
+    rawScreenshot: pkg.dataUrl,
+    elementCount: pkg.elements.length,
+    viewport: pkg.browserState.viewport,
+  });
 
   // Vision Engine Detections
-  broadcastHudStep(
-    2,
-    `Local Privacy Vision Engine: Found ${pkg.detections.length} sensitive items (${pkg.detections.map((d) => d.category).join(", ")}).`
-  );
+  broadcastHudStep(2, {
+    detections: pkg.detections,
+  });
 
   // Sanitizer: structural placeholders + in-memory visual redaction.
-  const { sanitized } = applyPlaceholders(pkg.elements, pkg.detections);
+  const { sanitized, map } = applyPlaceholders(pkg.elements, pkg.detections);
   const sanitizedScreenshot = await redactVisual(
     pkg.dataUrl,
     pkg.detections,
     pkg.browserState.viewport
   );
-  broadcastHudStep(
-    3,
-    `Sanitizer: Pixels redacted on canvas. Text values replaced with tokens (EMAIL_1, PAN_1, etc.).`
-  );
+  broadcastHudStep(3, {
+    sanitizedScreenshot,
+    rawScreenshot: pkg.dataUrl,
+    placeholders: Object.values(map),
+    detectionsCount: pkg.detections.length,
+  });
 
   // Policy Gate: never call the remote unless the package is allowed out.
   const gate = decide({ detections: pkg.detections, browserState: pkg.browserState });
-  broadcastHudStep(4, `Policy Gate: Decision is [${gate.decision.toUpperCase()}] — ${gate.reason}`);
+  broadcastHudStep(4, {
+    decision: gate.decision,
+    reason: gate.reason,
+  });
   if (gate.decision !== "allow") {
     return { decision: gate.decision, reason: gate.reason };
   }
@@ -127,21 +131,22 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
   // only `text`, so strip the user-controlled `label` (accessible label /
   // placeholder / title) to keep any raw value out of the remote context.
   const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
-  broadcastHudStep(5, `Remote Agent: Sending sanitized package with goal "${goal}"...`);
   const actions: Action[] = await sendSanitized({
     goal,
     sanitizedScreenshot,
     sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
   });
-  broadcastHudStep(5, `Remote Agent: Received ${actions.length} action(s): ${JSON.stringify(actions)}`);
+  broadcastHudStep(5, {
+    goal,
+    actions,
+  });
 
   // Local Executor: apply the returned actions on the real page DOM.
-  broadcastHudStep(6, `Local Executor: Resolving and applying actions on real DOM.`);
   const results = await applyActions(tabId, actions);
-  broadcastHudStep(
-    6,
-    `Local Executor: Action execution finished with status: ${results.map((r) => (r.ok ? "OK" : r.error)).join(", ")}`
-  );
+  broadcastHudStep(6, {
+    actions,
+    results,
+  });
 
   return { decision: gate.decision, reason: gate.reason, actions: results };
 }
