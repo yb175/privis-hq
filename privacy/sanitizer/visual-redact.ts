@@ -112,14 +112,20 @@ export async function redactVisual(
   for (const detection of detections) {
     const [bx, by, bw, bh] = detection.bbox;
     if (bw <= 0 || bh <= 0) continue; // ignore empty bboxes
+    // Clamp the right/bottom edges too, so a bbox starting off-page doesn't
+    // black out unrelated content inside the page (width/height shrink to fit).
     const x = Math.max(0, Math.round(bx * scaleX));
     const y = Math.max(0, Math.round(by * scaleY));
-    const w = Math.min(canvas.width - x, Math.round(bw * scaleX));
-    const h = Math.min(canvas.height - y, Math.round(bh * scaleY));
+    const right = Math.min(canvas.width, Math.round((bx + bw) * scaleX));
+    const bottom = Math.min(canvas.height, Math.round((by + bh) * scaleY));
+    const w = right - x;
+    const h = bottom - y;
     if (w <= 0 || h <= 0) continue;
 
     if (detection.category === "FACE") {
-      pixelate(ctx, img, x, y, w, h);
+      // Pixelate from the already-redacted canvas, not the raw image, so any
+      // blackout drawn underneath (overlapping PII) isn't repainted raw.
+      pixelate(ctx, canvas, x, y, w, h);
     } else if (BLACKOUT_CATEGORIES.has(detection.category)) {
       ctx.fillStyle = "#000";
       ctx.fillRect(x, y, w, h);
