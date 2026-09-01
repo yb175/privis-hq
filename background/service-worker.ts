@@ -73,10 +73,16 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
   );
 }
 
+// In-memory step cache for the HUD
+const lastLiveSteps: Array<Record<string, unknown>> = [];
+
 // Helper to broadcast step updates with rich data to the popup HUD
 function broadcastHudStep(step: number, data: Record<string, unknown>) {
+  const payload = { type: "hud.liveStep", step, ...data };
+  if (step === 1) lastLiveSteps.length = 0;
+  lastLiveSteps.push(payload);
   try {
-    chrome.runtime.sendMessage({ type: "hud.liveStep", step, ...data }).catch(() => {
+    chrome.runtime.sendMessage(payload).catch(() => {
       // HUD popup might be closed; safe to ignore
     });
   } catch {
@@ -177,6 +183,10 @@ if (typeof self !== "undefined") {
 // Plus the pre-existing { type: "PRIVIS_CAPTURE_SCREENSHOT", tabId } → { dataUrl }.
 // Both are in-memory only.
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "hud.getLatestSteps") {
+    sendResponse({ steps: lastLiveSteps });
+    return false;
+  }
   if (msg?.type === "privis.runStep" && typeof msg.tabId === "number") {
     const goal = typeof msg.goal === "string" && msg.goal ? msg.goal : DEFAULT_GOAL;
     runStep(msg.tabId, goal)
