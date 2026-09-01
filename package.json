@@ -4,12 +4,13 @@
   "description": "PRIVIS: On-device Visual Perception for Light-weight Browser Agents",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild background/service-worker.ts utils/dom-extractor.ts privacy/sanitizer/structural-redact.ts content/capture-content.ts --bundle --format=iife --outdir=dist",
     "typecheck": "tsc --noEmit",
-    "watch": "tsc --watch"
+    "watch": "npm run build -- --watch"
   },
   "devDependencies": {
     "@types/chrome": "^0.2.7",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }
 }
