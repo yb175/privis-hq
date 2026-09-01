@@ -11,18 +11,19 @@
  */
 export async function takeScreenshot(tabId: number): Promise<{ dataUrl: string }> {
   // captureVisibleTab works on the active tab of a window; resolve the tab's window.
-  let windowId: number | undefined;
+  let tab: chrome.tabs.Tab;
   try {
-    const tab = await chrome.tabs.get(tabId);
-    if (!tab.active) {
-      throw new Error(
-        `takeScreenshot: tab ${tabId} is not the active tab in its window; captureVisibleTab would capture a different tab`,
-      );
-    }
-    windowId = tab.windowId;
+    tab = await chrome.tabs.get(tabId);
   } catch {
     throw new Error(`takeScreenshot: tab ${tabId} not found`);
   }
+
+  if (!tab.active) {
+    throw new Error(
+      `takeScreenshot: tab ${tabId} is not the active tab in its window; captureVisibleTab would capture a different tab`,
+    );
+  }
+  const windowId = tab.windowId;
 
   try {
     const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
