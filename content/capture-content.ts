@@ -126,8 +126,8 @@ async function executeActions(actions: Action[]): Promise<ExecuteResponseMessage
   return { type: "execute.response", payload: { results } };
 }
 
-// Execute channel for the Local Executor. The capture.request channel lands with
-// the orchestrator issue (#15) — capture is out of scope here.
+// Execute channel for the Local Executor: applies gate-approved actions to the
+// real page DOM and replies with per-action results (stops on first failure).
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   if (!isExecuteRequest(message)) return false;
   void executeActions(message.payload.actions).then(sendResponse);

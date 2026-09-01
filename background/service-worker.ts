@@ -13,6 +13,7 @@ import type {
   Action,
   CapturePackage,
   CaptureResponseMessage,
+  ElementMeta,
   StepResult,
 } from "../types/index.js";
 import { takeScreenshot } from "../utils/screenshot.js";
@@ -34,19 +35,42 @@ const DEFAULT_GOAL = "Submit the employee portal form";
  * then fuses DOM detections (Local Privacy Vision Engine, DOM path).
  * @param tabId Target tab ID
  */
+// Snapshot the content-script DOM package for a tab.
+function domPackage(tabId: number): Promise<CaptureResponseMessage> {
+  return sendToContent<CaptureResponseMessage>(tabId, { type: "capture.request" });
+}
+
+// Cheap, deterministic fingerprint of the DOM package. Element ids are stable
+// across extractions (the content script keys them by DOM node), so equality
+// here means the page did not change between snapshots.
+function packageFingerprint(dom: CaptureResponseMessage): string {
+  return JSON.stringify(dom.payload);
+}
+
 export async function capturePackage(tabId: number): Promise<CapturePackage> {
-  const [{ dataUrl }, dom] = await Promise.all([
-    takeScreenshot(tabId),
-    sendToContent<CaptureResponseMessage>(tabId, { type: "capture.request" }),
-  ]);
-  const { elements, browserState } = dom.payload;
-  return {
-    tabId,
-    dataUrl,
-    elements,
-    detections: detectSensitive(elements),
-    browserState,
-  };
+  const MAX_TRIES = 3;
+  for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
+    // Snapshot the DOM first, capture the screenshot of that same state, then
+    // re-snapshot the DOM and require it to be unchanged. This guarantees the
+    // detections always describe the pixels we redact — never detections from
+    // one page state applied to another state's screenshot.
+    const before = await domPackage(tabId);
+    const { dataUrl } = await takeScreenshot(tabId);
+    const after = await domPackage(tabId);
+    if (packageFingerprint(before) === packageFingerprint(after)) {
+      const { elements, browserState } = before.payload;
+      return {
+        tabId,
+        dataUrl,
+        elements,
+        detections: detectSensitive(elements),
+        browserState,
+      };
+    }
+  }
+  throw new Error(
+    "capturePackage: page state kept changing between DOM snapshot and screenshot"
+  );
 }
 
 /**
@@ -72,11 +96,14 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
   }
 
   // Remote Agent: only the sanitized package crosses the wire — never the raw
-  // dataUrl, never the element_id -> real value map.
+  // dataUrl, never the element_id -> real value map. applyPlaceholders swaps
+  // only `text`, so strip the user-controlled `label` (accessible label /
+  // placeholder / title) to keep any raw value out of the remote context.
+  const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
   const actions: Action[] = await sendSanitized({
     goal,
     sanitizedScreenshot,
-    sanitizedContext: { elements: sanitized, browserState: pkg.browserState },
+    sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
   });
 
   // Local Executor: apply the returned actions on the real page DOM.
