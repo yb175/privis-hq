@@ -86,3 +86,48 @@ export interface StepResult {
   reason: string;
   actions?: ActionResult[];
 }
+
+export interface CaptureRequestMessage {
+  type: "capture.request";
+}
+
+export interface CaptureResponseMessage {
+  type: "capture.response";
+  payload: {
+    elements: ElementMeta[];
+    browserState: BrowserState;
+  };
+}
+
+export interface ExecuteRequestMessage {
+  type: "execute.request";
+  payload: {
+    actions: Action[];
+  };
+}
+
+export interface ExecuteResponseMessage {
+  type: "execute.response";
+  payload: {
+    results: ActionResult[];
+  };
+}
+
+export interface PingMessage {
+  type: "ping";
+}
+
+export interface PongMessage {
+  type: "pong";
+}
+
+export type PrivisMessage =
+  | CaptureRequestMessage
+  | CaptureResponseMessage
+  | ExecuteRequestMessage
+  | ExecuteResponseMessage
+  | PingMessage
+  | PongMessage;
+
+export type PrivisMessageType = PrivisMessage["type"];
+
