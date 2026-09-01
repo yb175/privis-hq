@@ -18,7 +18,7 @@ Overlapping boxes from both sources are merged (union), keeping the highest conf
 
 ## DOM path (now)
 
-Implemented later inside the Sanitizer/Engine modules — **not in this folder**. Regex matchers for PAN / Aadhaar / email / phone / amount patterns, `input[type=password]` fields, and nearby `<label>` / aria-label text to assign categories.
+Implemented in `privacy/sanitizer/structural-redact.js` (`detectSensitive`): regex matchers for PAN / Aadhaar / email / phone / amount patterns, `input[type=password]` fields, and name-labelled fields to assign categories. This folder stays code-free until the vision path lands.
 
 ## Vision path (later)
 

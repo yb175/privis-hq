@@ -1,10 +1,16 @@
 // remote/client.js — the only network path. Sanitized package in, action plan out.
 
-// sendSanitized({ goal, sanitizedScreenshot, sanitizedContext })
-// Calls the remote reasoning server. Never called on a gate "block".
-async function sendSanitized(pkg) {
-  // TODO: fetch(serverUrl, { sanitized package }) -> action plan
-  return null; // [{ type: "click" | "type", target, value? }]
-}
+// ponytail: hardcoded loopback URL — move to options page when a real server exists.
+const SERVER_URL = "http://localhost:8787/plan";
 
-export { sendSanitized };
+// sendSanitized({ goal, sanitizedScreenshot, sanitizedContext }) -> [{ type, target, value? }]
+// Called only after a Policy Gate "allow" (caller enforces this).
+async function sendSanitized(pkg) {
+  const res = await fetch(SERVER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pkg),
+  });
+  if (!res.ok) throw new Error(`remote agent: ${res.status}`);
+  return res.json();
+}

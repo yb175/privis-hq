@@ -1,11 +1,15 @@
-// executor/local-executor.js — pipeline step 6. Coordinates with the content script,
-// which performs the real DOM actions (see content/capture-content.js).
+// executor/local-executor.js — pipeline step 6 (background side).
+// The content script performs the real DOM actions (content/capture-content.js).
 
-// applyActions(tabId, actions) — resolves targets, executes clicks/types, returns results.
-// Real values for typing come from the on-device mapping table (gate-approved only).
-async function applyActions(tabId, actions, mappingTable) {
-  // TODO: sendToContent(tabId, { type: "execute", actions })
-  return { ok: false };
+// applyActions(tabId, actions) — executes each gate-approved action in order.
+async function applyActions(tabId, actions) {
+  const results = [];
+  for (const action of actions) {
+    try {
+      results.push(await sendToContent(tabId, { type: "execute", action }));
+    } catch (e) {
+      results.push({ ok: false, error: String(e) });
+    }
+  }
+  return results;
 }
-
-export { applyActions };

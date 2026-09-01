@@ -4,8 +4,8 @@
 
 ## Responsibility
 
-- Visual redaction: blur FACE boxes, black-out PASSWORD fields, mask PII text boxes on a canvas copy of the in-memory screenshot.
-- Structural redaction: replace sensitive strings with stable session placeholders (`EMAIL_1`, `PAN_1`, `AADHAAR_1`, `AMOUNT_1`, `PHONE_1`, `NAME_1`).
+- Visual redaction: blur FACE boxes, black-out PASSWORD fields, mask PII text boxes on a canvas copy of the in-memory screenshot (`visual-redact.js`, background).
+- Structural redaction + DOM-rule detection (`structural-redact.js`): regex PAN/Aadhaar/email/phone/amount + `input[type=password]` + name-labelled fields; replaces values with stable placeholders (`EMAIL_1`, `PAN_1`, `AADHAAR_1`, `AMOUNT_1`, `PHONE_1`, `NAME_1`).
 - Preserve layout, button labels, form structure, and all non-sensitive text.
 - Keep the placeholder→real-value mapping table on-device only.
 
