@@ -11,6 +11,7 @@ import type {
   Action,
   ActionResult,
   BrowserState,
+  CaptureRequestMessage,
   ElementMeta,
   ExecuteRequestMessage,
   ExecuteResponseMessage,
@@ -101,6 +102,19 @@ function isExecuteRequest(message: unknown): message is ExecuteRequestMessage {
   // payload, non-array/malformed actions) before payload.actions is touched.
   return isPrivisMessage(message) && message.type === "execute.request";
 }
+
+function isCaptureRequest(message: unknown): message is CaptureRequestMessage {
+  return isPrivisMessage(message) && message.type === "capture.request";
+}
+
+// Capture channel for the Capture Layer: returns the DOM package (elements +
+// browser state) to the background on request. Wired by the orchestrator (#15);
+// the background half lives in background/service-worker.ts.
+chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  if (!isCaptureRequest(message)) return false;
+  sendResponse({ type: "capture.response", payload: captureDom() });
+  return false;
+});
 
 async function executeActions(actions: Action[]): Promise<ExecuteResponseMessage> {
   const results: ActionResult[] = [];
