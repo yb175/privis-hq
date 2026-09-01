@@ -7,8 +7,16 @@
 // - Holds local mapping { element_id: real_value } strictly in memory.
 // - Executes real DOM actions (clicks, keyboard input) on behalf of local executor.
 
-import type { Action, ActionResult, BrowserState, ElementMeta } from "../types/index.js";
+import type {
+  Action,
+  ActionResult,
+  BrowserState,
+  ElementMeta,
+  ExecuteRequestMessage,
+  ExecuteResponseMessage,
+} from "../types/index.js";
 import { collectBrowserState, extractElements } from "../utils/dom-extractor.js";
+import { isPrivisMessage } from "../utils/messaging.js";
 
 /**
  * Capture Layer content-script half: visible elements + browser state.
@@ -18,25 +26,96 @@ export function captureDom(): { elements: ElementMeta[]; browserState: BrowserSt
   return { elements: extractElements(), browserState: collectBrowserState() };
 }
 
-// In-memory real value store for placeholder resolution (never sent upstream)
-// let localValues: Record<string, string> = {};
+// In-memory real value store for placeholder resolution (never sent upstream).
+// The Sanitizer writes element_id -> real value; this executor only reads it.
+const localValues: Record<string, string> = {};
 
 /**
  * Resolves a target selector or element id to a live DOM element.
  * @param target Element ID or CSS selector
  */
 export function resolveTarget(target: string): HTMLElement | null {
-  // TODO: Implement in chunks
+  const byId = document.getElementById(target);
+  if (byId) return byId;
+
+  let bySelector: HTMLElement | null = null;
+  try {
+    bySelector = document.querySelector<HTMLElement>(target);
+  } catch {
+    // Invalid CSS selector: fall through to the attribute lookup instead of throwing.
+  }
+  if (bySelector) return bySelector;
+
+  // data-privis-id carries the element_id (DOM id, or the generated id for
+  // id-less controls once the Sanitizer exposes it). Unknown values simply
+  // don't match; no selector parsing, so no escaping concerns.
+  for (const el of document.querySelectorAll<HTMLElement>("[data-privis-id]")) {
+    if (el.getAttribute("data-privis-id") === target) return el;
+  }
   return null;
 }
+
+// Stable per-category placeholder tokens produced by the Sanitizer (EMAIL_1, PAN_1, ...).
+const PLACEHOLDER_RE = /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME)_\d+$/;
 
 /**
  * Executes an action on the page DOM, substituting placeholders with real local values.
  * @param action The requested action (click, type, etc.)
  */
 export async function executeAction(action: Action): Promise<ActionResult> {
-  // TODO: Implement in chunks
-  throw new Error("Not implemented");
+  const el = resolveTarget(action.target);
+  if (!el) return { ok: false, error: `Target not found: ${action.target}` };
+
+  switch (action.type) {
+    case "click":
+      el.click();
+      return { ok: true };
+
+    case "type": {
+      let value = action.value ?? "";
+      if (PLACEHOLDER_RE.test(value)) {
+        // Substitute the placeholder with the real value only when the Sanitizer
+        // already stored one for this element; otherwise type what was sent.
+        const elementId = el.id || el.dataset.privisId || "";
+        // Own-property check so page ids like "constructor"/"toString" never
+        // resolve to inherited Object.prototype members.
+        if (Object.hasOwn(localValues, elementId)) value = localValues[elementId];
+      }
+      if (!("value" in el)) {
+        return { ok: false, error: `Cannot type into non-form element: ${action.target}` };
+      }
+      const field = el as HTMLInputElement;
+      field.value = value;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+      return { ok: true };
+    }
+
+    default:
+      return { ok: false, error: `Unsupported action type: ${action.type}` };
+  }
 }
 
-// TODO: chrome.runtime.onMessage listener for "capture" and "execute"
+function isExecuteRequest(message: unknown): message is ExecuteRequestMessage {
+  // Reuse the shared validator: rejects malformed execute messages (missing
+  // payload, non-array/malformed actions) before payload.actions is touched.
+  return isPrivisMessage(message) && message.type === "execute.request";
+}
+
+async function executeActions(actions: Action[]): Promise<ExecuteResponseMessage> {
+  const results: ActionResult[] = [];
+  for (const action of actions) {
+    const result = await executeAction(action);
+    results.push(result);
+    if (!result.ok) break; // stop on first failure
+  }
+  return { type: "execute.response", payload: { results } };
+}
+
+// Execute channel for the Local Executor. The capture.request channel lands with
+// the orchestrator issue (#15) — capture is out of scope here.
+chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  if (!isExecuteRequest(message)) return false;
+  void executeActions(message.payload.actions).then(sendResponse);
+  return true; // keep the channel open for the async response
+});
