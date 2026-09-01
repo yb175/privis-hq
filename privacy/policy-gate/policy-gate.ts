@@ -8,6 +8,47 @@
 
 import type { BrowserState, Detection, PolicyGateResult } from "../../types/index.js";
 
+const DENY_HOST_KEYWORDS = ["onlinesbi", "incometax", "epfo"];
+const LOGIN_KEYWORDS = ["login", "signin", "sign-in", "auth", "authenticate"];
+
+function isDemoOrLocalUrl(rawUrl: string): boolean {
+  if (!rawUrl) return false;
+  if (rawUrl.startsWith("file://")) return true;
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol === "file:") return true;
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "[::1]") return true;
+    if (host.includes("demo-portal") || parsed.pathname.includes("demo-portal")) return true;
+  } catch {
+    if (rawUrl.includes("demo-portal") || rawUrl.includes("localhost") || rawUrl.includes("127.0.0.1")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isDenyListedHost(rawUrl: string): boolean {
+  if (!rawUrl) return false;
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.toLowerCase();
+    return DENY_HOST_KEYWORDS.some((keyword) => host.includes(keyword));
+  } catch {
+    const lower = rawUrl.toLowerCase();
+    return DENY_HOST_KEYWORDS.some((keyword) => lower.includes(keyword));
+  }
+}
+
+function isLoginPage(browserState: BrowserState): boolean {
+  const urlLower = (browserState.url || "").toLowerCase();
+  const titleLower = (browserState.title || "").toLowerCase();
+  return (
+    LOGIN_KEYWORDS.some((kw) => urlLower.includes(kw)) ||
+    LOGIN_KEYWORDS.some((kw) => titleLower.includes(kw))
+  );
+}
+
 /**
  * Decides whether the sanitized package is safe to send to the remote agent.
  * @param params Detections and browser state
@@ -16,9 +57,65 @@ export function decide(params: {
   detections: Detection[];
   browserState: BrowserState;
 }): PolicyGateResult {
-  // TODO: Implement in chunks
+  const { detections, browserState } = params;
+
+  // v0 pragmatic demo rule: allow when all detections >= 0.8 and URL is file:// or localhost / demo-portal
+  const isDemoOrLocal = isDemoOrLocalUrl(browserState.url);
+  const allHighConfidence =
+    detections.length === 0 || detections.every((d) => d.confidence >= 0.8);
+
+  if (isDemoOrLocal && allHighConfidence) {
+    return {
+      decision: "allow",
+      reason:
+        "Allowed under v0 demo exception: all detections have confidence >= 0.8 on local/demo URL",
+    };
+  }
+
+  // 1. Block if URL host matches bank/payroll/tax deny list AND any detection confidence < 0.5
+  const hasLowConfidenceUnder05 = detections.some((d) => d.confidence < 0.5);
+  if (isDenyListedHost(browserState.url) && hasLowConfidenceUnder05) {
+    const lowest = detections.reduce(
+      (min, d) => (d.confidence < min ? d.confidence : min),
+      1.0
+    );
+    return {
+      decision: "block",
+      reason: `Blocked: low-confidence detection (${lowest.toFixed(2)}) on sensitive financial/tax host`,
+    };
+  }
+
+  // 2. Block if a PASSWORD detection exists (cannot prove redaction to remote in v0)
+  const hasPassword = detections.some((d) => d.category === "PASSWORD");
+  if (hasPassword) {
+    return {
+      decision: "block",
+      reason:
+        "Blocked: PASSWORD category detection present (password pages blocked from remote in v0)",
+    };
+  }
+
+  // 3. Human approval if any detection confidence < 0.6
+  const lowConfidenceDetection = detections.find((d) => d.confidence < 0.6);
+  if (lowConfidenceDetection) {
+    return {
+      decision: "human_approval",
+      reason: `Human approval required: low confidence detection (${lowConfidenceDetection.category} at ${lowConfidenceDetection.confidence.toFixed(2)})`,
+    };
+  }
+
+  // 4. Human approval if category FACE on a login page
+  const hasFace = detections.some((d) => d.category === "FACE");
+  if (hasFace && isLoginPage(browserState)) {
+    return {
+      decision: "human_approval",
+      reason: "Human approval required: FACE detection present on login/auth page",
+    };
+  }
+
+  // 5. Allow otherwise
   return {
-    decision: "block",
-    reason: "Policy gate not implemented",
+    decision: "allow",
+    reason: "Allowed: all safety and confidence checks passed",
   };
 }
