@@ -6,8 +6,7 @@
   "permissions": ["activeTab", "tabs", "scripting"],
   "host_permissions": ["<all_urls>"],
   "background": {
-    "service_worker": "dist/background/service-worker.js",
-    "type": "module"
+    "service_worker": "dist/background/service-worker.js"
   },
   "action": {
     "default_title": "PRIVIS: run one step"

@@ -29,7 +29,7 @@ npm install
 # 2. Typecheck (no emit)
 npm run typecheck
 
-# 3. Compile TypeScript to dist/
+# 3. Build extension bundles to dist/
 npm run build
 
 # Or watch mode
@@ -41,12 +41,12 @@ npm run watch
 1. Run `npm install && npm run build` (a fresh clone has no `dist/` yet).
 2. Open `chrome://extensions`, enable **Developer mode**.
 3. Click **Load unpacked** and select **this repository root** — `manifest.json` lives here and points at the compiled `dist/` output.
-4. Chrome 91+ loads the background service worker as an ES module (`"type": "module"`).
 
 Notes:
 
 - `dist/` is git-ignored by design; it is a build artifact, never committed. Load unpacked always targets the repo root, never `dist/` itself.
-- Output is plain `tsc` — no bundler. Modules currently only use `import type` (erased at compile time), so each emitted file is self-contained. Any runtime cross-file imports between content scripts will need a bundler or dynamic `import()`; that comes with the capture pipeline (issues #3/#4).
+- `npm run typecheck` is `tsc --noEmit` and is the CI type gate; `npm run build` uses **esbuild**.
+- esbuild bundles each entry as a classic (IIFE) script. Content scripts cannot be ES modules in Chrome MV3, so stripping the top-level `export`/`import` via bundling is what makes them load at all. Service worker and content scripts are all plain classic scripts — no `"type": "module"` needed.
 
 ## Contributing
 
