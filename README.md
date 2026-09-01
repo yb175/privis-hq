@@ -9,7 +9,7 @@ PRIVIS is a browser extension that lets an AI agent operate a web page without e
 
 ## Architecture
 
-![PRIVIS architecture](docs/architecture.svg)
+![PRIVIS architecture](docs/architecture.png)
 
 ## Flow
 
