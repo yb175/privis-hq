@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acme Corp — Employee Portal (Demo)</title>
+  <style>
+    :root {
+      --accent: #1f4e78;
+      --border: #c9d2dc;
+      --bg: #f4f6f8;
+      --text: #22303f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--accent);
+      color: #fff;
+    }
+    .demo-badge {
+      background: #b45309;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 4px 10px;
+      border-radius: 999px;
+    }
+    main {
+      max-width: 520px;
+      margin: 32px auto;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px 28px;
+      text-align: center;
+    }
+    .avatar {
+      width: 96px;
+      height: 96px;
+      margin: 0 auto 8px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 2px solid var(--border);
+      background: #e2e8f0;
+    }
+    .avatar svg { display: block; width: 100%; height: auto; }
+    .note {
+      color: #64748b;
+      font-size: 13px;
+      margin: 0 0 20px;
+    }
+    form { text-align: left; }
+    .field { margin-bottom: 16px; }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    input {
+      width: 100%;
+      padding: 9px 12px;
+      font-size: 15px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    input:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+    button#submit {
+      width: 100%;
+      padding: 11px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button#submit:hover { background: #163a5c; }
+    .toast {
+      margin-top: 14px;
+      padding: 10px;
+      border-radius: 6px;
+      background: #dcfce7;
+      color: #166534;
+      font-size: 14px;
+      display: none;
+    }
+    footer {
+      text-align: center;
+      font-size: 12px;
+      color: #94a3b8;
+      padding: 16px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Acme Corp — Employee Portal</strong>
+    <span class="demo-badge">DEMO</span>
+  </header>
+
+  <main>
+    <div class="avatar" id="avatar" aria-label="Employee photo">
+      <!-- inline SVG so it renders from file:// with no network -->
+      <svg viewBox="0 0 96 96" role="img" aria-hidden="true">
+        <circle cx="48" cy="34" r="20" fill="#94a3b8"/>
+        <path d="M10 92c4-18 20-26 38-26s34 8 38 26z" fill="#94a3b8"/>
+      </svg>
+    </div>
+
+    <p class="note">This is a fake employee portal for PRIVIS demo/fixtures. All values are made up.</p>
+
+    <form id="employee-form">
+      <div class="field">
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" value="Asha Rao" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" value="asha.rao@example.in" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="pan">PAN</label>
+        <input id="pan" name="pan" type="text" value="ABCDE1234F" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="amount">Salary</label>
+        <input id="amount" name="amount" type="text" value="₹12,00,000" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="phone">Phone</label>
+        <input id="phone" name="phone" type="tel" value="+91 98765 43210" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" value="demo-pass-123" autocomplete="off">
+      </div>
+      <button id="submit" type="submit">Submit</button>
+      <p class="toast" id="toast">Submitted (demo only — nothing was sent).</p>
+    </form>
+  </main>
+
+  <footer>PRIVIS demo fixture — no real personal data.</footer>
+
+  <script>
+    document.getElementById("employee-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var toast = document.getElementById("toast");
+      toast.style.display = "block";
+    });
+  </script>
+</body>
+</html>
