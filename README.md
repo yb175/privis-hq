@@ -40,7 +40,7 @@ npm run watch
 1. **Fork** the repository to your GitHub account.
 2. **Clone** your fork locally:
    ```bash
-   git clone https://github.com/<your-username>/privis-hq.git
+   git clone https://github.com/yb175/privis-hq.git
    cd privis-hq
    ```
 3. **Create a branch** for your change:
