@@ -11,14 +11,70 @@ PRIVIS is a browser extension that lets an AI agent operate a web page without e
 
 ![PRIVIS architecture](docs/architecture.png)
 
-## Flow
+## End-to-End Execution Flow
+
+```
+[ Real Page DOM + Screenshot ]
+             │
+             ▼
+1. Capture Layer (On-Device Extension)
+   - Background worker captures viewport screenshot into memory.
+   - Content script extracts interactive DOM elements.
+             │
+             ▼
+2. Local Privacy Engine & Sanitizer (On-Device)
+   - Detects PII (PAN, Aadhaar, Email, Faces, Phone, etc.) locally.
+   - Visually redacts screenshot pixels (pixelates faces, blacks out sensitive boxes).
+   - Replaces real values with stable placeholders: `PAN_1`, `EMAIL_1`.
+   - Real-to-placeholder map stays isolated in local memory.
+   - Stamps payload with `redacted: true`.
+             │
+             ▼
+3. Policy Gate (On-Device)
+   - Evaluates risk: `allow`, `human_approval`, or `block`.
+             │
+             ▼
+4. Packager (`remote-agent/packager.ts`)
+   - Verifies redaction provenance stamp.
+   - Combines `goal` + `sanitizedContext` + `screenshot` + `lastStepResult`.
+   - Strips sensitive metadata (like unredacted labels).
+   - Generates placeholder allowlist (`["PAN_1", "EMAIL_1"]`).
+             │
+             ▼
+5. Model Router & Cloud Brain (`remote-agent/router.ts`)
+   - Operator server holds LLM keys (no keys stored in browser extension).
+   - Dispatches packaged prompt to OpenAI (GPT-4o-mini) or Gemini (3.5 Flash).
+   - Receives single candidate action (e.g. `type target="#pan" placeholder="PAN_1"`).
+             │
+             ▼
+6. Guard (`remote-agent/guard.ts`)
+   - Pre-execution lock before browser runs anything:
+     - Verifies single action and schema conformance.
+     - Enforces URL schemes (`http:`, `https:` only for `navigate`).
+     - Enforces placeholder allowlist (rejects hallucinated `PAN_2`).
+     - Scans output against deep PII registry (rejects raw PAN/SSN/Card strings).
+     - Fail-closed: if anything is invalid, falls back safely to `ask_human`.
+             │
+             ▼
+7. Local Executor (`executor/local-executor.ts` On-Device)
+   - Resolves target selector against real DOM on page.
+   - Swaps placeholder `PAN_1` back to real PAN from on-device map.
+   - Performs real browser click/type action.
+             │
+             ▼
+[ Next step loop repeats until goal is done ]
+```
+
+### Stage Summary
 
 1. **Capture Layer** — background service worker screenshots the tab (memory only); content script reads DOM, a11y, visible text, element bounding boxes, and browser state.
-2. **Local Privacy Vision Engine** — fuses DOM detections (now) with vision boxes (later); emits `{element_id, category, bbox, confidence, source}`.
-3. **Sanitizer** — visual redaction on a canvas copy + type-preserving structural placeholders; layout, button labels, and non-sensitive text are preserved.
-4. **Policy Gate** — Allow / Human Approval / Block on the sanitized package.
-5. **Remote Agent** — receives only sanitized screenshot + sanitized JSON + goal; returns actions like `{ "type": "click", "target": "#submit" }`.
-6. **Local Executor** — content script resolves targets and clicks/types on the real page, then loops back to Capture.
+2. **Local Privacy Vision Engine** — fuses DOM detections with local vision models (e.g. YuNet face detection); emits `{element_id, category, bbox, confidence, source}`.
+3. **Sanitizer** — visual redaction on a canvas copy + type-preserving structural placeholders (`PAN_1`, `EMAIL_1`); layout and non-sensitive text are preserved.
+4. **Policy Gate** — Allow / Human Approval / Block decision on the sanitized package.
+5. **Packager** — validates provenance, compiles sanitized DOM, screenshot, and step history into structured prompts, and builds the placeholder allowlist.
+6. **Remote Agent & Model Router** — server dispatches sanitized prompt to OpenAI or Gemini with server-held keys (zero client keys).
+7. **Guard** — strict pre-execution lock verifying single action, URL schemes, placeholder allowlist, and PII exclusion before execution.
+8. **Local Executor** — content script resolves target selectors, swaps placeholders back to real values using the on-device map, and executes the action on the real page.
 
 ## Development
 

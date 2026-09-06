@@ -10,6 +10,9 @@ on-device Sanitizer.
 |------|------|
 | `types.ts` | CBA-1 `AgentAction` contract, session types, PII pattern registry, `parseAgentAction` validator |
 | `router.ts` | CBA-2 model router: privacy boundary checks, provider dispatch, hallucinated-placeholder guard |
+| `packager.ts` | CBA-3 prompt packager: prompt formatting from sanitized context, last-step history, placeholder allowlist extraction. Loads the system prompt verbatim from `prompt.md` (single source of truth) |
+| `guard.ts` | CBA-3 action guard: schema checks, one-action enforcement, placeholder allowlist validation, PII / URL scheme rejection, `ask_human` fallback |
+| `prompt.md` | CBA-3 system prompt specification — **the runtime prompt itself**: loaded verbatim by `packager.ts` at build time (`--loader:.md=text`); editing it changes model behavior |
 | `client-openai.ts` | "chatgpt" brain — OpenAI-compatible chat completions (vision + JSON mode) |
 | `client-gemini.ts` | "gemini" brain — Google Gemini `generateContent` (inline image + JSON mode) |
 | `client-server.ts` | Extension-side client: POSTs sanitized package to this server, no keys on device |
@@ -21,10 +24,12 @@ on-device Sanitizer.
 Extension (no keys)                     This server (holds keys)
 ────────────────────                    ──────────────────────────
 capture → sanitize → gate               POST /plan:
-  └─ queryServer() ──────────▶            1. assertSanitizedPackage (PII guard)
-     { SanitizedPackage,                  2. loadModelSettings (keys from env)
+  └─ queryServer() ──────────▶            1. assertSanitizedPackage (PII boundary check)
+     { SanitizedPackage,                  2. packagePrompt (Packager builds prompt + allowlist)
        model: "chatgpt"|"gemini" }        3. routeAgentRequest → OpenAI / Gemini
-  ◀───────────── { ok, action } ─────     4. parseAgentAction (schema + PII guard)
+  ◀───────────── { ok, action } ─────     4. guardModelOutput / guardAction (Guard lock)
+                                             └─ ok: return AgentAction
+                                             └─ fail: return ask_human
 placeholder → real value swap
 happens on-device, after response
 ```
@@ -84,8 +89,9 @@ the app stay hermetic and never see developer secrets.
 ## Testing
 
 ```bash
+npm run test:guard    # unit + production QA for Packager & Guard (#43)
 npm run test:router   # unit + integration (mock fetch, no paid API calls)
-npm test              # full suite: typecheck, CBA-1 contract, router, privacy
+npm test              # full suite: typecheck, CBA-1, CBA-2 router, CBA-3 guard, privacy
 ```
 
 CI never calls paid APIs — all provider interactions are mocked `fetch`.
@@ -93,6 +99,13 @@ CI never calls paid APIs — all provider interactions are mocked `fetch`.
 ---
 
 ## Changelog
+
+### CBA-3 — Packager + Guard (#43)
+
+- **Packager** (`packager.ts`): Builds model prompt exclusively from sanitized context, extracts active placeholder allowlist, incorporates `lastStepResult` history, and strips sensitive metadata (`label`).
+- **Prompt Spec** (`prompt.md`): Formalized system prompt instructions enforcing strict JSON-only outputs, placeholder usage rules, and action schema constraints.
+- **Guard** (`guard.ts`): Pre-execution lock validating model output before Local Executor runs. Enforces single action per step, URL scheme allowlist (http/https only), placeholder allowlist membership, raw key bans (`value`, `text`, etc.), comprehensive PII rejection across all action properties, and graceful fail-closed fallback to `ask_human`.
+- **Tests** (`tests/test-packager-guard.ts`): Complete unit and production QA test suite for Packager, Guard, protocol restrictions, placeholder allowlist, deep PII rejection, and fail-safe fallback flows.
 
 ### CBA-2 — Model router: chatgpt vs Gemini (#42)
 

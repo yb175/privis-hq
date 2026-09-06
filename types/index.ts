@@ -143,4 +143,9 @@ export type PrivisMessageType = PrivisMessage["type"];
 
 // Cloud Browser Agent (CBA) types
 export * from "../remote-agent/types.js";
+// Type-only re-exports: the barrel must stay a pure-type module so value
+// imports of packager/guard never drag the router + LLM clients into
+// lightweight consumers (service worker, content scripts, executor).
+export type * from "../remote-agent/packager.js";
+export type * from "../remote-agent/guard.js";
 
