@@ -1,0 +1,7 @@
+{
+  "type": "type",
+  "target": {
+    "css": "#pan-input"
+  },
+  "placeholder": "PAN_1"
+}

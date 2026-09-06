@@ -153,6 +153,65 @@ interface StepResult {
 }
 ```
 
+### Target (Cloud Browser Agent)
+
+```ts
+interface Target {
+  css?: string;
+  role?: string;
+  name?: string;
+  bbox?: [number, number, number, number];
+}
+```
+
+### AgentAction (Cloud Browser Agent)
+
+```ts
+type AgentAction =
+  | { type: "navigate"; url: string }
+  | { type: "click"; target: Target }
+  | { type: "type"; target: Target; placeholder: string } // "PAN_1"
+  | { type: "scroll"; dy: number }
+  | { type: "done"; reason: string }
+  | { type: "ask_human"; reason: string };
+```
+
+One action per step. `type` carries **placeholder names only**.
+
+```mermaid
+flowchart LR
+  PKG[SanitizedPackage] --> RA[Remote Agent]
+  RA --> A[AgentAction]
+  A --> EX[Local Executor]
+```
+
+### Session Types (Cloud Browser Agent)
+
+```ts
+type SessionStatus = "idle" | "running" | "waiting_human" | "done" | "error";
+
+interface SessionStep {
+  step: number;
+  url: string;
+  action: AgentAction;
+  result?: { ok: boolean; error?: string };
+  timestamp: number;
+}
+
+interface AgentSession {
+  sessionId: string;
+  tabId: number;
+  goal: string;
+  step: number;
+  maxSteps: number;
+  status: SessionStatus;
+  history: SessionStep[];
+  lastAction?: AgentAction;
+  error?: string;
+}
+```
+
+
 ## Placeholders
 
 The Sanitizer replaces real values with stable, type-preserving placeholders so
