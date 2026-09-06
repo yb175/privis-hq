@@ -217,6 +217,7 @@ async function simulateStep(scenario: {
     goal: "test goal",
     sanitizedScreenshot,
     sanitizedContext: { elements: remoteElements, browserState: scenario.browserState },
+    redacted: true, // sanitizer provenance (required by every outbound boundary)
   };
   await sendSanitized(payload); // REAL last-line defense: throws if anything raw slipped in
   return { gate, sent: payload, map, detections, sanitized, sanitizedScreenshot };
@@ -250,8 +251,9 @@ function assertPayloadClean(
     return;
   }
   const p = out.sent;
-  check(`${tag}: payload has exactly goal/sanitizedScreenshot/sanitizedContext keys`,
-    Object.keys(p).length === 3 && "goal" in p && "sanitizedScreenshot" in p && "sanitizedContext" in p,
+  check(`${tag}: payload has exactly goal/sanitizedScreenshot/sanitizedContext/redacted keys`,
+    Object.keys(p).length === 4 &&
+      "goal" in p && "sanitizedScreenshot" in p && "sanitizedContext" in p && p.redacted === true,
     Object.keys(p).join(","));
   check(`${tag}: sanitized screenshot is NOT the raw screenshot string`,
     p.sanitizedScreenshot !== rawDataUrl && !p.sanitizedScreenshot.includes(rawDataUrl.slice(0, 100)));
@@ -488,7 +490,7 @@ async function main(): Promise<void> {
           goal: "g",
           sanitizedScreenshot: "data:image/png;base64,AAAA",
           sanitizedContext: { elements: [el("e-x", "span", [0, 0, 1, 1], { text: "ABCDE1234F" })], browserState: VIEWPORT_640 },
-        });
+        } as never);
       } catch {
         refused = true;
       }
@@ -505,13 +507,13 @@ async function main(): Promise<void> {
         ["applyPlaceholders", sw.indexOf("applyPlaceholders(pkg")],
         ["redactVisual", sw.indexOf("await redactVisual(")],
         ["decide", sw.indexOf("decide({")],
-        ["sendSanitized", sw.indexOf("sendSanitized({")],
+        ["queryServer (remote agent)", sw.indexOf("queryServer(")],
       ] as const;
       check("Order: capture -> vision -> placeholders -> redact -> gate -> remote",
         order.every(([, i]) => i !== -1) && order.every(([name], k) => order[k][1] > (k > 0 ? order[k - 1][1] : -1)),
         order.map(([name, i]) => `${name}@${i}`).join(" "));
-      check("Order: no sendSanitized call outside runStep's post-gate path",
-        sw.split("sendSanitized(").length === 2); // one import + one call
+      check("Order: no queryServer call outside runStep's post-gate path",
+        sw.split("queryServer(").length === 2); // one import + one call
     }
 
     // --- Persistence + network audit (static) --------------------------------

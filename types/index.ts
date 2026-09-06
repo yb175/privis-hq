@@ -79,6 +79,16 @@ export interface SanitizedPackage {
   goal: string;
   sanitizedScreenshot: string;
   sanitizedContext: SanitizedContext;
+  /**
+   * Provenance stamp — REQUIRED. Only the on-device Sanitizer path sets it to
+   * true after structural + visual redaction. Every outbound boundary (router,
+   * sendSanitized, queryServer) refuses packages without it, so an unredacted
+   * raw screenshot can never be dispatched to a cloud model. ponytail: stamped
+   * by trusted in-device code; a fully compromised extension process could
+   * forge it — real mitigation is the sanitizer being the only package builder,
+   * per CONTRACT.md data flow.
+   */
+  redacted: true;
 }
 
 export interface StepResult {

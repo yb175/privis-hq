@@ -13,6 +13,7 @@
 
 import type {
   Action,
+  AgentAction,
   CapturePackage,
   CaptureResponseMessage,
   ElementMeta,
@@ -26,7 +27,9 @@ import {
 } from "../privacy/sanitizer/structural-redact.js";
 import { redactVisual } from "../privacy/sanitizer/visual-redact.js";
 import { decide } from "../privacy/policy-gate/policy-gate.js";
-import { sendSanitized } from "../remote/client.js";
+import { loadModelSettings } from "../extension/src/settings/models.js";
+import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-server.js";
+import { agentActionToExecutorActions } from "../executor/agent-action.js";
 import { applyActions } from "../executor/local-executor.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
 
@@ -158,16 +161,28 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
   // dataUrl, never the element_id -> real value map. applyPlaceholders swaps
   // only `text`, so strip the user-controlled `label` (accessible label /
   // placeholder / title) to keep any raw value out of the remote context.
+  // Privacy-first: NO LLM keys on this device — the package goes to the
+  // operator's remote-agent server, which holds the keys and picks the brain.
   const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
-  const actions: Action[] = await sendSanitized({
-    goal,
-    sanitizedScreenshot,
-    sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
-  });
+  const settings = await loadModelSettings();
+  const agentAction: AgentAction = await queryServer(
+    {
+      goal,
+      sanitizedScreenshot,
+      sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
+      redacted: true, // sanitizer provenance: structural placeholders + visual redaction applied above
+    },
+    serverOptionsFromSettings(settings)
+  );
   broadcastHudStep(5, {
     goal,
-    actions,
+    agentAction,
   });
+
+  // Convert the AgentAction contract into executor Actions (name/role/bbox
+  // targets resolved against the sanitized elements; placeholder → real-value
+  // swap happens HERE, on-device, from the local map — CONTRACT.md rule 2).
+  const actions: Action[] = agentActionToExecutorActions(agentAction, sanitized, map);
 
   // Local Executor: apply the returned actions on the real page DOM.
   const results = await applyActions(tabId, actions);

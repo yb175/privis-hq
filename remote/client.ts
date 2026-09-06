@@ -38,6 +38,13 @@ function assertSanitized(pkg: SanitizedPackage): void {
   if (!pkg.sanitizedContext || !Array.isArray(pkg.sanitizedContext.elements)) {
     throw new Error("Refusing to send: missing sanitizedContext");
   }
+  // Provenance stamp: the Sanitizer path must have marked the pixels redacted.
+  // Same gate as the model router — every outbound boundary enforces it.
+  if (pkg.redacted !== true) {
+    throw new Error(
+      "Refusing to send: package not marked as sanitized (redacted flag missing) — run the Sanitizer first"
+    );
+  }
 
   // Scan the full serialized context (every element field, browser state, goal)
   // so no unscanned metadata field can carry PII across the wire.
