@@ -13,10 +13,12 @@
 
 import type {
   Action,
+  AgentAction,
   CapturePackage,
   CaptureResponseMessage,
   ElementMeta,
   StepResult,
+  Target,
 } from "../types/index.js";
 import { takeScreenshot } from "../utils/screenshot.js";
 import { sendToContent } from "../utils/messaging.js";
@@ -26,7 +28,8 @@ import {
 } from "../privacy/sanitizer/structural-redact.js";
 import { redactVisual } from "../privacy/sanitizer/visual-redact.js";
 import { decide } from "../privacy/policy-gate/policy-gate.js";
-import { sendSanitized } from "../remote/client.js";
+import { loadModelSettings } from "../extension/src/settings/models.js";
+import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-server.js";
 import { applyActions } from "../executor/local-executor.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
 
@@ -158,16 +161,28 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
   // dataUrl, never the element_id -> real value map. applyPlaceholders swaps
   // only `text`, so strip the user-controlled `label` (accessible label /
   // placeholder / title) to keep any raw value out of the remote context.
+  // Privacy-first: NO LLM keys on this device — the package goes to the
+  // operator's remote-agent server, which holds the keys and picks the brain.
   const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
-  const actions: Action[] = await sendSanitized({
-    goal,
-    sanitizedScreenshot,
-    sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
-  });
+  const settings = await loadModelSettings();
+  const agentAction: AgentAction = await queryServer(
+    {
+      goal,
+      sanitizedScreenshot,
+      sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
+      redacted: true, // sanitizer provenance: structural placeholders + visual redaction applied above
+    },
+    serverOptionsFromSettings(settings)
+  );
   broadcastHudStep(5, {
     goal,
-    actions,
+    agentAction,
   });
+
+  // Convert the AgentAction contract into executor Actions. The placeholder →
+  // real-value swap happens HERE, on-device: the executor types real values
+  // from the local map, never placeholder strings (CONTRACT.md hard rule 2).
+  const actions: Action[] = agentActionToExecutorActions(agentAction, sanitized, map);
 
   // Local Executor: apply the returned actions on the real page DOM.
   const results = await applyActions(tabId, actions);
@@ -177,6 +192,37 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
   });
 
   return { decision: gate.decision, reason: gate.reason, actions: results };
+}
+
+/**
+ * Converts a validated AgentAction into Local-Executor Actions.
+ * - click: resolves via the target's css selector (element ids work as #id).
+ * - type:  resolves the real value from the ON-DEVICE placeholder map.
+ * - navigate/scroll/done/ask_human: not executable by the content-script
+ *   executor yet (CBA-3 scope); no-ops here.
+ */
+export function agentActionToExecutorActions(
+  action: AgentAction,
+  sanitized: ElementMeta[],
+  map: Record<string, string>
+): Action[] {
+  const cssOf = (t?: Target): string | undefined =>
+    typeof t?.css === "string" && t.css.trim() ? t.css.trim() : undefined;
+
+  switch (action.type) {
+    case "click": {
+      const css = cssOf(action.target);
+      return css ? [{ type: "click", target: css }] : [];
+    }
+    case "type": {
+      const css = cssOf(action.target);
+      const el = sanitized.find((e) => e.text === action.placeholder);
+      const real = el ? map[el.element_id] : undefined;
+      return css && real !== undefined ? [{ type: "type", target: css, value: real }] : [];
+    }
+    default:
+      return [];
+  }
 }
 
 // Toolbar click → one full step on the active tab, default goal.

@@ -4,6 +4,7 @@
 import type { SanitizedPackage } from "../types/index.js";
 import { type AgentAction, parseAgentAction } from "./types.js";
 import { SYSTEM_PROMPT, buildPrompt } from "./client-openai.js";
+import { DEFAULT_MODEL_SETTINGS } from "../extension/src/settings/models.js";
 
 export interface GeminiOptions {
   apiKey?: string;
@@ -42,7 +43,9 @@ export async function queryGemini(
   const baseUrl = (
     options?.baseUrl || "https://generativelanguage.googleapis.com/v1beta"
   ).replace(/\/+$/, "");
-  const model = options?.model || "gemini-3.5-flash-lite-preview";
+  // Shared default from extension settings — optionless calls must hit the
+  // repo-configured Gemini model, not a stale hardcoded one.
+  const model = options?.model || DEFAULT_MODEL_SETTINGS.geminiModel || "gemini-3.5-flash-lite-preview";
   const fetchClient = options?.fetchFn || (typeof fetch !== "undefined" ? fetch : null);
 
   if (!fetchClient) {

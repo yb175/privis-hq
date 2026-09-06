@@ -1,5 +1,5 @@
 // remote-agent/client-openai.ts
-// OpenAI-compatible client for Cloud Browser Agent (cheap tier)
+// OpenAI-compatible client for Cloud Browser Agent (chatgpt tier)
 
 import type { SanitizedPackage } from "../types/index.js";
 import { type AgentAction, parseAgentAction } from "./types.js";
@@ -36,7 +36,9 @@ export function buildPrompt(pkg: SanitizedPackage): string {
       if (el.element_id) parts.push(`id="${el.element_id}"`);
       if (el.type) parts.push(`type="${el.type}"`);
       if (el.role) parts.push(`role="${el.role}"`);
-      if (el.label) parts.push(`label="${el.label}"`);
+      // `label` is intentionally omitted: the sanitizer only swaps `text`, so a
+      // label can still carry raw page/user data (same boundary the extension
+      // service-worker applies before dispatching to the remote agent).
       parts.push(`>`);
       if (el.text) parts.push(`text="${el.text}"`);
       if (el.bbox) parts.push(`bbox=[${el.bbox.join(",")}]`);

@@ -1,10 +1,17 @@
 // extension/src/settings/models.ts
-// Configuration and persistence for CBA-2 Model Router settings (cheap GPT vs Gemini)
+// Configuration and persistence for CBA-2 Model Router settings (chatgpt vs Gemini)
 
-export type ModelChoice = "cheap" | "gemini";
+export type ModelChoice = "chatgpt" | "gemini";
 
 export interface ModelSettings {
   model: ModelChoice;
+  /**
+   * Privacy mode (default): the extension never holds LLM keys. It POSTs the
+   * sanitized package to the operator's server, which owns the keys and picks
+   * the actual brain (chatgpt/gemini). `model` above is sent as a preference
+   * the server MAY honor.
+   */
+  serverUrl?: string;
   openaiApiKey?: string;
   openaiBaseUrl?: string;
   openaiModel?: string;
@@ -16,27 +23,33 @@ export interface ModelSettings {
 export const STORAGE_KEY_MODEL_SETTINGS = "privis_model_settings";
 
 export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
-  model: "cheap",
+  model: "chatgpt",
+  serverUrl: "http://localhost:8080",
   openaiBaseUrl: "https://api.openai.com/v1",
   openaiModel: "gpt-4o-mini",
   geminiBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
-  geminiModel: "gemini-1.5-flash",
+  geminiModel: "gemini-3.5-flash-lite-preview",
 };
 
 /**
  * Validates and merges partial settings with defaults.
+ * Every field is type-checked before use — a corrupted storage blob (non-string
+ * values) must never break loading or routing.
  */
 export function normalizeModelSettings(settings?: Partial<ModelSettings> | null): ModelSettings {
-  const model: ModelChoice = settings?.model === "gemini" ? "gemini" : "cheap";
+  const model: ModelChoice = settings?.model === "gemini" ? "gemini" : "chatgpt";
+  const str = (v: unknown): string | undefined =>
+    typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
 
   return {
     model,
-    openaiApiKey: settings?.openaiApiKey?.trim() || undefined,
-    openaiBaseUrl: settings?.openaiBaseUrl?.trim() || DEFAULT_MODEL_SETTINGS.openaiBaseUrl,
-    openaiModel: settings?.openaiModel?.trim() || DEFAULT_MODEL_SETTINGS.openaiModel,
-    geminiApiKey: settings?.geminiApiKey?.trim() || undefined,
-    geminiBaseUrl: settings?.geminiBaseUrl?.trim() || DEFAULT_MODEL_SETTINGS.geminiBaseUrl,
-    geminiModel: settings?.geminiModel?.trim() || DEFAULT_MODEL_SETTINGS.geminiModel,
+    serverUrl: str(settings?.serverUrl) || DEFAULT_MODEL_SETTINGS.serverUrl,
+    openaiApiKey: str(settings?.openaiApiKey),
+    openaiBaseUrl: str(settings?.openaiBaseUrl) || DEFAULT_MODEL_SETTINGS.openaiBaseUrl,
+    openaiModel: str(settings?.openaiModel) || DEFAULT_MODEL_SETTINGS.openaiModel,
+    geminiApiKey: str(settings?.geminiApiKey),
+    geminiBaseUrl: str(settings?.geminiBaseUrl) || DEFAULT_MODEL_SETTINGS.geminiBaseUrl,
+    geminiModel: str(settings?.geminiModel) || DEFAULT_MODEL_SETTINGS.geminiModel,
   };
 }
 
@@ -64,7 +77,7 @@ export async function loadModelSettings(): Promise<ModelSettings> {
   // Fallback to environment variables if available (e.g. Node CLI / testing environment)
   const envSettings: Partial<ModelSettings> = {};
   if (typeof process !== "undefined" && process.env) {
-    if (process.env.PRIVIS_MODEL === "gemini" || process.env.PRIVIS_MODEL === "cheap") {
+    if (process.env.PRIVIS_MODEL === "gemini" || process.env.PRIVIS_MODEL === "chatgpt") {
       envSettings.model = process.env.PRIVIS_MODEL;
     }
     if (process.env.OPENAI_API_KEY) {
@@ -107,9 +120,14 @@ export async function saveModelSettings(
     chrome.storage &&
     typeof chrome.storage.local?.set === "function"
   ) {
-    await chrome.storage.local.set({
-      [STORAGE_KEY_MODEL_SETTINGS]: merged,
-    });
+    try {
+      await chrome.storage.local.set({
+        [STORAGE_KEY_MODEL_SETTINGS]: merged,
+      });
+    } catch {
+      // Persistence is optional (e.g. quota exceeded, MV3 shutdown) — routing
+      // still works with the merged in-memory settings this call returns.
+    }
   }
 
   return merged;

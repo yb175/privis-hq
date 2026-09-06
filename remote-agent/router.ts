@@ -1,5 +1,5 @@
 // remote-agent/router.ts
-// CBA-2 Model Router: Routes sanitized agent requests between cheap GPT and Gemini
+// CBA-2 Model Router: Routes sanitized agent requests between chatgpt and Gemini
 
 import type { SanitizedPackage } from "../types/index.js";
 import { type AgentAction, PII_PATTERNS } from "./types.js";
@@ -50,6 +50,18 @@ export function assertSanitizedPackage(pkg: SanitizedPackage): void {
     throw new Error("Refusing to route: missing browserState in sanitizedContext");
   }
 
+  // Provenance gate: only the on-device Sanitizer path stamps redacted: true
+  // after structural + visual redaction. A textual PII regex scan cannot verify
+  // that PIXELS were redacted, so an unmarked package is never dispatched.
+  // ponytail: flag set by trusted in-device code; a fully compromised extension
+  // process could forge it — real mitigation is the sanitizer being the only
+  // package builder, per CONTRACT.md data flow.
+  if (pkg.redacted !== true) {
+    throw new Error(
+      "Refusing to route: package not marked as sanitized (redacted flag missing) — run the Sanitizer first"
+    );
+  }
+
   // Scan full serialized payload to ensure no raw PII leaks across the wire
   const serialized = JSON.stringify({
     goal: pkg.goal,
@@ -66,7 +78,24 @@ export function assertSanitizedPackage(pkg: SanitizedPackage): void {
 }
 
 /**
- * Routes the sanitized package to the configured model brain ("cheap" OpenAI-compatible or "gemini").
+ * Verifies that a 'type' action's placeholder actually exists in the sanitized
+ * context. Catches model-hallucinated tokens (e.g. "PAN_2" when only "PAN_1"
+ * was sanitized) that pass the token-format regex but reference nothing real.
+ */
+function assertPlaceholderInContext(pkg: SanitizedPackage, action: AgentAction): void {
+  if (action.type !== "type") return;
+  const knownPlaceholders = new Set(
+    pkg.sanitizedContext.elements.map((el) => el.text).filter(Boolean)
+  );
+  if (!knownPlaceholders.has(action.placeholder)) {
+    throw new Error(
+      `Refusing action: placeholder "${action.placeholder}" does not exist in sanitized context — model hallucination`
+    );
+  }
+}
+
+/**
+ * Routes the sanitized package to the configured model brain ("chatgpt" OpenAI-compatible or "gemini").
  * Returns a validated AgentAction adhering to the CBA-1 schema.
  */
 export async function routeAgentRequest(
@@ -95,16 +124,20 @@ export async function routeAgentRequest(
         model: settings.geminiModel,
         fetchFn,
       };
-      return await queryGemini(pkg, geminiOpts);
+      const action = await queryGemini(pkg, geminiOpts);
+      assertPlaceholderInContext(pkg, action);
+      return action;
     } else {
-      // Default: "cheap" (OpenAI-compatible)
+      // Default: "chatgpt" (OpenAI-compatible)
       const openAiOpts: OpenAIOptions = {
         apiKey: settings.openaiApiKey,
         baseUrl: settings.openaiBaseUrl,
         model: settings.openaiModel,
         fetchFn,
       };
-      return await queryOpenAI(pkg, openAiOpts);
+      const action = await queryOpenAI(pkg, openAiOpts);
+      assertPlaceholderInContext(pkg, action);
+      return action;
     }
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);

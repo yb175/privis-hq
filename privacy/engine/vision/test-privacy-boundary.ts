@@ -505,13 +505,13 @@ async function main(): Promise<void> {
         ["applyPlaceholders", sw.indexOf("applyPlaceholders(pkg")],
         ["redactVisual", sw.indexOf("await redactVisual(")],
         ["decide", sw.indexOf("decide({")],
-        ["sendSanitized", sw.indexOf("sendSanitized({")],
+        ["queryServer (remote agent)", sw.indexOf("queryServer(")],
       ] as const;
       check("Order: capture -> vision -> placeholders -> redact -> gate -> remote",
         order.every(([, i]) => i !== -1) && order.every(([name], k) => order[k][1] > (k > 0 ? order[k - 1][1] : -1)),
         order.map(([name, i]) => `${name}@${i}`).join(" "));
-      check("Order: no sendSanitized call outside runStep's post-gate path",
-        sw.split("sendSanitized(").length === 2); // one import + one call
+      check("Order: no queryServer call outside runStep's post-gate path",
+        sw.split("queryServer(").length === 2); // one import + one call
     }
 
     // --- Persistence + network audit (static) --------------------------------

@@ -79,6 +79,13 @@ export interface SanitizedPackage {
   goal: string;
   sanitizedScreenshot: string;
   sanitizedContext: SanitizedContext;
+  /**
+   * Provenance flag: must be set to true by the on-device Sanitizer path
+   * (service-worker) after structural + visual redaction. Consumers (model
+   * router) refuse packages that lack it, so an unredacted raw screenshot
+   * can never be dispatched to a cloud model.
+   */
+  redacted?: boolean;
 }
 
 export interface StepResult {
