@@ -1,0 +1,373 @@
+// remote-agent/guard.ts
+// CBA-3 Guard: Validates model outputs, rejects raw PII / illegal actions,
+// and fails closed to ask_human before Local Executor runs.
+
+import type { SanitizedPackage, SanitizedContext } from "../types/index.js";
+import {
+  type AgentAction,
+  type AskHumanAction,
+  type Target,
+  PII_PATTERNS,
+  PLACEHOLDER_TOKEN_REGEX,
+  isTarget,
+} from "./types.js";
+
+export interface GuardOptions {
+  allowlist?: Set<string> | string[];
+  sanitizedPackage?: SanitizedPackage;
+  sanitizedContext?: SanitizedContext;
+}
+
+export interface GuardSuccess {
+  ok: true;
+  action: AgentAction;
+}
+
+export interface GuardFailure {
+  ok: false;
+  error: string;
+  fallbackAction: AskHumanAction;
+}
+
+export type GuardResult = GuardSuccess | GuardFailure;
+
+const ALLOWED_NAVIGATE_PROTOCOLS = ["http:", "https:"];
+const FORBIDDEN_RAW_KEYS = ["value", "text", "input", "val", "content", "password", "secret"];
+
+/**
+ * Extracts all valid placeholder tokens present in a sanitized context.
+ */
+export function getPlaceholderAllowlistFromContext(
+  context?: SanitizedContext | null
+): Set<string> {
+  const allowlist = new Set<string>();
+  if (!context || !Array.isArray(context.elements)) {
+    return allowlist;
+  }
+
+  for (const el of context.elements) {
+    if (typeof el.text === "string") {
+      const trimmed = el.text.trim();
+      if (PLACEHOLDER_TOKEN_REGEX.test(trimmed)) {
+        allowlist.add(trimmed);
+      }
+    }
+  }
+  return allowlist;
+}
+
+/**
+ * Unwraps markdown code fences or single-action wrappers.
+ * Rejects multi-action arrays immediately.
+ */
+function normalizeRawOutput(input: unknown): unknown {
+  let val = input;
+  if (typeof val === "string") {
+    let clean = val.trim();
+    if (clean.startsWith("```")) {
+      clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    }
+    try {
+      val = JSON.parse(clean);
+    } catch (err) {
+      throw new Error(`Invalid JSON output from model: ${(err as Error).message}`);
+    }
+  }
+
+  if (Array.isArray(val)) {
+    throw new Error(
+      `Multiple actions detected (${val.length}) — model must return exactly one action per step`
+    );
+  }
+
+  if (typeof val === "object" && val !== null) {
+    const record = val as Record<string, unknown>;
+    if (Array.isArray(record.actions)) {
+      throw new Error(
+        `Multiple actions detected in 'actions' array (${record.actions.length}) — exactly one action allowed`
+      );
+    }
+    if ("action" in record && typeof record.action === "object" && record.action !== null) {
+      if (Array.isArray(record.action)) {
+        throw new Error("Multiple actions detected in 'action' wrapper — exactly one action allowed");
+      }
+      val = record.action;
+    } else if (
+      "agent_action" in record &&
+      typeof record.agent_action === "object" &&
+      record.agent_action !== null
+    ) {
+      if (Array.isArray(record.agent_action)) {
+        throw new Error(
+          "Multiple actions detected in 'agent_action' wrapper — exactly one action allowed"
+        );
+      }
+      val = record.agent_action;
+    }
+  }
+
+  return val;
+}
+
+/**
+ * Resolves the active placeholder allowlist from options.
+ */
+function resolveAllowlist(options?: GuardOptions): Set<string> | null {
+  if (!options) return null;
+  if (options.allowlist) {
+    return options.allowlist instanceof Set
+      ? options.allowlist
+      : new Set(options.allowlist);
+  }
+  if (options.sanitizedPackage?.sanitizedContext) {
+    return getPlaceholderAllowlistFromContext(options.sanitizedPackage.sanitizedContext);
+  }
+  if (options.sanitizedContext) {
+    return getPlaceholderAllowlistFromContext(options.sanitizedContext);
+  }
+  return null;
+}
+
+/**
+ * Scans an arbitrary string or object for raw PII patterns.
+ */
+export function findPiiInValue(val: unknown): string | null {
+  if (typeof val === "string") {
+    for (const { name, re } of PII_PATTERNS) {
+      if (re.test(val)) {
+        return name;
+      }
+    }
+  } else if (typeof val === "object" && val !== null) {
+    for (const v of Object.values(val)) {
+      const match = findPiiInValue(v);
+      if (match) return match;
+    }
+  }
+  return null;
+}
+
+/**
+ * Validates candidate object against Guard rules and schema.
+ */
+function validateActionWithGuard(
+  candidate: unknown,
+  allowlist: Set<string> | null
+): { ok: true; action: AgentAction } | { ok: false; error: string } {
+  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
+    return { ok: false, error: "Action must be a non-null JSON object" };
+  }
+
+  const obj = candidate as Record<string, unknown>;
+
+  if (typeof obj.type !== "string" || obj.type.trim().length === 0) {
+    return { ok: false, error: "Missing or invalid 'type' property in action" };
+  }
+
+  // Check for raw values accidentally included in top-level action object
+  for (const rawKey of FORBIDDEN_RAW_KEYS) {
+    if (rawKey in obj) {
+      return {
+        ok: false,
+        error: `Forbidden raw field '${rawKey}' present in action — must never send raw data`,
+      };
+    }
+  }
+
+  switch (obj.type) {
+    case "navigate": {
+      if (typeof obj.url !== "string" || obj.url.trim().length === 0) {
+        return { ok: false, error: "'navigate' action requires a non-empty 'url' string" };
+      }
+      const rawUrl = obj.url.trim();
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(rawUrl);
+      } catch {
+        return { ok: false, error: `Invalid URL format in navigate action: "${rawUrl}"` };
+      }
+
+      if (!ALLOWED_NAVIGATE_PROTOCOLS.includes(parsedUrl.protocol)) {
+        return {
+          ok: false,
+          error: `Disallowed URL protocol "${parsedUrl.protocol}" in navigate action — only http: and https: allowed`,
+        };
+      }
+
+      const piiMatch = findPiiInValue(rawUrl);
+      if (piiMatch) {
+        return {
+          ok: false,
+          error: `Raw ${piiMatch} detected in navigate URL: "${rawUrl}"`,
+        };
+      }
+
+      return { ok: true, action: { type: "navigate", url: rawUrl } };
+    }
+
+    case "click": {
+      if (!isTarget(obj.target)) {
+        return {
+          ok: false,
+          error: "'click' action requires a valid 'target' with css, role, name, or bbox",
+        };
+      }
+      const piiMatch = findPiiInValue(obj.target);
+      if (piiMatch) {
+        return {
+          ok: false,
+          error: `Raw ${piiMatch} detected in click target`,
+        };
+      }
+      return { ok: true, action: { type: "click", target: obj.target as Target } };
+    }
+
+    case "type": {
+      if (!isTarget(obj.target)) {
+        return {
+          ok: false,
+          error: "'type' action requires a valid 'target' with css, role, name, or bbox",
+        };
+      }
+
+      if (typeof obj.placeholder !== "string" || obj.placeholder.trim().length === 0) {
+        return { ok: false, error: "'type' action requires a non-empty 'placeholder' string" };
+      }
+
+      const trimmedPlaceholder = obj.placeholder.trim();
+
+      // 1. Scan for raw PII
+      const piiMatch = findPiiInValue(trimmedPlaceholder);
+      if (piiMatch) {
+        return {
+          ok: false,
+          error: `Raw ${piiMatch} detected in placeholder: "${obj.placeholder}". Only placeholder tokens allowed.`,
+        };
+      }
+
+      // 2. Enforce placeholder token format (e.g. PAN_1, EMAIL_1)
+      if (!PLACEHOLDER_TOKEN_REGEX.test(trimmedPlaceholder)) {
+        return {
+          ok: false,
+          error: `Invalid placeholder format: "${obj.placeholder}". Must match CATEGORY_INDEX format (e.g. 'PAN_1').`,
+        };
+      }
+
+      // 3. Enforce placeholder allowlist if available
+      if (allowlist && !allowlist.has(trimmedPlaceholder)) {
+        return {
+          ok: false,
+          error: `Placeholder "${trimmedPlaceholder}" does not exist in sanitized context allowlist [${Array.from(
+            allowlist
+          ).join(", ")}] — model hallucination`,
+        };
+      }
+
+      return {
+        ok: true,
+        action: {
+          type: "type",
+          target: obj.target as Target,
+          placeholder: trimmedPlaceholder,
+        },
+      };
+    }
+
+    case "scroll": {
+      if (typeof obj.dy !== "number" || !Number.isFinite(obj.dy)) {
+        return { ok: false, error: "'scroll' action requires a finite number 'dy'" };
+      }
+      return { ok: true, action: { type: "scroll", dy: obj.dy } };
+    }
+
+    case "done": {
+      if (typeof obj.reason !== "string" || obj.reason.trim().length === 0) {
+        return { ok: false, error: "'done' action requires a non-empty 'reason' string" };
+      }
+      const piiMatch = findPiiInValue(obj.reason);
+      if (piiMatch) {
+        return {
+          ok: false,
+          error: `Raw ${piiMatch} detected in done reason: "${obj.reason}"`,
+        };
+      }
+      return { ok: true, action: { type: "done", reason: obj.reason.trim() } };
+    }
+
+    case "ask_human": {
+      if (typeof obj.reason !== "string" || obj.reason.trim().length === 0) {
+        return { ok: false, error: "'ask_human' action requires a non-empty 'reason' string" };
+      }
+      const piiMatch = findPiiInValue(obj.reason);
+      if (piiMatch) {
+        return {
+          ok: false,
+          error: `Raw ${piiMatch} detected in ask_human reason: "${obj.reason}"`,
+        };
+      }
+      return { ok: true, action: { type: "ask_human", reason: obj.reason.trim() } };
+    }
+
+    default:
+      return { ok: false, error: `Unknown action type: "${obj.type}"` };
+  }
+}
+
+/**
+ * Guards raw model output (string, JSON, object).
+ * If validation fails, returns ok: false with fallbackAction: ask_human.
+ */
+export function guardModelOutput(
+  rawOutput: unknown,
+  options?: GuardOptions
+): GuardResult {
+  const allowlist = resolveAllowlist(options);
+
+  try {
+    const normalized = normalizeRawOutput(rawOutput);
+    const result = validateActionWithGuard(normalized, allowlist);
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.error,
+        fallbackAction: {
+          type: "ask_human",
+          reason: `Guard rejected model action: ${result.error}`,
+        },
+      };
+    }
+    return { ok: true, action: result.action };
+  } catch (err) {
+    const msg = (err as Error).message || String(err);
+    return {
+      ok: false,
+      error: msg,
+      fallbackAction: {
+        type: "ask_human",
+        reason: `Guard rejected model output: ${msg}`,
+      },
+    };
+  }
+}
+
+/**
+ * Guards an already-parsed AgentAction against allowlist, PII leaks, and schema constraints.
+ */
+export function guardAction(
+  action: AgentAction,
+  options?: GuardOptions
+): GuardResult {
+  const allowlist = resolveAllowlist(options);
+  const result = validateActionWithGuard(action, allowlist);
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error,
+      fallbackAction: {
+        type: "ask_human",
+        reason: `Guard rejected action: ${result.error}`,
+      },
+    };
+  }
+  return { ok: true, action: result.action };
+}

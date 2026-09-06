@@ -11,8 +11,9 @@
     "test:privacy": "npm run build && esbuild privacy/engine/vision/test-privacy-boundary.ts --bundle --format=esm --platform=node --outfile=dist-test/test-privacy-boundary.mjs && node dist-test/test-privacy-boundary.mjs",
     "test:cba": "esbuild tests/test-agent-action.ts --bundle --format=esm --platform=node --outfile=dist-test/test-agent-action.mjs && node dist-test/test-agent-action.mjs",
     "test:router": "esbuild tests/test-router.ts --bundle --format=esm --platform=node --outfile=dist-test/test-router.mjs && node dist-test/test-router.mjs",
+    "test:guard": "esbuild tests/test-packager-guard.ts --bundle --format=esm --platform=node --outfile=dist-test/test-packager-guard.mjs && node dist-test/test-packager-guard.mjs",
     "serve:agent": "esbuild remote-agent/server.ts --bundle --format=esm --platform=node --outfile=dist/remote-agent/server.mjs && node dist/remote-agent/server.mjs",
-    "test": "npm run typecheck && npm run test:cba && npm run test:router && npm run test:privacy",
+    "test": "npm run typecheck && npm run test:cba && npm run test:router && npm run test:guard && npm run test:privacy",
     "typecheck": "tsc --noEmit",
     "watch": "npm run build -- --watch"
   },

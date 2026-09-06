@@ -10,6 +10,7 @@ import {
 } from "../extension/src/settings/models.js";
 import { queryOpenAI, type OpenAIOptions } from "./client-openai.js";
 import { queryGemini, type GeminiOptions } from "./client-gemini.js";
+import { guardAction } from "./guard.js";
 
 export interface RouterOptions {
   settings?: Partial<ModelSettings>;
@@ -115,8 +116,9 @@ export async function routeAgentRequest(
 
   const fetchFn = options?.fetchFn;
 
-  // 3. Dispatch to selected model client
+  // 3. Dispatch to selected model client and guard output
   try {
+    let action: AgentAction;
     if (settings.model === "gemini") {
       const geminiOpts: GeminiOptions = {
         apiKey: settings.geminiApiKey,
@@ -124,9 +126,7 @@ export async function routeAgentRequest(
         model: settings.geminiModel,
         fetchFn,
       };
-      const action = await queryGemini(pkg, geminiOpts);
-      assertPlaceholderInContext(pkg, action);
-      return action;
+      action = await queryGemini(pkg, geminiOpts);
     } else {
       // Default: "chatgpt" (OpenAI-compatible)
       const openAiOpts: OpenAIOptions = {
@@ -135,10 +135,14 @@ export async function routeAgentRequest(
         model: settings.openaiModel,
         fetchFn,
       };
-      const action = await queryOpenAI(pkg, openAiOpts);
-      assertPlaceholderInContext(pkg, action);
-      return action;
+      action = await queryOpenAI(pkg, openAiOpts);
     }
+
+    const guardRes = guardAction(action, { sanitizedPackage: pkg });
+    if (!guardRes.ok) {
+      return guardRes.fallbackAction;
+    }
+    return guardRes.action;
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     // If an unhandled remote error occurs, return ask_human action so the agent loop doesn't crash
