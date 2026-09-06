@@ -63,15 +63,24 @@ AADHAAR_RE = re.compile(
 )
 
 # Amount, two branches (searched together):
-#   1. currency-prefixed: ₹ / Rs / Rs. / INR / $ / € / £ + number with
-#      optional commas (any grouping) and optional 2-decimal fraction;
-#   2. bare number: MUST have western comma grouping (one or more ",ddd"
-#      groups) — this is the conservative branch that still catches OCR
+#   1. currency-prefixed: ₹ / Rs / Rs. / INR / $ / € / £ + a number whose
+#      comma grouping, WHEN COMMAS ARE PRESENT, is valid — western
+#      \d{1,3}(?:,\d{3})* or Indian \d{1,2}(?:,\d{2})+\,\d{3} — or a plain
+#      ungrouped integer; optional 2-decimal fraction. The trailing guards
+#      (?![.,]\d) reject a malformed continuation, so a 3+-digit fraction
+#      ("₹12.345") or an invalid grouping tail ("Rs 1,23") can NOT match by
+#      backtracking to a shorter number. A sentence-ending period after a
+#      complete amount ("₹1,23,45,678.") still matches.
+#   2. bare number: MUST have valid western comma grouping (one or more
+#      ",ddd" groups) — the conservative branch that still catches OCR
 #      output where EasyOCR dropped the ₹ glyph ("12,345", "12,345.00"),
 #      while plain "12345" / "12345.67" (no comma) do NOT classify.
+# Malformed values like "₹12.345", "Rs 1,23", "INR 99.999", "₹1,234.567"
+# do NOT match.
 AMOUNT_RE = re.compile(
-    r"(?:₹|Rs\.?|INR|\$|€|£)\s?\d[\d,]*(?:\.\d{1,2})?(?!\d)"
-    r"|(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?(?!\d)"
+    r"(?:₹|Rs\.?|INR|\$|€|£)\s?(?:\d{1,3}(?:,\d{3})*|\d{1,2}(?:,\d{2})+,\d{3}|\d+)"
+    r"(?:\.\d{1,2})?(?!\d)(?![.,]\d)"
+    r"|(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?(?!\d)(?![.,]\d)"
 )
 
 # Priority order matters when a string could match several rules.

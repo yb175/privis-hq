@@ -72,6 +72,10 @@ NEG = [
     "12345",
     "12345.67",              # bare number, no comma
     "12,34",                 # invalid (non-3-digit) grouping
+    "₹12.345",              # 3-digit fraction — malformed decimal
+    "Rs 1,23",               # invalid grouping after currency
+    "INR 99.999",            # 3-digit fraction after currency word
+    "₹1,234.567",            # valid grouping, malformed fraction
     "ABCDE1234F9",           # PAN with trailing digit
     "xABCDE1234F",           # PAN embedded in longer token
     "12345678901",           # 11 digits
