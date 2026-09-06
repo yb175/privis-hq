@@ -80,6 +80,104 @@ Both must exit 0. `typecheck` catches type drift; `build` catches import/bundle 
    The active tab must be the demo portal. **Pass** = a PNG `dataUrl` comes back and it is the portal page; the raw screenshot never touches disk or extension storage.
 4. **When the full `runStep` pipeline is implemented**, run one complete step (Capture → Sanitizer → Policy Gate → Remote Agent → Executor) and diff the output against `fixtures/`: `detections.json` (vision-engine output), `sanitized-context.json` (sanitizer output — every sensitive value must be a placeholder like `EMAIL_1`/`PAN_1`), and `action-click-submit.json` (the remote agent's action that the executor must apply to `#submit`). The demo portal's fake PII is the stable target for this check.
 
+## Demo script for judges (CBA-2 model router: privacy-first remote brain)
+
+The full product now runs end-to-end: extension → your remote-agent server →
+cloud LLM (chatgpt or Gemini) → local executor — with zero PII and zero API
+keys ever leaving the user's device.
+
+### Step 0 — One-time setup (before the demo)
+
+```bash
+npm install
+npm run build
+
+# 1. Server keys (never committed; .env is git-ignored)
+cp remote-agent/.env.example remote-agent/.env
+# edit remote-agent/.env:
+#   PRIVIS_MODEL=gemini          # or chatgpt
+#   GEMINI_API_KEY=AIza...       # or OPENAI_API_KEY=sk-...
+#   AGENT_AUTH_TOKEN=$(openssl rand -hex 32)
+
+# 2. Load the extension (see "Load the extension in Chrome" above)
+# 3. Serve the demo portal
+cd demo-portal && python3 -m http.server 8000
+```
+
+### Step 1 — Start the remote brain
+
+```bash
+npm run serve:agent
+# [PRIVIS Remote Agent (Hono)] listening on http://0.0.0.0:8080 (auth: bearer token required)
+```
+
+Point out: all LLM keys live **here**, on the operator server — the extension
+ships with zero keys.
+
+### Step 2 — Point the extension at the server (once)
+
+`chrome://extensions` → **PRIVIS** → **service worker** → DevTools console:
+
+```js
+const KEY = "privis_model_settings";
+const cur = (await chrome.storage.local.get(KEY))[KEY] ?? {};
+await chrome.storage.local.set({
+  [KEY]: {
+    ...cur,
+    serverUrl: "http://localhost:8080",
+    agentAuthToken: "<same token as remote-agent/.env>",
+    model: "gemini",            // preference only — server decides with its keys
+  },
+});
+console.log("settings saved");
+```
+
+### Step 3 — Run one full agent step
+
+1. Open `http://localhost:8000` (the demo portal with synthetic PAN / Aadhaar /
+   email / amount / phone / name fields).
+2. Click the **PRIVIS toolbar icon**. The HUD walks the judges through all six
+   stages live:
+   1. **Capture** — raw screenshot + DOM package (in memory only)
+   2. **Vision Engine** — sensitive regions detected (DOM rules + YuNet face model)
+   3. **Sanitizer** — pixels blacked out, values swapped to `PAN_1`, `EMAIL_1`, …
+   4. **Policy Gate** — allow / human-approval / block decision with reason
+   5. **Remote Agent** — only the redacted screenshot + placeholder tokens cross the wire
+   6. **Executor** — the real values are typed back from the on-device map; form submits
+3. The agent loops until it returns `done` — the form is filled and submitted
+   with real values, but the cloud model never saw a single one of them.
+
+### Step 4 — The proof points (what to show the judges)
+
+- **Keys stay server-side**: the extension's storage (`chrome.storage.local` →
+  `privis_model_settings`) contains no `OPENAI_API_KEY` / `GEMINI_API_KEY` —
+  show it in DevTools.
+- **Nothing raw crosses the wire**: in the service worker's DevTools → Network,
+  the only outbound POST is to `http://localhost:8080/plan`. Its body shows
+  `PAN_1`-style tokens and a visibly redacted screenshot — no PAN, no Aadhaar,
+  no face pixels.
+- **Model switch without code changes**: flip `PRIVIS_MODEL=chatgpt` ↔
+  `gemini` in `remote-agent/.env`, restart the server, rerun — same demo, same
+  AgentAction schema, different brain. (Or send a `model` preference from the
+  extension settings above.)
+- **Fail-safety**: stop the server and click PRIVIS — the step fails closed
+  (no crash loop, no partial send). Remove the key from `.env` — the server
+  answers `ask_human` with a `no_api_key` reason instead of crashing.
+- **Automated QA (offline, no paid API)**: `npm test` runs typecheck + the
+  CBA-1 PII-guard suite (38 real-world PII patterns), the router/server tests
+  (auth, CORS, no-keys-on-wire), and the privacy boundary suite (real
+  redaction on synthetic fixtures, fail-closed vision, static leak audits).
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Server logs `auth: OFF` | `AGENT_AUTH_TOKEN` not set in `.env` — restart the server |
+| Extension step errors with `401` | `agentAuthToken` in extension storage doesn't match `AGENT_AUTH_TOKEN` |
+| `Remote agent server error` / connection refused | Server not running, or `serverUrl` mismatch (default `http://localhost:8080`) |
+| `ask_human` with `no_api_key` | Key for the selected model missing in `remote-agent/.env` |
+| Content scripts not injecting | Open `http://localhost:8000` (http/https only, not `file://`) |
+
 ## Contributing
 
 1. **Fork** the repository to your GitHub account.
