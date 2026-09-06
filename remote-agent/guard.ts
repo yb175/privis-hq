@@ -35,6 +35,20 @@ const ALLOWED_NAVIGATE_PROTOCOLS = ["http:", "https:"];
 const FORBIDDEN_RAW_KEYS = ["value", "text", "input", "val", "content", "password", "secret"];
 
 /**
+ * Replaces PII pattern matches with [REDACTED_<NAME>] markers so a string is
+ * safe to embed in a fallback reason (which flows back into the next prompt
+ * via lastStepResult) or any operator-facing surface. Category names survive;
+ * raw values do not.
+ */
+export function redactPii(text: string): string {
+  let out = text;
+  for (const { name, re } of PII_PATTERNS) {
+    out = out.replace(re, `[REDACTED_${name}]`);
+  }
+  return out;
+}
+
+/**
  * Extracts all valid placeholder tokens present in a sanitized context.
  */
 export function getPlaceholderAllowlistFromContext(
@@ -236,7 +250,17 @@ function validateActionWithGuard(
 
       const trimmedPlaceholder = obj.placeholder.trim();
 
-      // 1. Scan for raw PII
+      // 1. Scan target locators for raw PII (same rule as the click branch —
+      // a model echoing page data back in css/name must never pass)
+      const targetPii = findPiiInValue(obj.target);
+      if (targetPii) {
+        return {
+          ok: false,
+          error: `Raw ${targetPii} detected in type target`,
+        };
+      }
+
+      // 2. Scan for raw PII in placeholder
       const piiMatch = findPiiInValue(trimmedPlaceholder);
       if (piiMatch) {
         return {
@@ -245,7 +269,7 @@ function validateActionWithGuard(
         };
       }
 
-      // 2. Enforce placeholder token format (e.g. PAN_1, EMAIL_1)
+      // 3. Enforce placeholder token format (e.g. PAN_1, EMAIL_1)
       if (!PLACEHOLDER_TOKEN_REGEX.test(trimmedPlaceholder)) {
         return {
           ok: false,
@@ -253,7 +277,7 @@ function validateActionWithGuard(
         };
       }
 
-      // 3. Enforce placeholder allowlist if available
+      // 4. Enforce placeholder allowlist if available
       if (allowlist && !allowlist.has(trimmedPlaceholder)) {
         return {
           ok: false,
@@ -330,9 +354,11 @@ export function guardModelOutput(
       return {
         ok: false,
         error: result.error,
+        // Redact: the fallback reason flows back into the next prompt via
+        // lastStepResult — it must never carry the raw offending value.
         fallbackAction: {
           type: "ask_human",
-          reason: `Guard rejected model action: ${result.error}`,
+          reason: redactPii(`Guard rejected model action: ${result.error}`),
         },
       };
     }
@@ -344,7 +370,7 @@ export function guardModelOutput(
       error: msg,
       fallbackAction: {
         type: "ask_human",
-        reason: `Guard rejected model output: ${msg}`,
+        reason: redactPii(`Guard rejected model output: ${msg}`),
       },
     };
   }
@@ -365,7 +391,7 @@ export function guardAction(
       error: result.error,
       fallbackAction: {
         type: "ask_human",
-        reason: `Guard rejected action: ${result.error}`,
+        reason: redactPii(`Guard rejected action: ${result.error}`),
       },
     };
   }

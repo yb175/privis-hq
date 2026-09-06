@@ -10,9 +10,9 @@ on-device Sanitizer.
 |------|------|
 | `types.ts` | CBA-1 `AgentAction` contract, session types, PII pattern registry, `parseAgentAction` validator |
 | `router.ts` | CBA-2 model router: privacy boundary checks, provider dispatch, hallucinated-placeholder guard |
-| `packager.ts` | CBA-3 prompt packager: prompt formatting from sanitized context, last-step history, placeholder allowlist extraction |
+| `packager.ts` | CBA-3 prompt packager: prompt formatting from sanitized context, last-step history, placeholder allowlist extraction. Loads the system prompt verbatim from `prompt.md` (single source of truth) |
 | `guard.ts` | CBA-3 action guard: schema checks, one-action enforcement, placeholder allowlist validation, PII / URL scheme rejection, `ask_human` fallback |
-| `prompt.md` | CBA-3 system prompt specification for model brains |
+| `prompt.md` | CBA-3 system prompt specification — **the runtime prompt itself**: loaded verbatim by `packager.ts` at build time (`--loader:.md=text`); editing it changes model behavior |
 | `client-openai.ts` | "chatgpt" brain — OpenAI-compatible chat completions (vision + JSON mode) |
 | `client-gemini.ts` | "gemini" brain — Google Gemini `generateContent` (inline image + JSON mode) |
 | `client-server.ts` | Extension-side client: POSTs sanitized package to this server, no keys on device |
