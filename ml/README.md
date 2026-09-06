@@ -103,6 +103,7 @@ forms); that is a later milestone, not the baseline.
 | M2 | Face detection | Trained + exported `FACE` detector; precision/recall targets met on the synthetic eval split. |
 | M3 | Text-PII region detection | Vision fallback for the 6 text categories on DOM-invisible values. |
 | ML-4 | **DOM + vision fusion (done)** | `ml/fusion/fuse.py` merges existing DOM detections with ML-1/ML-3 vision detections into `Detection[]`: pixel→CSS scaling, IoU matching (threshold 0.3, deterministic tie-breaks), (element, category) duplicate merge (higher confidence wins, tie→DOM), unmatched FACE kept as `vision-<i>`, unmatched text skipped. See `fusion/README.md`. |
+| ML-5 | **Detection evaluation + metrics (done)** | `ml/evaluation/evaluate.py` scores predicted `Detection[]` vs ground truth: one-to-one matching (DOM by element identity, vision by IoU ≥ 0.5), TP/FP/FN/precision/recall/F1 aggregate + per-category, JSON CLI, synthetic fixtures only. See `evaluation/README.md`. |
 | M5 | In-extension inference | ONNX Runtime Web / WebGPU inference inside the Local Privacy Vision Engine; no Python process, no network. |
 | M6 | Evaluation + latency budget | Per-category precision/recall and end-to-end step latency measured on device; accuracy/latency trade-off documented (ISRO PS requirement). |
 
