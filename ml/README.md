@@ -18,14 +18,16 @@ training code, evaluation harness, and exported models that feed that runtime.
 | `dataset/annotations/` | Ground-truth labels (bbox + category) matching the images. |
 | `generation/` | Synthetic data generators (portals, documents, faces) — no real PII. |
 | `training/` | Training scripts and configs for the detector models. |
-| `inference/` | Export + on-device inference glue (ONNX export, preprocessing, postprocessing). Currently: pretrained MTCNN local inference (ML-1) — see `inference/README.md`. |
+| `inference/` | Export + on-device inference glue (ONNX export, preprocessing, postprocessing). Currently: pretrained raw-perception entrypoints — MTCNN FACE detection (ML-1) and EasyOCR text reading (ML-2) — plus deterministic PII classification (ML-3). Both pretrained entrypoints are dev-side baselines only: OCR output (text + pixel-space bbox + confidence) is not a `Detection`; ML-3 classification and fusion are required before anything reaches the Sanitizer. See `inference/README.md`. |
 | `fusion/` | DOM + vision detection merging — the `source:"vision"` half of the engine. |
 | `evaluation/` | Metrics: precision/recall per category, plus latency budgets. |
 | `models/` | Exported ONNX artifacts (committed only as release artifacts, never fabricated). |
 | `scripts/` | One-off utilities (dataset stats, format converters, sanity checks). |
 
-All directories are intentionally empty in this first step — no frameworks,
-no training runs, no placeholder `.onnx` files.
+The skeleton is populated: pretrained inference baselines (ML-1..ML-3),
+fusion, evaluation, and the browser-side port (ML-6*) exist as working code —
+see the milestone table below for the current state. No fabricated
+placeholder `.onnx` files: `models/` holds only real artifacts.
 
 ## Vision inference ↔ `Detection[]`
 
@@ -95,7 +97,7 @@ forms); that is a later milestone, not the baseline.
 
 | # | Milestone | Exit criteria |
 |---|-----------|---------------|
-| M0 | Structure + dataset baseline (**this step**) | `ml/` skeleton + this README; no code, no models. |
+| M0 | Structure + dataset baseline | `ml/` skeleton + this README; no code, no models. |
 | M1 | Synthetic data generation | Generator emits images + annotations covering all 8 categories; zero real PII. |
 | ML-1 | **Pretrained FACE inference (done)** | Dev-side baseline before M2: pretrained MTCNN runs locally via `ml/inference/` — GPU when available, CPU fallback, contract-shaped output. No training, no extension wiring. See `inference/README.md`. |
 | ML-2 | **Pretrained OCR text reading (done)** | Dev-side baseline before M3: pretrained EasyOCR runs locally — returns text + pixel-space `[x,y,w,h]` bboxes + confidence per line. Perception only: no PII classification (ML-3), no element_id (fusion). See `inference/README.md`. |

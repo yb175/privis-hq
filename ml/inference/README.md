@@ -163,13 +163,13 @@ nothing more.
   "lines": [
     {
       "text": "TEST USER",
-      "bbox": [77, 61, 186, 36],
-      "confidence": 0.9938
+      "bbox": [77, 61, 182, 36],
+      "confidence": 0.9999
     },
     {
       "text": "test@example.com",
-      "bbox": [75, 151, 284, 40],
-      "confidence": 0.6541
+      "bbox": [74, 150, 323, 44],
+      "confidence": 0.9897
     }
   ]
 }
@@ -356,5 +356,10 @@ Runtime enforces declared dims, OpenCV DNN did not).
 - During normal runtime, screenshots and OCR output stay in memory; nothing
   is persisted. The CLI is a dev tool: it reads a path you give it and, with
   `--annotate`, writes an annotated copy of that same local image.
-- OCR reads visible characters only; it never extracts password values
-  (passwords are handled by DOM semantics per `CONTRACT.md`).
+- OCR reads only pixels: it cannot see DOM `input[type=password]` values (the
+  browser renders those masked, and the DOM path never extracts them).
+  But text that is *visibly rendered* — a revealed "show password" field,
+  canvas-rendered text, a screenshot of typed characters — will appear in
+  OCR output like any other characters. OCR does not suppress or classify
+  it; suppression/redaction of any such leak is the job of ML-3 + fusion +
+  the Sanitizer, not of raw perception.

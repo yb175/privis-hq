@@ -31,7 +31,7 @@ def check(detections: list[dict], img_w: int, img_h: int, label: str) -> None:
         assert 0 <= x and x + w <= img_w and 0 <= y and y + h <= img_h, \
             f"{label}: bbox {det['bbox']} outside image bounds {img_w}x{img_h}"
         assert 0.0 <= det["confidence"] <= 1.0, f"{label}: confidence out of range"
-        assert det["confidence"] > 0.5, f"{label}: confidence suspiciously low"
+        assert det["confidence"] >= 0.5, f"{label}: confidence below detector threshold"
     print(f"  PASS {label}: {len(detections)} face(s), e.g. {detections[0]}")
 
 

@@ -43,8 +43,15 @@ def read_text(
 ) -> tuple[list[dict], str]:
     """OCR a PIL image. Returns (lines, resolved_device)."""
     from easyocr import Reader
+    import torch
 
     dev = pick_device(device)
+    if dev == "cuda" and not torch.cuda.is_available():
+        # Explicit --device cuda must fail loudly, not silently run on CPU
+        # (EasyOCR's Reader would quietly default back to cpu with gpu=True).
+        raise RuntimeError(
+            "device='cuda' requested but CUDA is not available; use --device auto or cpu"
+        )
     reader = Reader(list(languages), gpu=(dev == "cuda"), verbose=False)
     import numpy as np
     result = reader.readtext(np.asarray(image))

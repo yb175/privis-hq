@@ -55,9 +55,15 @@ def detect_faces(
         for (x1, y1, x2, y2), p in zip(boxes, probs):
             if p is None or p < min_confidence:
                 continue
+            # ponytail: clamp-only postprocess; NMS/letterboxing stays in the model
+            x1, y1 = max(0.0, x1), max(0.0, y1)
+            x2, y2 = min(float(image.width), x2), min(float(image.height), y2)
+            w, h = round(x2 - x1), round(y2 - y1)
+            if w <= 0 or h <= 0:
+                continue
             detections.append({
                 "category": "FACE",
-                "bbox": [round(x1), round(y1), round(x2 - x1), round(y2 - y1)],
+                "bbox": [round(x1), round(y1), w, h],
                 "confidence": round(float(p), 4),
                 "source": "vision",
             })
