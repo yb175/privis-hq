@@ -1,4 +1,10 @@
 node_modules/
 dist/
+dist-test/
 *.tsbuildinfo
 .DS_Store
+.venv-ml/
+__pycache__/
+*.pyc
+.agents/
+.claude/
