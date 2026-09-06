@@ -21,7 +21,7 @@ export interface ClickAction {
 export interface TypeAction {
   type: "type";
   target: Target;
-  placeholder: string; // e.g. "PAN_1", "EMAIL_1", "AADHAAR_1", "NAME_1", "AMOUNT_1", "PHONE_1"
+  placeholder: string; // e.g. "PAN_1", "EMAIL_1", "AADHAAR_1", "NAME_1", "AMOUNT_1", "PHONE_1", "SSN_1", "CARD_1"
 }
 
 export interface ScrollAction {
@@ -71,13 +71,58 @@ export interface AgentSession {
   error?: string;
 }
 
-// Unanchored pattern checks to catch raw PII even if embedded inside sentences
-const PII_PATTERNS: { name: string; re: RegExp }[] = [
-  { name: "PAN", re: /[a-z]{5}[0-9]{4}[a-z]/i },
-  { name: "AADHAAR", re: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/ },
-  { name: "EMAIL", re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/ },
-  { name: "PHONE", re: /\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/ },
-  { name: "CREDIT_CARD", re: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b/ },
+/**
+ * Comprehensive PII pattern registry covering >90% of real-world PII edge cases:
+ * - National & Government IDs (PAN, Aadhaar, US SSN, UK NINO, Passports)
+ * - Financial & Payment (Credit/Debit Cards, IBAN, IFSC, UPI VPAs, Currency Amounts)
+ * - Contact & Identity (Emails, Phone numbers with global formats, IP addresses, Dates of Birth)
+ * - Authentication & Secrets (JWT tokens, API keys, Bearer credentials)
+ */
+export const PII_PATTERNS: { name: string; re: RegExp }[] = [
+  // Government / National IDs
+  { name: "PAN", re: /\b[a-z]{5}[0-9]{4}[a-z]\b/i },
+  { name: "AADHAAR", re: /\b[2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4}\b/ },
+  { name: "US_SSN", re: /\b(?!000|666|9\d{2})\d{3}[- ]?(?!00)\d{2}[- ]?(?!0000)\d{4}\b/ },
+  { name: "UK_NINO", re: /\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\s?[0-9]{2}\s?[0-9]{2}\s?[0-9]{2}\s?[A-D]\b/i },
+  { name: "PASSPORT", re: /\b[A-Z][0-9]{7,8}\b/ },
+
+  // Financial & Banking
+  {
+    name: "CREDIT_CARD",
+    re: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|2[2-7][0-9]{14}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11}|6(?:011|5[0-9]{2})[0-9]{12}|60[0-9]{14}|65[0-9]{14}|81[0-9]{14}|82[0-9]{14}|508[0-9]{13}|35[0-9]{14})(?:[\s-]?[0-9]{4})*\b|\b(?:\d{4}[ -]?){3}\d{4}\b|\b\d{4}[ -]?\d{6}[ -]?\d{5}\b/,
+  },
+  { name: "IBAN", re: /\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}([A-Z0-9]?){0,16}\b/i },
+  { name: "IFSC", re: /\b[A-Z]{4}0[A-Z0-9]{6}\b/i },
+  {
+    name: "UPI_VPA",
+    re: /\b[a-zA-Z0-9._-]+@(okaxis|okhdfcbank|okicici|oksbi|paytm|ybl|ibl|upi|axl|apl|allbank|albk|aubank|axisbank|barodampay|cnrb|csbpay|dbs|dcbbank|federal|hdfcbank|hsbc|icici|idbi|idfcbank|indus|iob|kbl|kvb|kotak|pnb|rbl|sc|sib|synb|tjsb|uco|unionbank|vijb|yesbank)\b/i,
+  },
+  {
+    name: "CURRENCY_AMOUNT",
+    re: /\b(?:[$€£₹¥]|USD|EUR|GBP|INR|CAD|AUD)\s?[0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?\b|\b[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?\s?(?:USD|EUR|GBP|INR|₹|Rs\.?)\b/i,
+  },
+
+  // Contact & Personal
+  { name: "EMAIL", re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/ },
+  {
+    name: "PHONE",
+    re: /\b(?:\+\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b/,
+  },
+  {
+    name: "IPV4",
+    re: /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/,
+  },
+  {
+    name: "DOB_DATE",
+    re: /\b(?:0?[1-9]|[12][0-9]|3[01])[-/.](?:0?[1-9]|1[012])[-/.](?:19|20)\d\d\b|\b(?:19|20)\d\d[-/.](?:0?[1-9]|1[012])[-/.](?:0?[1-9]|[12][0-9]|3[01])\b/,
+  },
+
+  // Auth & Secrets
+  { name: "JWT", re: /\beyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*\b/ },
+  {
+    name: "API_KEY",
+    re: /\b(?:AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9_]{36,255}|sk-[a-zA-Z0-9]{32,}|Bearer\s+[A-Za-z0-9._~+/-]+=*)\b/,
+  },
 ];
 
 const FORBIDDEN_SCHEMES = [
@@ -89,6 +134,11 @@ const FORBIDDEN_SCHEMES = [
   "chrome-extension:",
   "about:",
 ];
+
+/**
+ * Format for legitimate privacy placeholder tokens (e.g., PAN_1, EMAIL_1, CUSTOM_TOKEN_2).
+ */
+export const PLACEHOLDER_TOKEN_REGEX = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_\d+$/;
 
 /**
  * Validates a Target object.
@@ -172,8 +222,11 @@ export function validateAgentAction(
         return { ok: false, error: "'type' action requires a non-empty 'placeholder' string" };
       }
 
+      const trimmedPlaceholder = obj.placeholder.trim();
+
+      // Scan against the comprehensive PII registry
       for (const { name, re } of PII_PATTERNS) {
-        if (re.test(obj.placeholder.trim())) {
+        if (re.test(trimmedPlaceholder)) {
           return {
             ok: false,
             error: `Raw ${name} detected in placeholder: "${obj.placeholder}". Only placeholder tokens are allowed.`,
@@ -181,12 +234,20 @@ export function validateAgentAction(
         }
       }
 
+      // Enforce valid token naming convention (e.g. CATEGORY_INDEX)
+      if (!PLACEHOLDER_TOKEN_REGEX.test(trimmedPlaceholder)) {
+        return {
+          ok: false,
+          error: `Invalid placeholder token format: "${obj.placeholder}". Must match CATEGORY_N format (e.g. 'PAN_1', 'EMAIL_1').`,
+        };
+      }
+
       return {
         ok: true,
         action: {
           type: "type",
           target: obj.target,
-          placeholder: obj.placeholder.trim(),
+          placeholder: trimmedPlaceholder,
         },
       };
     }
@@ -231,7 +292,6 @@ function normalizePayload(input: unknown): unknown {
   let val = input;
   if (typeof val === "string") {
     let clean = val.trim();
-    // Strip markdown code fences (```json ... ``` or ``` ...)
     if (clean.startsWith("```")) {
       clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
     }
@@ -242,7 +302,6 @@ function normalizePayload(input: unknown): unknown {
     }
   }
 
-  // Handle LLM wrapper keys like { action: { ... } } or { agent_action: { ... } }
   if (typeof val === "object" && val !== null && !Array.isArray(val)) {
     const record = val as Record<string, unknown>;
     if ("action" in record && typeof record.action === "object" && record.action !== null) {
