@@ -9,8 +9,8 @@
     "service_worker": "dist/background/service-worker.js"
   },
   "action": {
-    "default_title": "PRIVIS: pipeline HUD",
-    "default_popup": "hud/index.html"
+    "default_title": "PRIVIS",
+    "default_popup": "extension/src/popup/popup.html"
   },
   "content_scripts": [
     {

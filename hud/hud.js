@@ -115,6 +115,16 @@ function badge(container, decision, reason) {
   container.append(el("span", null, ` ${reason}`));
 }
 
+function updateHeaderGateBadge(decision, reason) {
+  const badgeContainer = document.getElementById("hud-gate-badge");
+  if (!badgeContainer) return;
+  badgeContainer.replaceChildren();
+  if (!decision) return;
+  const tag = el("span", `hud-badge ${String(decision).toLowerCase()}`, String(decision).toUpperCase());
+  if (reason) tag.title = reason;
+  badgeContainer.append(tag);
+}
+
 function placeholders(ctx) {
   return ctx.elements
     .filter((m) => /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME)_\d+$/.test(m.text))
@@ -154,6 +164,7 @@ async function playFixture() {
       const row = el("p");
       badge(row, "allow", "sanitized package only — no raw PII below the Sanitizer");
       b.append(row);
+      updateHeaderGateBadge("allow", "sanitized package only — no raw PII below the Sanitizer");
     });
 
     addStep(++n, STEPS[4], (b) => {
@@ -285,6 +296,7 @@ function renderLiveStep(msg) {
   if (msg.step === 1) {
     seenLiveSteps.clear();
     PIPELINE.replaceChildren();
+    updateHeaderGateBadge(null);
   }
 
   if (seenLiveSteps.has(msg.step)) return;
@@ -330,8 +342,11 @@ function renderLiveStep(msg) {
 
       case 4: {
         const row = el("p");
-        badge(row, msg.decision || "allow", msg.reason || "Safety and confidence checks passed");
+        const dec = msg.decision || "allow";
+        const rsn = msg.reason || "Safety and confidence checks passed";
+        badge(row, dec, rsn);
         b.append(row);
+        updateHeaderGateBadge(dec, rsn);
         break;
       }
 
