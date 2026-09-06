@@ -1,0 +1,97 @@
+{
+  "F1": {
+    "image": "ml/dataset/images/synthetic_face.png",
+    "width": 640,
+    "height": 480,
+    "faces": [
+      [
+        220,
+        120,
+        200,
+        260
+      ]
+    ],
+    "gt_source": "analytic: head ellipse [220,120,420,380] of make_synthetic_face.draw_face"
+  },
+  "F2": {
+    "image": "ml/dataset/images/f2_multi_scale_faces.png",
+    "width": 640,
+    "height": 480,
+    "faces": [
+      [
+        30,
+        100,
+        200,
+        260
+      ],
+      [
+        300,
+        40,
+        100,
+        130
+      ],
+      [
+        480,
+        300,
+        50,
+        65
+      ]
+    ],
+    "gt_source": "analytic: draw_face_at(x, y, s) head boxes"
+  },
+  "F3": {
+    "image": "ml/dataset/images/f3_small_faces.png",
+    "width": 1280,
+    "height": 720,
+    "faces": [
+      [
+        200,
+        200,
+        40,
+        52
+      ],
+      [
+        800,
+        400,
+        40,
+        52
+      ]
+    ],
+    "gt_source": "analytic: draw_face_at(x, y, 0.2) head boxes"
+  },
+  "F4": {
+    "image": "ml/dataset/images/f4_edge_face.png",
+    "width": 640,
+    "height": 480,
+    "faces": [
+      [
+        0,
+        140,
+        140,
+        260
+      ]
+    ],
+    "gt_source": "analytic: draw_face_at(-60, 140, 1.0) head box clipped to image bounds"
+  },
+  "F5": {
+    "image": "ml/dataset/images/f5_text_negative.png",
+    "width": 640,
+    "height": 480,
+    "faces": [],
+    "gt_source": "negative fixture: geometric text-like UI, no faces drawn"
+  },
+  "F6": {
+    "image": "ml/dataset/images/f6_form_negative.png",
+    "width": 640,
+    "height": 480,
+    "faces": [],
+    "gt_source": "negative fixture: geometric form UI, no faces drawn"
+  },
+  "F7": {
+    "image": "ml/dataset/images/synthetic_text.png",
+    "width": 800,
+    "height": 480,
+    "faces": [],
+    "gt_source": "negative fixture: existing ML-2 synthetic text page, no faces"
+  }
+}

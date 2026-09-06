@@ -1,0 +1,1096 @@
+{
+  "experiment": "M6-B2: YuNet 2023mar operating-point justification",
+  "artifact": {
+    "name": "face_detection_yunet_2023mar.onnx",
+    "size_bytes": 232589,
+    "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+    "unchanged_from_m6b": true
+  },
+  "fixtures": {
+    "F1_F7": "unchanged M6-B manifest (m6b_face_fixtures.json)",
+    "F8_F12": "M6-B2 hard negatives (m6b2_face_fixtures.json), zero faces by construction",
+    "order": [
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "F6",
+      "F7",
+      "F8",
+      "F9",
+      "F10",
+      "F11",
+      "F12"
+    ]
+  },
+  "per_face_scores": [
+    {
+      "fixture": "F1",
+      "gt": [
+        220,
+        120,
+        200,
+        260
+      ],
+      "gt_index": 0,
+      "score": 0.8497,
+      "match_iou": 0.8386
+    },
+    {
+      "fixture": "F2",
+      "gt": [
+        30,
+        100,
+        200,
+        260
+      ],
+      "gt_index": 0,
+      "score": 0.8389,
+      "match_iou": 0.8155
+    },
+    {
+      "fixture": "F2",
+      "gt": [
+        300,
+        40,
+        100,
+        130
+      ],
+      "gt_index": 1,
+      "score": 0.8137,
+      "match_iou": 0.8418
+    },
+    {
+      "fixture": "F2",
+      "gt": [
+        480,
+        300,
+        50,
+        65
+      ],
+      "gt_index": 2,
+      "score": 0.355,
+      "match_iou": 0.7932
+    },
+    {
+      "fixture": "F3",
+      "gt": [
+        200,
+        200,
+        40,
+        52
+      ],
+      "gt_index": 0,
+      "score": 0.5602,
+      "match_iou": 0.9023
+    },
+    {
+      "fixture": "F3",
+      "gt": [
+        800,
+        400,
+        40,
+        52
+      ],
+      "gt_index": 1,
+      "score": 0.4354,
+      "match_iou": 0.8824
+    },
+    {
+      "fixture": "F4",
+      "gt": [
+        0,
+        140,
+        140,
+        260
+      ],
+      "gt_index": 0,
+      "score": 0.6547,
+      "match_iou": 0.8304
+    }
+  ],
+  "threshold_sweep": {
+    "0.25": {
+      "tp": 7,
+      "fp": 2,
+      "fn": 0,
+      "precision": 0.7778,
+      "recall": 1.0,
+      "f1": 0.875,
+      "mean_matched_iou": 0.8435,
+      "fp_F5_F7": 0,
+      "fp_F8_F12": 2,
+      "per_fixture": {
+        "F1": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F2": {
+          "pred_count": 3,
+          "fp": 0,
+          "fn": 0,
+          "tp": 3
+        },
+        "F3": {
+          "pred_count": 2,
+          "fp": 0,
+          "fn": 0,
+          "tp": 2
+        },
+        "F4": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F5": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F6": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F7": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F8": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F9": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F10": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F11": {
+          "pred_count": 2,
+          "fp": 2,
+          "fn": 0,
+          "tp": 0
+        },
+        "F12": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        }
+      }
+    },
+    "0.30": {
+      "tp": 7,
+      "fp": 1,
+      "fn": 0,
+      "precision": 0.875,
+      "recall": 1.0,
+      "f1": 0.9333,
+      "mean_matched_iou": 0.8435,
+      "fp_F5_F7": 0,
+      "fp_F8_F12": 1,
+      "per_fixture": {
+        "F1": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F2": {
+          "pred_count": 3,
+          "fp": 0,
+          "fn": 0,
+          "tp": 3
+        },
+        "F3": {
+          "pred_count": 2,
+          "fp": 0,
+          "fn": 0,
+          "tp": 2
+        },
+        "F4": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F5": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F6": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F7": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F8": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F9": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F10": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F11": {
+          "pred_count": 1,
+          "fp": 1,
+          "fn": 0,
+          "tp": 0
+        },
+        "F12": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        }
+      }
+    },
+    "0.35": {
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_matched_iou": 0.8435,
+      "fp_F5_F7": 0,
+      "fp_F8_F12": 0,
+      "per_fixture": {
+        "F1": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F2": {
+          "pred_count": 3,
+          "fp": 0,
+          "fn": 0,
+          "tp": 3
+        },
+        "F3": {
+          "pred_count": 2,
+          "fp": 0,
+          "fn": 0,
+          "tp": 2
+        },
+        "F4": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F5": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F6": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F7": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F8": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F9": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F10": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F11": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F12": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        }
+      }
+    },
+    "0.40": {
+      "tp": 6,
+      "fp": 0,
+      "fn": 1,
+      "precision": 1.0,
+      "recall": 0.8571,
+      "f1": 0.9231,
+      "mean_matched_iou": 0.8518,
+      "fp_F5_F7": 0,
+      "fp_F8_F12": 0,
+      "per_fixture": {
+        "F1": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F2": {
+          "pred_count": 2,
+          "fp": 0,
+          "fn": 1,
+          "tp": 2
+        },
+        "F3": {
+          "pred_count": 2,
+          "fp": 0,
+          "fn": 0,
+          "tp": 2
+        },
+        "F4": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F5": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F6": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F7": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F8": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F9": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F10": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F11": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F12": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        }
+      }
+    },
+    "0.45": {
+      "tp": 5,
+      "fp": 0,
+      "fn": 2,
+      "precision": 1.0,
+      "recall": 0.7143,
+      "f1": 0.8333,
+      "mean_matched_iou": 0.8457,
+      "fp_F5_F7": 0,
+      "fp_F8_F12": 0,
+      "per_fixture": {
+        "F1": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F2": {
+          "pred_count": 2,
+          "fp": 0,
+          "fn": 1,
+          "tp": 2
+        },
+        "F3": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 1,
+          "tp": 1
+        },
+        "F4": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F5": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F6": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F7": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F8": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F9": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F10": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F11": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F12": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        }
+      }
+    },
+    "0.50": {
+      "tp": 5,
+      "fp": 0,
+      "fn": 2,
+      "precision": 1.0,
+      "recall": 0.7143,
+      "f1": 0.8333,
+      "mean_matched_iou": 0.8457,
+      "fp_F5_F7": 0,
+      "fp_F8_F12": 0,
+      "per_fixture": {
+        "F1": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F2": {
+          "pred_count": 2,
+          "fp": 0,
+          "fn": 1,
+          "tp": 2
+        },
+        "F3": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 1,
+          "tp": 1
+        },
+        "F4": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F5": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F6": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F7": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F8": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F9": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F10": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F11": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F12": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        }
+      }
+    },
+    "0.55": {
+      "tp": 5,
+      "fp": 0,
+      "fn": 2,
+      "precision": 1.0,
+      "recall": 0.7143,
+      "f1": 0.8333,
+      "mean_matched_iou": 0.8457,
+      "fp_F5_F7": 0,
+      "fp_F8_F12": 0,
+      "per_fixture": {
+        "F1": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F2": {
+          "pred_count": 2,
+          "fp": 0,
+          "fn": 1,
+          "tp": 2
+        },
+        "F3": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 1,
+          "tp": 1
+        },
+        "F4": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F5": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F6": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F7": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F8": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F9": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F10": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F11": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F12": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        }
+      }
+    },
+    "0.60": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 3,
+      "precision": 1.0,
+      "recall": 0.5714,
+      "f1": 0.7273,
+      "mean_matched_iou": 0.8316,
+      "fp_F5_F7": 0,
+      "fp_F8_F12": 0,
+      "per_fixture": {
+        "F1": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F2": {
+          "pred_count": 2,
+          "fp": 0,
+          "fn": 1,
+          "tp": 2
+        },
+        "F3": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 2,
+          "tp": 0
+        },
+        "F4": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F5": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F6": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F7": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F8": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F9": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F10": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F11": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F12": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        }
+      }
+    },
+    "0.65": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 3,
+      "precision": 1.0,
+      "recall": 0.5714,
+      "f1": 0.7273,
+      "mean_matched_iou": 0.8316,
+      "fp_F5_F7": 0,
+      "fp_F8_F12": 0,
+      "per_fixture": {
+        "F1": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F2": {
+          "pred_count": 2,
+          "fp": 0,
+          "fn": 1,
+          "tp": 2
+        },
+        "F3": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 2,
+          "tp": 0
+        },
+        "F4": {
+          "pred_count": 1,
+          "fp": 0,
+          "fn": 0,
+          "tp": 1
+        },
+        "F5": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F6": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F7": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F8": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F9": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F10": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F11": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        },
+        "F12": {
+          "pred_count": 0,
+          "fp": 0,
+          "fn": 0,
+          "tp": 0
+        }
+      }
+    }
+  },
+  "mtcnn_baseline": {
+    "aggregate": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 3,
+      "precision": 1.0,
+      "recall": 0.5714,
+      "f1": 0.7273
+    },
+    "mean_matched_iou": 0.6489,
+    "fp_F5_F7": 0,
+    "fp_F8_F12": 0,
+    "per_fixture": {
+      "F1": {
+        "pred_count": 1,
+        "fp": 0,
+        "fn": 0,
+        "tp": 1
+      },
+      "F2": {
+        "pred_count": 1,
+        "fp": 0,
+        "fn": 2,
+        "tp": 1
+      },
+      "F3": {
+        "pred_count": 2,
+        "fp": 0,
+        "fn": 0,
+        "tp": 2
+      },
+      "F4": {
+        "pred_count": 0,
+        "fp": 0,
+        "fn": 1,
+        "tp": 0
+      },
+      "F5": {
+        "pred_count": 0,
+        "fp": 0,
+        "fn": 0,
+        "tp": 0
+      },
+      "F6": {
+        "pred_count": 0,
+        "fp": 0,
+        "fn": 0,
+        "tp": 0
+      },
+      "F7": {
+        "pred_count": 0,
+        "fp": 0,
+        "fn": 0,
+        "tp": 0
+      },
+      "F8": {
+        "pred_count": 0,
+        "fp": 0,
+        "fn": 0,
+        "tp": 0
+      },
+      "F9": {
+        "pred_count": 0,
+        "fp": 0,
+        "fn": 0,
+        "tp": 0
+      },
+      "F10": {
+        "pred_count": 0,
+        "fp": 0,
+        "fn": 0,
+        "tp": 0
+      },
+      "F11": {
+        "pred_count": 0,
+        "fp": 0,
+        "fn": 0,
+        "tp": 0
+      },
+      "F12": {
+        "pred_count": 0,
+        "fp": 0,
+        "fn": 0,
+        "tp": 0
+      }
+    },
+    "note": "MTCNN via facenet-pytorch (ML-1), device=cpu, default config 0.5 \u2014 unchanged"
+  },
+  "latency": {
+    "load_ms": 183.6,
+    "first_ms": 15.3,
+    "steady_ms_median": 17.1,
+    "runs": 20,
+    "at_selected_threshold": {
+      "threshold": 0.35,
+      "first_ms": 25.8,
+      "steady_ms_median": 26.7
+    }
+  },
+  "determinism_at_selected": true,
+  "gate_table": {
+    "0.25": {
+      "precision_ge_0.90": false,
+      "recall_ge_0.90": true,
+      "f1_ge_0.90": false,
+      "mean_matched_iou_ge_0.75": true,
+      "recall_within_0.05_of_mtcnn": true,
+      "zero_fp_on_F5_F12": false,
+      "load_under_2000ms": true,
+      "first_under_300ms": true,
+      "steady_under_150ms": true,
+      "all_pass": false
+    },
+    "0.30": {
+      "precision_ge_0.90": false,
+      "recall_ge_0.90": true,
+      "f1_ge_0.90": true,
+      "mean_matched_iou_ge_0.75": true,
+      "recall_within_0.05_of_mtcnn": true,
+      "zero_fp_on_F5_F12": false,
+      "load_under_2000ms": true,
+      "first_under_300ms": true,
+      "steady_under_150ms": true,
+      "all_pass": false
+    },
+    "0.35": {
+      "precision_ge_0.90": true,
+      "recall_ge_0.90": true,
+      "f1_ge_0.90": true,
+      "mean_matched_iou_ge_0.75": true,
+      "recall_within_0.05_of_mtcnn": true,
+      "zero_fp_on_F5_F12": true,
+      "load_under_2000ms": true,
+      "first_under_300ms": true,
+      "steady_under_150ms": true,
+      "all_pass": true,
+      "deterministic": true
+    },
+    "0.40": {
+      "precision_ge_0.90": true,
+      "recall_ge_0.90": false,
+      "f1_ge_0.90": true,
+      "mean_matched_iou_ge_0.75": true,
+      "recall_within_0.05_of_mtcnn": true,
+      "zero_fp_on_F5_F12": true,
+      "load_under_2000ms": true,
+      "first_under_300ms": true,
+      "steady_under_150ms": true,
+      "all_pass": false
+    },
+    "0.45": {
+      "precision_ge_0.90": true,
+      "recall_ge_0.90": false,
+      "f1_ge_0.90": false,
+      "mean_matched_iou_ge_0.75": true,
+      "recall_within_0.05_of_mtcnn": true,
+      "zero_fp_on_F5_F12": true,
+      "load_under_2000ms": true,
+      "first_under_300ms": true,
+      "steady_under_150ms": true,
+      "all_pass": false
+    },
+    "0.50": {
+      "precision_ge_0.90": true,
+      "recall_ge_0.90": false,
+      "f1_ge_0.90": false,
+      "mean_matched_iou_ge_0.75": true,
+      "recall_within_0.05_of_mtcnn": true,
+      "zero_fp_on_F5_F12": true,
+      "load_under_2000ms": true,
+      "first_under_300ms": true,
+      "steady_under_150ms": true,
+      "all_pass": false
+    },
+    "0.55": {
+      "precision_ge_0.90": true,
+      "recall_ge_0.90": false,
+      "f1_ge_0.90": false,
+      "mean_matched_iou_ge_0.75": true,
+      "recall_within_0.05_of_mtcnn": true,
+      "zero_fp_on_F5_F12": true,
+      "load_under_2000ms": true,
+      "first_under_300ms": true,
+      "steady_under_150ms": true,
+      "all_pass": false
+    },
+    "0.60": {
+      "precision_ge_0.90": true,
+      "recall_ge_0.90": false,
+      "f1_ge_0.90": false,
+      "mean_matched_iou_ge_0.75": true,
+      "recall_within_0.05_of_mtcnn": true,
+      "zero_fp_on_F5_F12": true,
+      "load_under_2000ms": true,
+      "first_under_300ms": true,
+      "steady_under_150ms": true,
+      "all_pass": false
+    },
+    "0.65": {
+      "precision_ge_0.90": true,
+      "recall_ge_0.90": false,
+      "f1_ge_0.90": false,
+      "mean_matched_iou_ge_0.75": true,
+      "recall_within_0.05_of_mtcnn": true,
+      "zero_fp_on_F5_F12": true,
+      "load_under_2000ms": true,
+      "first_under_300ms": true,
+      "steady_under_150ms": true,
+      "all_pass": false
+    }
+  },
+  "passing_thresholds": [
+    "0.35"
+  ],
+  "selected_threshold": 0.35,
+  "decision": "YUNET APPROVED @ 0.35"
+}

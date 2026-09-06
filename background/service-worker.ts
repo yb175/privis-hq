@@ -3,7 +3,9 @@
 //
 // Pipeline Flow:
 // 1. Capture Layer: Tab screenshot (memory-only) + Content script DOM package.
-// 2. Local Privacy Vision Engine (DOM path): detectSensitive on extracted elements.
+// 2. Local Privacy Vision Engine: DOM path (detectSensitive) fused with the
+//    browser-local YuNet FACE detector (M6-D, fail-closed: any vision-path
+//    failure rejects runStep below — gate and remote are never reached).
 // 3. Sanitizer: structural placeholders (applyPlaceholders) + pixel redaction (redactVisual).
 // 4. Policy Gate: Evaluate risk (Allow / Human Approval / Block).
 // 5. Remote Agent: Transmit sanitized package only (never called unless the gate allows).
@@ -26,13 +28,15 @@ import { redactVisual } from "../privacy/sanitizer/visual-redact.js";
 import { decide } from "../privacy/policy-gate/policy-gate.js";
 import { sendSanitized } from "../remote/client.js";
 import { applyActions } from "../executor/local-executor.js";
+import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
 
 // Toolbar clicks carry no typed goal; run with the demo default.
 const DEFAULT_GOAL = "Submit the employee portal form";
 
 /**
  * Coordinates tab screenshot and DOM extraction from content script,
- * then fuses DOM detections (Local Privacy Vision Engine, DOM path).
+ * then runs DOM-path detections (detectSensitive) on the elements.
+ * (Vision-path fusion happens in runStep via runVisionPath.)
  * @param tabId Target tab ID
  */
 // Snapshot the content-script DOM package for a tab.
@@ -97,6 +101,19 @@ function broadcastHudStep(step: number, data: Record<string, unknown>) {
  */
 export async function runStep(tabId: number, goal: string): Promise<StepResult> {
   const pkg = await capturePackage(tabId);
+
+  // M6-D vision path: browser-local YuNet FACE inference on the SAME in-memory
+  // screenshot (no extra capture), fused with the DOM detections through the
+  // M4 rules (privacy/engine/fuse.ts). FAIL-CLOSED: any decode/model/inference
+  // error rejects this step before the gate — never an empty detection list
+  // with an unsanitized screenshot heading to the remote agent.
+  pkg.detections = await runVisionPath({
+    dataUrl: pkg.dataUrl,
+    elements: pkg.elements,
+    domDetections: pkg.detections,
+    viewport: pkg.browserState.viewport,
+  });
+
   broadcastHudStep(1, {
     rawScreenshot: pkg.dataUrl,
     elementCount: pkg.elements.length,

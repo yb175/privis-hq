@@ -24,18 +24,14 @@ LINES = [
     "₹12,345",
 ]
 
-# Windows ships these; first one that loads wins. Needed because PIL's
-# built-in bitmap font has no ₹ glyph.
-FONT_CANDIDATES = ["arial.ttf", "segoeui.ttf", "DejaVuSans.ttf"]
+# Repository-controlled font (DejaVu Sans 2.37, Bitstream Vera license —
+# see DejaVuSans-LICENSE.txt). Committed so fixture rendering is identical
+# on every machine; includes the ₹ glyph PIL's bitmap default lacks.
+FONT_PATH = Path(__file__).resolve().parents[1] / "dataset/fonts/DejaVuSans.ttf"
 
 
 def load_font(size: int = 32) -> ImageFont.FreeTypeFont:
-    for name in FONT_CANDIDATES:
-        try:
-            return ImageFont.truetype(name, size)
-        except OSError:
-            continue
-    return ImageFont.load_default()
+    return ImageFont.truetype(str(FONT_PATH), size)
 
 
 def draw_text_page() -> Image.Image:

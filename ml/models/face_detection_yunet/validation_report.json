@@ -1,0 +1,292 @@
+{
+  "model": {
+    "name": "face_detection_yunet_2023mar.onnx",
+    "size_bytes": 232589,
+    "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+    "runtime": "onnxruntime 1.29.0 CPUExecutionProvider"
+  },
+  "yunet_at_0.60": {
+    "aggregate": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 3,
+      "precision": 1.0,
+      "recall": 0.5714,
+      "f1": 0.7273
+    },
+    "per_fixture": {
+      "F1": {
+        "gt_count": 1,
+        "pred_count": 1,
+        "metrics": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "matched_ious": [
+          0.8386
+        ]
+      },
+      "F2": {
+        "gt_count": 3,
+        "pred_count": 2,
+        "metrics": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.6667,
+          "f1": 0.8
+        },
+        "matched_ious": [
+          0.8418,
+          0.8155
+        ]
+      },
+      "F3": {
+        "gt_count": 2,
+        "pred_count": 0,
+        "metrics": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 2,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "matched_ious": []
+      },
+      "F4": {
+        "gt_count": 1,
+        "pred_count": 1,
+        "metrics": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "matched_ious": [
+          0.8304
+        ]
+      },
+      "F5": {
+        "gt_count": 0,
+        "pred_count": 0,
+        "metrics": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "matched_ious": []
+      },
+      "F6": {
+        "gt_count": 0,
+        "pred_count": 0,
+        "metrics": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "matched_ious": []
+      },
+      "F7": {
+        "gt_count": 0,
+        "pred_count": 0,
+        "metrics": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "matched_ious": []
+      }
+    },
+    "mean_matched_iou": 0.8316
+  },
+  "threshold_sweep": {
+    "0.3": {
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "0.45": {
+      "tp": 5,
+      "fp": 0,
+      "fn": 2,
+      "precision": 1.0,
+      "recall": 0.7143,
+      "f1": 0.8333
+    },
+    "0.6": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 3,
+      "precision": 1.0,
+      "recall": 0.5714,
+      "f1": 0.7273
+    },
+    "0.75": {
+      "tp": 3,
+      "fp": 0,
+      "fn": 4,
+      "precision": 1.0,
+      "recall": 0.4286,
+      "f1": 0.6
+    }
+  },
+  "mtcnn_baseline": {
+    "aggregate": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 3,
+      "precision": 1.0,
+      "recall": 0.5714,
+      "f1": 0.7273
+    },
+    "per_fixture": {
+      "F1": {
+        "gt_count": 1,
+        "pred_count": 1,
+        "metrics": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "matched_ious": [
+          0.6146
+        ]
+      },
+      "F2": {
+        "gt_count": 3,
+        "pred_count": 1,
+        "metrics": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 2,
+          "precision": 1.0,
+          "recall": 0.3333,
+          "f1": 0.5
+        },
+        "matched_ious": [
+          0.7263
+        ]
+      },
+      "F3": {
+        "gt_count": 2,
+        "pred_count": 2,
+        "metrics": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "matched_ious": [
+          0.6702,
+          0.5846
+        ]
+      },
+      "F4": {
+        "gt_count": 1,
+        "pred_count": 0,
+        "metrics": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 1,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "matched_ious": []
+      },
+      "F5": {
+        "gt_count": 0,
+        "pred_count": 0,
+        "metrics": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "matched_ious": []
+      },
+      "F6": {
+        "gt_count": 0,
+        "pred_count": 0,
+        "metrics": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "matched_ious": []
+      },
+      "F7": {
+        "gt_count": 0,
+        "pred_count": 0,
+        "metrics": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "matched_ious": []
+      }
+    },
+    "note": "MTCNN via facenet-pytorch (ML-1), device=cpu, default min_confidence 0.5"
+  },
+  "latency": {
+    "model_load_ms": 177.5,
+    "first_inference_ms": 18.4,
+    "steady_state_ms_median": 16.3,
+    "runs": 20,
+    "input": "F1 640x480 letterboxed to 640x640",
+    "provider": "CPUExecutionProvider"
+  },
+  "negative_fixture_fp": {
+    "F5": 0,
+    "F6": 0,
+    "F7": 0
+  },
+  "determinism": true,
+  "gates": {
+    "sha256_match": true,
+    "precision_ge_0.90": true,
+    "recall_ge_0.90": false,
+    "f1_ge_0.90": false,
+    "mean_matched_iou_ge_0.75": true,
+    "recall_within_0.05_of_mtcnn": true,
+    "zero_fp_on_negatives": true,
+    "load_under_2000ms": true,
+    "first_under_300ms": true,
+    "steady_under_150ms": true,
+    "deterministic": true
+  },
+  "all_gates_pass": false
+}

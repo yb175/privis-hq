@@ -56,8 +56,20 @@ def box_iou(a: list[int], b: list[int]) -> float:
 def main() -> None:
     print(f"torch {torch.__version__}, CUDA available: {torch.cuda.is_available()}")
 
-    # 1. CPU fallback (always runs)
+    # 0. Fixture determinism: same code -> byte-identical image, and the
+    #    committed fixture matches what the generator produces.
+    import io
     img = draw_text_page()
+    buf1, buf2 = io.BytesIO(), io.BytesIO()
+    draw_text_page().save(buf1, "PNG")
+    draw_text_page().save(buf2, "PNG")
+    assert buf1.getvalue() == buf2.getvalue(), "fixture generator is not deterministic"
+    committed = Path(__file__).resolve().parents[1] / "dataset/images/synthetic_text.png"
+    assert committed.read_bytes() == buf1.getvalue(), \
+        f"committed fixture {committed} differs from generator output"
+    print("  PASS fixture determinism (two draws byte-identical, matches committed PNG)")
+
+    # 1. CPU fallback (always runs)
     cpu_lines, cpu_dev = read_text(img, device="cpu")
     assert cpu_dev == "cpu"
     check(cpu_lines, img.width, img.height, "CPU inference")
@@ -75,6 +87,17 @@ def main() -> None:
         print(f"  PASS CPU/CUDA agreement (first-box IoU={iou:.3f} > 0.8)")
     else:
         print("  SKIP CUDA inference (no CUDA available — CPU fallback verified)")
+
+    # 3. Explicit cuda must fail loudly when CUDA is unavailable
+    #    (EasyOCR's Reader would silently run on CPU with gpu=True).
+    from unittest.mock import patch
+    with patch.object(torch.cuda, "is_available", return_value=False):
+        try:
+            read_text(img, device="cuda")
+            raise AssertionError("device='cuda' should raise when CUDA is unavailable")
+        except RuntimeError as e:
+            assert "cuda" in str(e).lower()
+    print("  PASS explicit cuda rejected when CUDA unavailable (fails loudly, no silent CPU)")
 
     print("ALL CHECKS PASSED")
 

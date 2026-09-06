@@ -18,14 +18,16 @@ training code, evaluation harness, and exported models that feed that runtime.
 | `dataset/annotations/` | Ground-truth labels (bbox + category) matching the images. |
 | `generation/` | Synthetic data generators (portals, documents, faces) — no real PII. |
 | `training/` | Training scripts and configs for the detector models. |
-| `inference/` | Export + on-device inference glue (ONNX export, preprocessing, postprocessing). Currently: pretrained MTCNN local inference (ML-1) — see `inference/README.md`. |
+| `inference/` | Export + on-device inference glue (ONNX export, preprocessing, postprocessing). Currently: pretrained raw-perception entrypoints — MTCNN FACE detection (ML-1) and EasyOCR text reading (ML-2) — plus deterministic PII classification (ML-3). Both pretrained entrypoints are dev-side baselines only: OCR output (text + pixel-space bbox + confidence) is not a `Detection`; ML-3 classification and fusion are required before anything reaches the Sanitizer. See `inference/README.md`. |
 | `fusion/` | DOM + vision detection merging — the `source:"vision"` half of the engine. |
 | `evaluation/` | Metrics: precision/recall per category, plus latency budgets. |
 | `models/` | Exported ONNX artifacts (committed only as release artifacts, never fabricated). |
 | `scripts/` | One-off utilities (dataset stats, format converters, sanity checks). |
 
-All directories are intentionally empty in this first step — no frameworks,
-no training runs, no placeholder `.onnx` files.
+The skeleton is populated: pretrained inference baselines (ML-1..ML-3),
+fusion, evaluation, and the browser-side port (ML-6*) exist as working code —
+see the milestone table below for the current state. No fabricated
+placeholder `.onnx` files: `models/` holds only real artifacts.
 
 ## Vision inference ↔ `Detection[]`
 
@@ -95,7 +97,7 @@ forms); that is a later milestone, not the baseline.
 
 | # | Milestone | Exit criteria |
 |---|-----------|---------------|
-| M0 | Structure + dataset baseline (**this step**) | `ml/` skeleton + this README; no code, no models. |
+| M0 | Structure + dataset baseline | `ml/` skeleton + this README; no code, no models. |
 | M1 | Synthetic data generation | Generator emits images + annotations covering all 8 categories; zero real PII. |
 | ML-1 | **Pretrained FACE inference (done)** | Dev-side baseline before M2: pretrained MTCNN runs locally via `ml/inference/` — GPU when available, CPU fallback, contract-shaped output. No training, no extension wiring. See `inference/README.md`. |
 | ML-2 | **Pretrained OCR text reading (done)** | Dev-side baseline before M3: pretrained EasyOCR runs locally — returns text + pixel-space `[x,y,w,h]` bboxes + confidence per line. Perception only: no PII classification (ML-3), no element_id (fusion). See `inference/README.md`. |
@@ -105,6 +107,12 @@ forms); that is a later milestone, not the baseline.
 | ML-4 | **DOM + vision fusion (done)** | `ml/fusion/fuse.py` merges existing DOM detections with ML-1/ML-3 vision detections into `Detection[]`: pixel→CSS scaling, IoU matching (threshold 0.3, deterministic tie-breaks), (element, category) duplicate merge (higher confidence wins, tie→DOM), unmatched FACE kept as `vision-<i>`, unmatched text skipped. See `fusion/README.md`. |
 | ML-5 | **Detection evaluation + metrics (done)** | `ml/evaluation/evaluate.py` scores predicted `Detection[]` vs ground truth: one-to-one matching (DOM by element identity, vision by IoU ≥ 0.5), TP/FP/FN/precision/recall/F1 aggregate + per-category, JSON CLI, synthetic fixtures only. See `evaluation/README.md`. |
 | M5 | In-extension inference | ONNX Runtime Web / WebGPU inference inside the Local Privacy Vision Engine; no Python process, no network. |
+| ML-6A | **ONNX Runtime Web foundation (done)** | ORT Web (WASM-only) session factory in `privacy/engine/vision/ort-runtime.ts` with fail-explicit loading, no-network proof, Node test harness — no model, no pipeline wiring. |
+| ML-6B | **YuNet model validation (done: rejected @0.60)** | Offline validation of official YuNet 2023mar (checksum-verified, ML-5-scored vs MTCNN, latency, determinism, 20 tests). All gates pass except recall/F1 at the mandated 0.60 threshold — see `models/face_detection_yunet/README.md`. Not browser-wired. |
+| ML-6B2 | **YuNet operating-point justification (done: APPROVED @ 0.35)** | Hard negatives F8–F12 + threshold sweep 0.25–0.65 with unchanged gates. 0.25/0.30 falsified by real FPs (F11 texture); 0.40+ loses a small face; **0.35 passes every gate** (P/R/F1 = 1.000, IoU 0.843, zero FP F5–F12, deterministic, latency green). Thin margin [0.3482, 0.3550] documented. Not browser-wired. |
+| ML-6C | **Browser TS port + parity (done: PASS)** | `privacy/engine/vision/face-detector.ts`: faithful port of `ml/inference/yunet_detector.py` (checksum gate, letterbox, decode, NMS, threshold 0.35). Parity on F1–F12 vs `reference_outputs_m6c.json`: identical counts, max box error 0 px, max confidence error 0.0007; latency + determinism green; tampered-model rejection. Unwired. |
+| ML-6D | **Pipeline wiring (done: PASS)** | `privacy/engine/vision/face-pipeline.ts` + `privacy/engine/fuse.ts` (M4 rules ported, byte-identical vs Python) wired into `runStep()`: screenshot → RGBA → YuNet → fusion → existing sanitizer/gate/remote. **Fail-closed**: any vision-path error rejects the step before the gate — never `detections = []`. Scenarios A–F + privacy boundary + latency green via `npm run test:face-pipeline`. |
+| ML-6E | **Privacy-boundary validation (done: PASS)** | `npm run test:privacy`: 123 checks running the REAL pipeline (real redactVisual via a test-only canvas shim, real sendSanitized last-line defense) over matrix A–H. Verified: FACE pixelated (exact block geometry) before any payload, no FACE text placeholder, PII placeholders unchanged, PASSWORD never extracted, overlap fusion correct, raw-vs-sanitized screenshot hashes differ, fail-closed on model/inference/decode/sanitizer failure, persistence + network audits clean. **No privacy defects found; zero runtime code changed.** |
 | M6 | Evaluation + latency budget | Per-category precision/recall and end-to-end step latency measured on device; accuracy/latency trade-off documented (ISRO PS requirement). |
 
 Each milestone is its own issue/branch; nothing here jumps ahead.

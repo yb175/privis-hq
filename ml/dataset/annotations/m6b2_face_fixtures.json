@@ -1,0 +1,37 @@
+{
+  "F8": {
+    "image": "ml/dataset/images/f8_skin_blobs.png",
+    "width": 640,
+    "height": 480,
+    "faces": [],
+    "gt_source": "hard negative (M6-B2): featureless skin-tone ellipses/blobs of varied size and aspect \u2014 zero faces by construction"
+  },
+  "F9": {
+    "image": "ml/dataset/images/f9_partial_primitives.png",
+    "width": 640,
+    "height": 480,
+    "faces": [],
+    "gt_source": "hard negative (M6-B2): skin ellipses each carrying exactly ONE facial primitive (one eye / one mouth / one brow) \u2014 zero faces by construction"
+  },
+  "F10": {
+    "image": "ml/dataset/images/f10_hand_like.png",
+    "width": 640,
+    "height": 480,
+    "faces": [],
+    "gt_source": "hard negative (M6-B2): fist-like blobs: rounded palm + four finger capsules + thumb \u2014 zero faces by construction"
+  },
+  "F11": {
+    "image": "ml/dataset/images/f11_lowfreq_texture.png",
+    "width": 640,
+    "height": 480,
+    "faces": [],
+    "gt_source": "hard negative (M6-B2): smooth gradients + soft blobs + seeded low-frequency noise \u2014 zero faces by construction"
+  },
+  "F12": {
+    "image": "ml/dataset/images/f12_circles_animals.png",
+    "width": 640,
+    "height": 480,
+    "faces": [],
+    "gt_source": "hard negative (M6-B2): grouped circle clusters + cartoon cat head (triangle ears, whiskers) \u2014 zero faces by construction"
+  }
+}
