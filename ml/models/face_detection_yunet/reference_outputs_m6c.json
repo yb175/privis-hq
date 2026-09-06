@@ -1,0 +1,195 @@
+{
+  "model": "face_detection_yunet_2023mar.onnx",
+  "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+  "score_threshold": 0.35,
+  "note": "offline ORT (CPU) reference at the M6-B2 approved operating point",
+  "F1": {
+    "image": "ml/dataset/images/synthetic_face.png",
+    "image_size": [
+      640,
+      480
+    ],
+    "letterbox_scale": 1.0,
+    "detections": [
+      {
+        "category": "FACE",
+        "bbox": [
+          229,
+          126,
+          184,
+          237
+        ],
+        "confidence": 0.8497,
+        "source": "vision"
+      }
+    ]
+  },
+  "F2": {
+    "image": "ml/dataset/images/f2_multi_scale_faces.png",
+    "image_size": [
+      640,
+      480
+    ],
+    "letterbox_scale": 1.0,
+    "detections": [
+      {
+        "category": "FACE",
+        "bbox": [
+          40,
+          110,
+          182,
+          233
+        ],
+        "confidence": 0.8389,
+        "source": "vision"
+      },
+      {
+        "category": "FACE",
+        "bbox": [
+          301,
+          50,
+          96,
+          114
+        ],
+        "confidence": 0.8137,
+        "source": "vision"
+      },
+      {
+        "category": "FACE",
+        "bbox": [
+          476,
+          303,
+          55,
+          56
+        ],
+        "confidence": 0.355,
+        "source": "vision"
+      }
+    ]
+  },
+  "F3": {
+    "image": "ml/dataset/images/f3_small_faces.png",
+    "image_size": [
+      1280,
+      720
+    ],
+    "letterbox_scale": 0.5,
+    "detections": [
+      {
+        "category": "FACE",
+        "bbox": [
+          200,
+          200,
+          41,
+          48
+        ],
+        "confidence": 0.5602,
+        "source": "vision"
+      },
+      {
+        "category": "FACE",
+        "bbox": [
+          799,
+          402,
+          42,
+          48
+        ],
+        "confidence": 0.4354,
+        "source": "vision"
+      }
+    ]
+  },
+  "F4": {
+    "image": "ml/dataset/images/f4_edge_face.png",
+    "image_size": [
+      640,
+      480
+    ],
+    "letterbox_scale": 1.0,
+    "detections": [
+      {
+        "category": "FACE",
+        "bbox": [
+          0,
+          151,
+          127,
+          238
+        ],
+        "confidence": 0.6547,
+        "source": "vision"
+      }
+    ]
+  },
+  "F5": {
+    "image": "ml/dataset/images/f5_text_negative.png",
+    "image_size": [
+      640,
+      480
+    ],
+    "letterbox_scale": 1.0,
+    "detections": []
+  },
+  "F6": {
+    "image": "ml/dataset/images/f6_form_negative.png",
+    "image_size": [
+      640,
+      480
+    ],
+    "letterbox_scale": 1.0,
+    "detections": []
+  },
+  "F7": {
+    "image": "ml/dataset/images/synthetic_text.png",
+    "image_size": [
+      800,
+      480
+    ],
+    "letterbox_scale": 0.8,
+    "detections": []
+  },
+  "F8": {
+    "image": "ml/dataset/images/f8_skin_blobs.png",
+    "image_size": [
+      640,
+      480
+    ],
+    "letterbox_scale": 1.0,
+    "detections": []
+  },
+  "F9": {
+    "image": "ml/dataset/images/f9_partial_primitives.png",
+    "image_size": [
+      640,
+      480
+    ],
+    "letterbox_scale": 1.0,
+    "detections": []
+  },
+  "F10": {
+    "image": "ml/dataset/images/f10_hand_like.png",
+    "image_size": [
+      640,
+      480
+    ],
+    "letterbox_scale": 1.0,
+    "detections": []
+  },
+  "F11": {
+    "image": "ml/dataset/images/f11_lowfreq_texture.png",
+    "image_size": [
+      640,
+      480
+    ],
+    "letterbox_scale": 1.0,
+    "detections": []
+  },
+  "F12": {
+    "image": "ml/dataset/images/f12_circles_animals.png",
+    "image_size": [
+      640,
+      480
+    ],
+    "letterbox_scale": 1.0,
+    "detections": []
+  }
+}

@@ -1,4 +1,4 @@
-# ml/inference/ — pretrained local inference (ML-1 FACE, ML-2 OCR)
+# ml/inference/ — pretrained local inference (ML-1 FACE, ML-2 OCR, ML-6B/B2 YuNet)
 
 Working local ML milestones that run entirely on this machine:
 
@@ -278,6 +278,54 @@ coordinates, never the matched text. Test data is 100% synthetic.
 .venv-ml/Scripts/python.exe ml/inference/pii_classifier.py ocr.json
 ```
 
+## ML-6B: offline YuNet FACE validation (candidate browser detector)
+
+Offline validation of the official YuNet 2023mar ONNX artifact
+(opencv_zoo, MIT model license) as candidate browser FACE detector, via
+Python onnxruntime — the same ORT family as the browser runtime (M6-A).
+**Not wired into the extension.**
+
+M6-B verdict at the upstream default threshold 0.60: **REJECTED** (recall
+0.5714 / F1 0.7273 < 0.90 gates) with precision 1.0, zero FPs on the
+original negatives, excellent localization (IoU 0.832) and latency far
+under budget; the ported decoder reproduces OpenCV's own runtime exactly.
+
+**M6-B2 (operating-point justification) verdict: YUNET APPROVED @ 0.35.**
+Five adversarial hard negatives (F8–F12: featureless skin blobs, single-
+primitive ellipses, fist-like blobs, low-frequency texture, circle/cat
+patterns) falsified the naive 0.30 (real FPs at 0.298–0.348 on the texture
+negative), and 0.40+ loses the 0.435-scored small face. 0.35 passes every
+unchanged gate: precision 1.000, recall 1.000, F1 1.000, mean IoU 0.843,
+zero FP on F5–F12, deterministic, latency green. **Documented risk:** the
+feasible band is thin ([0.3482, 0.3550]) — see the model README. Full
+evidence: [`../models/face_detection_yunet/README.md`](../models/face_detection_yunet/README.md),
+`validation_report_b2.json` there.
+
+### Commands
+
+```bash
+# Regenerate the deterministic fixtures + annotations (F2-F6 + manifest):
+.venv-ml/Scripts/python.exe ml/scripts/make_m6b_fixtures.py
+
+# M6-B2 hard negatives (F8-F12 + manifest):
+.venv-ml/Scripts/python.exe ml/scripts/make_m6b2_fixtures.py
+
+# Full M6-B validation experiment (validation_report.json + reference_outputs.json):
+.venv-ml/Scripts/python.exe ml/scripts/validate_yunet.py
+
+# M6-B2 operating-point experiment (validation_report_b2.json):
+.venv-ml/Scripts/python.exe ml/scripts/validate_yunet_b2.py
+
+# Detector CLI / tests:
+.venv-ml/Scripts/python.exe ml/inference/yunet_detector.py ml/dataset/images/synthetic_face.png
+.venv-ml/Scripts/python.exe ml/inference/test_yunet_detector.py   # M6-B: 20 checks
+.venv-ml/Scripts/python.exe ml/inference/test_yunet_b2.py          # M6-B2: 10 checks
+```
+
+Note: the 2023mar artifact declares a **fixed 640×640 input**; the detector
+letterboxes to it (documented deviation from the 320×320 suggestion — ONNX
+Runtime enforces declared dims, OpenCV DNN did not).
+
 ## Files
 
 | File | Purpose |
@@ -288,6 +336,13 @@ coordinates, never the matched text. Test data is 100% synthetic.
 | `test_ocr_reader.py` | ML-2 smoke test (see above) |
 | `pii_classifier.py` | ML-3 deterministic classifier (`classify_line`, `classify_ocr_lines`) + CLI |
 | `test_pii_classifier.py` | ML-3 unit tests (see above) |
+| `yunet_detector.py` | ML-6B offline YuNet detector (checksum gate, letterbox 640×640, ported decode, NMS, fail-closed) + CLI |
+| `test_yunet_detector.py` | ML-6B tests: 20 checks (checksum/tamper, load, structure, determinism, negatives, decode math, NMS, letterbox, fixtures) |
+| `../scripts/make_m6b_fixtures.py` | ML-6B deterministic synthetic fixtures F2–F6 + annotation manifest |
+| `../scripts/validate_yunet.py` | ML-6B validation experiment: YuNet + MTCNN baseline over F1–F7, ML-5 scoring, threshold sweep, latency, determinism |
+| `../scripts/make_m6b2_fixtures.py` | M6-B2 hard negatives F8–F12 (deterministic) + manifest |
+| `../scripts/validate_yunet_b2.py` | M6-B2 operating-point experiment: F1–F12 sweep, per-face scores, MTCNN, gates |
+| `test_yunet_b2.py` | M6-B2 tests: 10 checks (F1–F7 preserved, F8–F12 deterministic/zero-GT, 0.35 structure + determinism, evidence consistency) |
 | `../scripts/make_synthetic_face.py` | Deterministic synthetic fixture generator (no real faces) |
 | `../scripts/make_synthetic_text.py` | Deterministic synthetic text fixture generator (fake strings only) |
 | `../dataset/images/synthetic_face.png` | Committed fixture — synthetic drawing, not a real person |
