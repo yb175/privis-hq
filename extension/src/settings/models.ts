@@ -12,6 +12,8 @@ export interface ModelSettings {
    * the server MAY honor.
    */
   serverUrl?: string;
+  /** Bearer token for the operator server (sent as Authorization header). */
+  agentAuthToken?: string;
   openaiApiKey?: string;
   openaiBaseUrl?: string;
   openaiModel?: string;
@@ -22,7 +24,13 @@ export interface ModelSettings {
 
 export const STORAGE_KEY_MODEL_SETTINGS = "privis_model_settings";
 
-export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
+/**
+ * Non-secret defaults (always defined). API keys are NOT defaulted — they come
+ * from chrome.storage / env only.
+ */
+export const DEFAULT_MODEL_SETTINGS: Required<
+  Omit<ModelSettings, "openaiApiKey" | "geminiApiKey" | "agentAuthToken">
+> = {
   model: "chatgpt",
   serverUrl: "http://localhost:8080",
   openaiBaseUrl: "https://api.openai.com/v1",
@@ -44,6 +52,7 @@ export function normalizeModelSettings(settings?: Partial<ModelSettings> | null)
   return {
     model,
     serverUrl: str(settings?.serverUrl) || DEFAULT_MODEL_SETTINGS.serverUrl,
+    agentAuthToken: str(settings?.agentAuthToken),
     openaiApiKey: str(settings?.openaiApiKey),
     openaiBaseUrl: str(settings?.openaiBaseUrl) || DEFAULT_MODEL_SETTINGS.openaiBaseUrl,
     openaiModel: str(settings?.openaiModel) || DEFAULT_MODEL_SETTINGS.openaiModel,

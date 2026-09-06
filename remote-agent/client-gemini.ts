@@ -43,9 +43,7 @@ export async function queryGemini(
   const baseUrl = (
     options?.baseUrl || "https://generativelanguage.googleapis.com/v1beta"
   ).replace(/\/+$/, "");
-  // Shared default from extension settings — optionless calls must hit the
-  // repo-configured Gemini model, not a stale hardcoded one.
-  const model = options?.model || DEFAULT_MODEL_SETTINGS.geminiModel || "gemini-3.5-flash-lite-preview";
+  const model: string = options?.model || DEFAULT_MODEL_SETTINGS.geminiModel;
   const fetchClient = options?.fetchFn || (typeof fetch !== "undefined" ? fetch : null);
 
   if (!fetchClient) {

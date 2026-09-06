@@ -129,6 +129,7 @@ await saveModelSettings({
 assert.deepStrictEqual(mockStorage[STORAGE_KEY_MODEL_SETTINGS], {
   model: "gemini",
   serverUrl: "http://localhost:8080",
+  agentAuthToken: undefined,
   openaiApiKey: undefined,
   openaiBaseUrl: "https://api.openai.com/v1",
   openaiModel: "gpt-4o-mini",
@@ -504,7 +505,7 @@ assert.throws(
 // (a non-empty string alone cannot prove pixels were redacted)
 assert.throws(
   () => {
-    assertSanitizedPackage({ ...pkg, redacted: undefined });
+    assertSanitizedPackage({ ...pkg, redacted: undefined as unknown as true });
   },
   {
     message: /not marked as sanitized.*run the Sanitizer first/i,
@@ -691,8 +692,44 @@ const notFoundRes = await app.request("/unknown-route");
 assert.strictEqual(notFoundRes.status, 404);
 console.log("  ✔ Hono app returns 404 for unknown endpoints");
 
-// Restore developer environment after all isolation-dependent tests
-process.env = ENV_BACKUP;
+// Auth: when AGENT_AUTH_TOKEN is set, /plan requires the bearer token
+try {
+  process.env.AGENT_AUTH_TOKEN = "test-secret-token";
+  const noAuthRes = await app.request("/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pkg),
+  });
+  assert.strictEqual(noAuthRes.status, 401);
+  const badAuthRes = await app.request("/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer wrong-token" },
+    body: JSON.stringify(pkg),
+  });
+  assert.strictEqual(badAuthRes.status, 401);
+  const goodAuthRes = await app.request("/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer test-secret-token" },
+    body: JSON.stringify(pkg),
+  });
+  assert.strictEqual(goodAuthRes.status, 200);
+  console.log("  ✔ /plan enforces bearer auth when AGENT_AUTH_TOKEN is configured");
+
+  // CORS: disallowed origins get no Access-Control-Allow-Origin header
+  const evilRes = await app.request("/plan", {
+    method: "OPTIONS",
+    headers: { Origin: "https://evil.example.com", "Access-Control-Request-Method": "POST" },
+  });
+  assert.ok(!evilRes.headers.get("Access-Control-Allow-Origin"));
+  const friendRes = await app.request("/plan", {
+    method: "OPTIONS",
+    headers: { Origin: "chrome-extension://abcdef", "Access-Control-Request-Method": "POST" },
+  });
+  assert.strictEqual(friendRes.headers.get("Access-Control-Allow-Origin"), "chrome-extension://abcdef");
+  console.log("  ✔ CORS restricted to localhost / chrome-extension / configured origins");
+} finally {
+  delete process.env.AGENT_AUTH_TOKEN;
+}
 
 // --------------------------------------------------------------------------
 // 7. Privacy-first Server Client (extension -> operator server, no keys on device)
@@ -790,7 +827,11 @@ globalThis.fetch = async (input: any, init: any) => {
 
 try {
   // The server holds its keys in env (here: simulated) — the client never sent any.
+  // Base URL/model also isolated so a developer's exported values can't
+  // redirect the upstream-call assertion.
   process.env.GEMINI_API_KEY = "server-held-test-key";
+  delete process.env.GEMINI_BASE_URL;
+  delete process.env.GEMINI_MODEL;
   const prefRes = await app.request("/plan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -818,6 +859,110 @@ const srvOpts = serverOptionsFromSettings({
 assert.strictEqual(srvOpts.serverUrl, "http://prod:8080");
 assert.strictEqual(srvOpts.model, "gemini");
 console.log("  ✔ serverOptionsFromSettings maps settings correctly");
+
+// Pre-flight privacy check: unsanitized package refused BEFORE any POST
+let preFlightCalls = 0;
+const spyFetch: typeof fetch = async () => {
+  preFlightCalls++;
+  return { ok: true, json: async () => ({ ok: true, action: { type: "done", reason: "x" } }) } as Response;
+};
+await assert.rejects(
+  async () => {
+    await queryServer({ ...pkg, tabId: 1 } as any, { fetchFn: spyFetch });
+  },
+  {
+    message: /Refusing to route: package contains raw field "tabId"/i,
+  }
+);
+await assert.rejects(
+  async () => {
+    await queryServer({ ...pkg, redacted: undefined } as any, { fetchFn: spyFetch });
+  },
+  {
+    message: /not marked as sanitized/i,
+  }
+);
+assert.strictEqual(preFlightCalls, 0, "nothing may be POSTed for unsanitized packages");
+console.log("  ✔ queryServer refuses unsanitized packages before any network request");
+
+// --------------------------------------------------------------------------
+// 8. AgentAction -> Executor bridge (name/role/bbox resolution, real-value swap)
+// --------------------------------------------------------------------------
+console.log("\n[8] Executor bridge tests");
+
+import { agentActionToExecutorActions } from "../executor/agent-action.js";
+
+const bridgeElements: ElementMeta[] = [
+  { element_id: "pan-input", tag: "input", type: "text", role: "textbox", label: null, text: "PAN_1", bbox: [10, 20, 200, 30] },
+  { element_id: "el-input-7", tag: "input", type: "email", role: "textbox", label: null, text: "EMAIL_1", bbox: [10, 60, 200, 30] },
+  { element_id: "submit-btn", tag: "button", type: "submit", role: "button", label: null, text: "Submit Form", bbox: [10, 100, 120, 40] },
+];
+const bridgeMap = { "pan-input": "ABCDE1234F", "el-input-7": "user@x.com" };
+
+// click by name (no css) -> resolved to #submit-btn
+const clickByName = agentActionToExecutorActions(
+  { type: "click", target: { name: "Submit Form" } },
+  bridgeElements,
+  bridgeMap
+);
+assert.strictEqual(clickByName.length, 1);
+assert.strictEqual(clickByName[0].target, "#submit-btn");
+console.log("  ✔ Bridge resolves click target by name to a CSS selector");
+
+// click by role + generated id -> attribute selector fallback
+clickByRoleCheck: {
+  const clickByRole = agentActionToExecutorActions(
+    { type: "click", target: { role: "button" } },
+    bridgeElements,
+    bridgeMap
+  );
+  assert.strictEqual(clickByRole.length, 1);
+  assert.strictEqual(clickByRole[0].target, "#submit-btn");
+}
+console.log("  ✔ Bridge resolves click target by role");
+
+// click by bbox overlap -> nearest matching element
+const clickByBbox = agentActionToExecutorActions(
+  { type: "click", target: { bbox: [12, 102, 100, 36] } },
+  bridgeElements,
+  bridgeMap
+);
+assert.strictEqual(clickByBbox[0].target, "#submit-btn");
+console.log("  ✔ Bridge resolves click target by bbox overlap");
+
+// type by role: real value from the on-device map, never the placeholder
+const typeByRole = agentActionToExecutorActions(
+  { type: "type", target: { role: "textbox" }, placeholder: "PAN_1" },
+  bridgeElements,
+  bridgeMap
+);
+assert.strictEqual(typeByRole[0].target, "#pan-input");
+assert.strictEqual(typeByRole[0].value, "ABCDE1234F"); // real value, not "PAN_1"
+console.log("  ✔ Bridge resolves type target by role and swaps placeholder to real value");
+
+// generated-id element -> attribute selector
+const typeGen = agentActionToExecutorActions(
+  { type: "type", target: { css: "#el-input-7" }, placeholder: "EMAIL_1" },
+  bridgeElements,
+  bridgeMap
+);
+assert.strictEqual(typeGen[0].target, "#el-input-7");
+assert.strictEqual(typeGen[0].value, "user@x.com");
+console.log("  ✔ Bridge passes css targets through with real values");
+
+// unresolvable target -> empty (executor no-op), not a crash
+const unresolvable = agentActionToExecutorActions(
+  { type: "click", target: { name: "Nonexistent" } },
+  bridgeElements,
+  bridgeMap
+);
+assert.strictEqual(unresolvable.length, 0);
+// non-executable action types -> no-op
+assert.deepStrictEqual(agentActionToExecutorActions({ type: "done", reason: "x" }, bridgeElements, bridgeMap), []);
+console.log("  ✔ Bridge no-ops unresolvable targets and non-executable action types");
+
+// Restore developer environment after ALL isolation-dependent tests
+process.env = ENV_BACKUP;
 
 console.log("\n============================================================");
 console.log("✅ ALL CBA-2 MODEL ROUTER & CLIENT TESTS PASSED (100%)");

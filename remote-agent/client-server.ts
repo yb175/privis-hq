@@ -6,9 +6,12 @@
 import type { SanitizedPackage } from "../types/index.js";
 import { type AgentAction, parseAgentAction } from "./types.js";
 import type { ModelChoice, ModelSettings } from "../extension/src/settings/models.js";
+import { assertSanitizedPackage } from "./router.js";
 
 export interface ServerOptions {
   serverUrl?: string;
+  /** Bearer token required by the server when AGENT_AUTH_TOKEN is configured. */
+  authToken?: string;
   /** Model preference sent to the server; the server MAY ignore it. */
   model?: ModelChoice;
   fetchFn?: typeof fetch;
@@ -29,9 +32,19 @@ export async function queryServer(
     throw new Error("No fetch implementation available for server client");
   }
 
+  // Privacy check BEFORE anything crosses to the operator server. The server
+  // re-checks (defense in depth), but a malformed/leaked package must never
+  // leave the device.
+  assertSanitizedPackage(pkg);
+
   const response = await fetchClient(`${serverUrl}/plan`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(options?.authToken
+        ? { Authorization: `Bearer ${options.authToken}` }
+        : {}),
+    },
     body: JSON.stringify({
       goal: pkg.goal,
       sanitizedScreenshot: pkg.sanitizedScreenshot,
@@ -67,6 +80,7 @@ export async function queryServer(
 export function serverOptionsFromSettings(settings: ModelSettings): ServerOptions {
   return {
     serverUrl: settings.serverUrl,
+    authToken: settings.agentAuthToken,
     model: settings.model,
   };
 }

@@ -174,6 +174,7 @@ async function simulateStep(scenario: {
     goal: "test goal",
     sanitizedScreenshot,
     sanitizedContext: { elements: remoteElements, browserState: scenario.browserState },
+    redacted: true, // sanitizer provenance (required by every outbound boundary)
   };
   record.remotePayloads.push(payload);
   return { gate, sent: payload, map, detections, sanitized, record };

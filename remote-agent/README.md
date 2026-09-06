@@ -55,7 +55,15 @@ OPENAI_API_KEY=sk-...       # required for chatgpt
 GEMINI_API_KEY=AIza...      # required for gemini
 # GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 # GEMINI_MODEL=gemini-3.5-flash-lite-preview
+
+# Security (recommended before exposing beyond localhost)
+# AGENT_AUTH_TOKEN=change-me    # /plan then requires Authorization: Bearer <token>
+# AGENT_ALLOWED_ORIGINS=chrome-extension://your-id,https://your-portal
+#                               # default allowlist: localhost, 127.0.0.1, chrome-extension://
 ```
+
+`.env` is loaded at server startup (`process.loadEnvFile`) — tests importing
+the app stay hermetic and never see developer secrets.
 
 ## Behavior guarantees
 
