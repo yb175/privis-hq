@@ -19,6 +19,7 @@
     "privacy/**/*",
     "remote/**/*",
     "remote-agent/**/*",
+    "extension/**/*",
     "types/**/*",
     "utils/**/*",
     "tests/**/*"
