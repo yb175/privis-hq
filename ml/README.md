@@ -98,6 +98,7 @@ forms); that is a later milestone, not the baseline.
 | M0 | Structure + dataset baseline (**this step**) | `ml/` skeleton + this README; no code, no models. |
 | M1 | Synthetic data generation | Generator emits images + annotations covering all 8 categories; zero real PII. |
 | ML-1 | **Pretrained FACE inference (done)** | Dev-side baseline before M2: pretrained MTCNN runs locally via `ml/inference/` — GPU when available, CPU fallback, contract-shaped output. No training, no extension wiring. See `inference/README.md`. |
+| ML-2 | **Pretrained OCR text reading (done)** | Dev-side baseline before M3: pretrained EasyOCR runs locally — returns text + pixel-space `[x,y,w,h]` bboxes + confidence per line. Perception only: no PII classification (ML-3), no element_id (fusion). See `inference/README.md`. |
 | M2 | Face detection | Trained + exported `FACE` detector; precision/recall targets met on the synthetic eval split. |
 | M3 | Text-PII region detection | Vision fallback for the 6 text categories on DOM-invisible values. |
 | M4 | Fusion | DOM + vision merge (union, highest confidence) produces a valid `Detection[]` passing the `fixtures/detections.json` shape. |
