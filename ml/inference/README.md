@@ -9,6 +9,9 @@ Working local ML milestones that run entirely on this machine:
 - **ML-2 — OCR text reading** (pretrained EasyOCR): perception only — where
   text is and what characters it contains. No PII classification (that is
   ML-3), no element_id (that is later fusion).
+- **ML-3 — PII classification** (deterministic regex): classifies OCR lines
+  as EMAIL / PHONE / PAN / AADHAAR / AMOUNT, fully locally. Pattern
+  classification only — no validity verification, no element_id.
 
 Neither is wired into the browser extension and neither is a runtime
   dependency of it (M5 keeps that path ONNX Runtime Web / WebGPU inside the
@@ -198,6 +201,83 @@ inside image bounds; confidence in 0..1; CPU fallback runs; CUDA path runs
 and agrees with CPU (exact strings + first-box IoU > 0.8) when a GPU is
 present. Exits non-zero on any failure.
 
+## ML-3: deterministic PII classification
+
+Consumes ML-2 OCR lines and classifies them locally with pure stdlib `re`
+rules — no LLM, no network, no cloud API, no browser API, no model at all.
+
+**Supported categories (exactly these):** `EMAIL`, `PHONE`, `PAN`, `AADHAAR`,
+`AMOUNT`. Not implemented by design: `NAME`, `PASSWORD`, `FACE` (DOM/face
+path owns them) and `element_id` (M4 fusion owns DOM/vision association).
+
+### Input / output
+
+```
+OCR line: {"text": str, "bbox": [x, y, w, h], "confidence": 0..1}
+           │
+           ▼  classify_ocr_lines()
+{"category": "EMAIL", "bbox": <copied exactly>,
+ "confidence": <copied exactly>, "source": "vision"}
+```
+
+- `bbox` and `confidence` are copied from the OCR line **exactly** — no
+  rescaling, rounding, or merging. Pixel space stays pixel space; the
+  CSS/DOM conversion belongs to fusion.
+- `source` is always `"vision"`. There is deliberately **no `element_id`**.
+- Lines matching nothing produce no detection. The input is never mutated.
+
+### Normalization approach
+
+None that destroys text: matching is **search-based with boundary guards**
+(`(?<!\d)`, `(?!\d)`, alnum guards for PAN), so a sensitive value is found
+inside a longer OCR line ("Email: test@example.com.") while matches
+embedded in longer token/digit runs are rejected. PHONE and AADHAAR allow
+single space/dash separators between digit groups instead of stripping all
+separators globally — that keeps the guards meaningful. PAN is
+case-insensitive.
+
+### Matching rules (exact)
+
+| Category | Rule (priority order) |
+|---|---|
+| `EMAIL` | `[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}` — conventional address with a dotted TLD of 2+ letters. Rejects `user@host` (no TLD) and bare `@mentions`. |
+| `PAN` | 5 letters + 4 digits + 1 letter, case-insensitive, not embedded in a longer alphanumeric token (`ABCDE1234F`, `abcde1234f`). |
+| `PHONE` | Optional `+91` or `0` prefix, then 10 digits starting 6–9, optional single space/dash separators (`+91 90000 00000`, `90000 00000`, `9000000000`, `98765-43210`). Digit-run guards reject longer/other numbers. |
+| `AADHAAR` | 12 digits with optional 4-4-4 space/dash grouping (`1234 5678 9012`, `123456789012`). |
+| `AMOUNT` | Either (a) currency-prefixed: `₹`/`Rs`/`Rs.`/`INR`/`$`/`€`/`£` + digits with optional commas (any grouping) and optional 2-decimal fraction; or (b) bare number that **must have western comma grouping** (`12,345`, `12,345.00`, `$1,234.50`) — this catches EasyOCR output where the ₹ glyph was dropped (`{12,345`) while plain `12345` / `12345.67` do **not** classify. |
+
+Priority: EMAIL → PAN → PHONE → AADHAAR → AMOUNT (PHONE before AADHAAR so
+`+91 …` country-code forms never fall through to the 12-digit rule).
+
+### False-positive limitations
+
+This is **pattern classification, not identity or validity verification**:
+no PAN registry check, no Aadhaar Verhoeff checksum, no phone assignment or
+email existence check. Known false positives: any 5-letter+4-digit+1-letter
+token matches PAN; any grouped 12-digit number (order ids, timestamps)
+matches AADHAAR; any comma-grouped bare number ("1,000 items") matches
+AMOUNT; any 10-digit 6–9-leading number in text matches PHONE. Known false
+negatives: non-Indian phone formats, un-grouped bare amounts ("12345"),
+emails with unusual TLDs, values OCR splits across lines. Tightening these
+is later milestone work (context-aware classification in fusion).
+
+### Privacy
+
+Classification is pure local regex over in-memory strings — nothing is
+transmitted, persisted, or logged. The module prints only categories and
+coordinates, never the matched text. Test data is 100% synthetic.
+
+### Usage
+
+```bash
+# Unit tests (no OCR run needed):
+.venv-ml/Scripts/python.exe ml/inference/test_pii_classifier.py
+
+# CLI: classify a JSON file of ML-2 OCR output (list or {"lines": [...]}):
+.venv-ml/Scripts/python.exe ml/inference/ocr_reader.py image.png > ocr.json
+.venv-ml/Scripts/python.exe ml/inference/pii_classifier.py ocr.json
+```
+
 ## Files
 
 | File | Purpose |
@@ -206,6 +286,8 @@ present. Exits non-zero on any failure.
 | `test_face_detector.py` | ML-1 smoke test (see above) |
 | `ocr_reader.py` | ML-2 OCR library (`read_text`, `annotate`) + CLI |
 | `test_ocr_reader.py` | ML-2 smoke test (see above) |
+| `pii_classifier.py` | ML-3 deterministic classifier (`classify_line`, `classify_ocr_lines`) + CLI |
+| `test_pii_classifier.py` | ML-3 unit tests (see above) |
 | `../scripts/make_synthetic_face.py` | Deterministic synthetic fixture generator (no real faces) |
 | `../scripts/make_synthetic_text.py` | Deterministic synthetic text fixture generator (fake strings only) |
 | `../dataset/images/synthetic_face.png` | Committed fixture — synthetic drawing, not a real person |
