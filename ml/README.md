@@ -102,7 +102,7 @@ forms); that is a later milestone, not the baseline.
 | ML-3 | **Deterministic PII classification (done)** | Consumes ML-2 OCR lines, classifies EMAIL/PHONE/PAN/AADHAAR/AMOUNT locally via regex with bbox/confidence preserved, `source:"vision"`, no element_id. Pattern classification only — no validity verification. See `inference/README.md`. |
 | M2 | Face detection | Trained + exported `FACE` detector; precision/recall targets met on the synthetic eval split. |
 | M3 | Text-PII region detection | Vision fallback for the 6 text categories on DOM-invisible values. |
-| M4 | Fusion | DOM + vision merge (union, highest confidence) produces a valid `Detection[]` passing the `fixtures/detections.json` shape. |
+| ML-4 | **DOM + vision fusion (done)** | `ml/fusion/fuse.py` merges existing DOM detections with ML-1/ML-3 vision detections into `Detection[]`: pixel→CSS scaling, IoU matching (threshold 0.3, deterministic tie-breaks), (element, category) duplicate merge (higher confidence wins, tie→DOM), unmatched FACE kept as `vision-<i>`, unmatched text skipped. See `fusion/README.md`. |
 | M5 | In-extension inference | ONNX Runtime Web / WebGPU inference inside the Local Privacy Vision Engine; no Python process, no network. |
 | M6 | Evaluation + latency budget | Per-category precision/recall and end-to-end step latency measured on device; accuracy/latency trade-off documented (ISRO PS requirement). |
 
