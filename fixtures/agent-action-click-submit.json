@@ -1,0 +1,6 @@
+{
+  "type": "click",
+  "target": {
+    "name": "Submit"
+  }
+}

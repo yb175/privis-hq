@@ -131,3 +131,6 @@ export type PrivisMessage =
 
 export type PrivisMessageType = PrivisMessage["type"];
 
+// Cloud Browser Agent (CBA) types
+export * from "../remote-agent/types.js";
+

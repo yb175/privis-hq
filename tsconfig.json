@@ -18,8 +18,10 @@
     "executor/**/*",
     "privacy/**/*",
     "remote/**/*",
+    "remote-agent/**/*",
     "types/**/*",
-    "utils/**/*"
+    "utils/**/*",
+    "tests/**/*"
   ],
   "exclude": ["node_modules", "dist"]
 }
