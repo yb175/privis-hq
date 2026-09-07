@@ -347,6 +347,33 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   // swap happens HERE, on-device, from the local map — CONTRACT.md rule 2).
   const actions: Action[] = agentActionToExecutorActions(agentAction, sanitized, map);
 
+  // A type action without a local mapping must never become a silent no-op or
+  // type its placeholder. Escalate so the human can repair the mapping/page.
+  if (agentAction.type === "type" && actions.length === 0) {
+    const escalation = {
+      type: "ask_human" as const,
+      reason: `Cannot resolve local value for ${agentAction.placeholder}`,
+    };
+    session.lastAction = escalation;
+    session.history.push({
+      step: session.history.length + 1,
+      url: pkg.browserState.url,
+      action: escalation,
+      result: { ok: false, error: escalation.reason },
+      timestamp: Date.now(),
+    });
+    session.step = session.history.length;
+    session.status = "waiting_human";
+    broadcastHudStep(6, {
+      actions: [],
+      results: [{ ok: false, error: escalation.reason }],
+      outcome: "ask_human",
+      reason: escalation.reason,
+    });
+    notifySessionUpdate(session, gate);
+    return { decision: gate.decision, reason: escalation.reason, actions: [{ ok: false, error: escalation.reason }], stop: true };
+  }
+
   // Local Executor: apply the returned actions on the real page DOM.
   const results = await applyActions(tabId, actions);
   const stepRecord = {

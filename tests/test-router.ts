@@ -894,7 +894,7 @@ import { agentActionToExecutorActions } from "../executor/agent-action.js";
 
 const bridgeElements: ElementMeta[] = [
   { element_id: "pan-input", tag: "input", type: "text", role: "textbox", label: null, text: "PAN_1", bbox: [10, 20, 200, 30] },
-  { element_id: "el-input-7", tag: "input", type: "email", role: "textbox", label: null, text: "EMAIL_1", bbox: [10, 60, 200, 30] },
+  { element_id: "el-input-7", tag: "input", type: "email", role: "textbox", label: null, text: "EMAIL_1", bbox: [10, 60, 200, 30], generated: true },
   { element_id: "submit-btn", tag: "button", type: "submit", role: "button", label: null, text: "Submit Form", bbox: [10, 100, 120, 40] },
 ];
 const bridgeMap = { "pan-input": "ABCDE1234F", "el-input-7": "user@x.com" };
@@ -938,15 +938,54 @@ const typeByRole = agentActionToExecutorActions(
 );
 assert.strictEqual(typeByRole[0].target, "#pan-input");
 assert.strictEqual(typeByRole[0].value, "ABCDE1234F"); // real value, not "PAN_1"
-console.log("  ✔ Bridge resolves type target by role and swaps placeholder to real value");
+console.log("  ✔ Bridge resolves type target by placeholder and swaps to the local value");
 
-// generated-id element -> attribute selector
+// Same role/type fields still resolve by placeholder, not first role match.
+const secondEmail = { ...bridgeElements[1], element_id: "el-input-8", text: "EMAIL_2", generated: true };
+const typeSecondEmail = agentActionToExecutorActions(
+  { type: "type", target: { role: "textbox" }, placeholder: "EMAIL_2" },
+  [...bridgeElements, secondEmail],
+  { ...bridgeMap, "el-input-8": "other@x.com" }
+);
+assert.deepStrictEqual(typeSecondEmail, [
+  { type: "type", target: "__privis_generated:el-input-8", value: "other@x.com" },
+]);
+console.log("  ✔ EMAIL_2 resolves to the second matching field");
+
+// A broad/mismatched CSS target cannot override the placeholder's field.
+const prefixedRealId = {
+  ...bridgeElements[1],
+  element_id: "el-input-9",
+  text: "EMAIL_3",
+  generated: false,
+};
+assert.deepStrictEqual(
+  agentActionToExecutorActions(
+    { type: "type", target: { css: "input.email" }, placeholder: "EMAIL_3" },
+    [...bridgeElements, prefixedRealId],
+    { ...bridgeMap, "el-input-9": "third@x.com" }
+  ),
+  [{ type: "type", target: "#el-input-9", value: "third@x.com" }]
+);
+console.log("  ✔ Placeholder wins over mismatched CSS and real el-* ids remain real IDs");
+
+// generated-id element -> in-memory lookup token
 const typeGen = agentActionToExecutorActions(
   { type: "type", target: { css: "#el-input-7" }, placeholder: "EMAIL_1" },
   bridgeElements,
   bridgeMap
 );
-assert.strictEqual(typeGen[0].target, "#el-input-7");
+assert.strictEqual(typeGen[0].target, "__privis_generated:el-input-7");
+
+// Missing local mapping is fail-closed: no placeholder reaches the executor.
+assert.deepStrictEqual(
+  agentActionToExecutorActions(
+    { type: "type", target: { role: "textbox" }, placeholder: "EMAIL_1" },
+    bridgeElements,
+    { "pan-input": "ABCDE1234F" }
+  ),
+  []
+);
 assert.strictEqual(typeGen[0].value, "user@x.com");
 console.log("  ✔ Bridge passes css targets through with real values");
 

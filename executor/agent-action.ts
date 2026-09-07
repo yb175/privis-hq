@@ -9,14 +9,11 @@
 import type { Action, AgentAction, ElementMeta, Target } from "../types/index.js";
 
 /**
- * Builds a resolver-friendly CSS target for a sanitized element, mirroring
- * remote/client.ts selectorFor: real DOM ids resolve via #id; generated ids
- * (el-<tag>-<n>) fall back to a tag/attribute CSS selector.
+ * Builds a resolver-friendly target for a sanitized element. Real DOM ids
+ * resolve via #id; generated ids use a content-script-only lookup token.
  */
 function selectorFor(el: ElementMeta): string {
-  if (!/^el-/.test(el.element_id)) return `#${el.element_id}`;
-  if (el.tag === "input" && el.type) return `input[type="${el.type}"]`;
-  return el.tag;
+  return el.generated ? `__privis_generated:${el.element_id}` : `#${el.element_id}`;
 }
 
 /**
@@ -77,15 +74,18 @@ export function agentActionToExecutorActions(
     }
     case "type": {
       const t = action.target;
-      const css =
-        typeof t?.css === "string" && t.css.trim()
-          ? t.css.trim()
-          : (() => {
-              const el = resolveTarget(t, sanitized);
-              return el ? selectorFor(el) : undefined;
-            })();
-      const el = sanitized.find((e) => e.text === action.placeholder);
-      const real = el ? map[el.element_id] : undefined;
+      // The placeholder identifies the exact field. Prefer it over a broad
+      // role/name target so EMAIL_1 and EMAIL_2 cannot land in the same box.
+      const valueEl = sanitized.find((e) => e.text === action.placeholder);
+      const explicitCss = typeof t?.css === "string" && t.css.trim() ? t.css.trim() : undefined;
+      const css = valueEl
+        ? selectorFor(valueEl)
+        : explicitCss ??
+          (() => {
+            const el = resolveTarget(t, sanitized);
+            return el ? selectorFor(el) : undefined;
+          })();
+      const real = valueEl ? map[valueEl.element_id] : undefined;
       return css && real !== undefined ? [{ type: "type", target: css, value: real }] : [];
     }
     default:

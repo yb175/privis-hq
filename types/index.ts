@@ -31,6 +31,8 @@ export interface ElementMeta {
   label: string | null;
   text: string;
   bbox: BoundingBox;
+  /** True when element_id is an in-memory generated id, not a DOM id. */
+  generated?: boolean;
 }
 
 export interface Viewport {

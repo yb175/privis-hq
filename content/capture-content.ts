@@ -16,7 +16,11 @@ import type {
   ExecuteRequestMessage,
   ExecuteResponseMessage,
 } from "../types/index.js";
-import { collectBrowserState, extractElements } from "../utils/dom-extractor.js";
+import {
+  collectBrowserState,
+  extractElements,
+  resolveGeneratedElement,
+} from "../utils/dom-extractor.js";
 import { isPrivisMessage } from "../utils/messaging.js";
 
 /**
@@ -36,6 +40,11 @@ const localValues: Record<string, string> = {};
  * @param target Element ID or CSS selector
  */
 export function resolveTarget(target: string): HTMLElement | null {
+  const generatedPrefix = "__privis_generated:";
+  if (target.startsWith(generatedPrefix)) {
+    return resolveGeneratedElement(target.slice(generatedPrefix.length));
+  }
+
   const byId = document.getElementById(target);
   if (byId) return byId;
 
@@ -47,12 +56,6 @@ export function resolveTarget(target: string): HTMLElement | null {
   }
   if (bySelector) return bySelector;
 
-  // data-privis-id carries the element_id (DOM id, or the generated id for
-  // id-less controls once the Sanitizer exposes it). Unknown values simply
-  // don't match; no selector parsing, so no escaping concerns.
-  for (const el of document.querySelectorAll<HTMLElement>("[data-privis-id]")) {
-    if (el.getAttribute("data-privis-id") === target) return el;
-  }
   return null;
 }
 
@@ -80,7 +83,11 @@ export async function executeAction(action: Action): Promise<ActionResult> {
         const elementId = el.id || el.dataset.privisId || "";
         // Own-property check so page ids like "constructor"/"toString" never
         // resolve to inherited Object.prototype members.
-        if (Object.hasOwn(localValues, elementId)) value = localValues[elementId];
+        if (Object.hasOwn(localValues, elementId)) {
+          value = localValues[elementId];
+        } else {
+          return { ok: false, error: `Missing local value for placeholder: ${value}` };
+        }
       }
       if (!("value" in el)) {
         return { ok: false, error: `Cannot type into non-form element: ${action.target}` };
