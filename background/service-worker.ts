@@ -8,6 +8,7 @@
 
 import { takeScreenshot } from "../utils/screenshot.js";
 import { runStep, capturePackage, getLiveSteps } from "../orchestrator/runStep.js";
+import { runGoal } from "../orchestrator/runGoal.js";
 import {
   sessionsByTab,
   pendingHumanDecisions,
@@ -19,9 +20,9 @@ const DEFAULT_GOAL = "Submit the employee portal form";
 // Toolbar click → one full session loop on the active tab, default goal.
 chrome.action.onClicked.addListener((tab) => {
   if (typeof tab.id !== "number") return;
-  runStep(tab.id, DEFAULT_GOAL).catch((err: unknown) => {
+  runGoal(DEFAULT_GOAL, tab.id).catch((err: unknown) => {
     console.error(
-      "PRIVIS runStep (toolbar) failed:",
+      "PRIVIS runGoal (toolbar) failed:",
       err instanceof Error ? err.message : String(err)
     );
   });
@@ -32,6 +33,7 @@ const privisAPI = {
   takeScreenshot,
   capturePackage,
   runStep,
+  runGoal,
   sessionsByTab,
   pendingHumanDecisions,
 };
@@ -68,29 +70,57 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       return true;
     }
   }
+  if (msg?.type === "RUN_GOAL") {
+    const text =
+      typeof msg.text === "string" && msg.text
+        ? msg.text
+        : typeof msg.goal === "string" && msg.goal
+        ? msg.goal
+        : DEFAULT_GOAL;
+    const tabId = typeof msg.tabId === "number" ? msg.tabId : undefined;
+    runGoal(text, tabId)
+      .then((res) => {
+        const resolvedTabId =
+          typeof tabId === "number"
+            ? tabId
+            : Array.from(sessionsByTab.entries()).find(
+                ([, sess]) => sess.goal === text
+              )?.[0];
+        const session =
+          typeof resolvedTabId === "number"
+            ? sessionsByTab.get(resolvedTabId)
+            : null;
+        sendResponse({ ok: true, session, result: res });
+      })
+      .catch((err: unknown) =>
+        sendResponse({
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      );
+    return true; // async response
+  }
   if (msg?.type === "cba.startSession") {
     const goal = typeof msg.goal === "string" && msg.goal ? msg.goal : DEFAULT_GOAL;
-    const startForTab = (id: number) => {
-      runStep(id, goal)
-        .then((res) => sendResponse({ ok: true, session: sessionsByTab.get(id), result: res }))
-        .catch((err: unknown) =>
-          sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) })
-        );
-    };
-    if (typeof msg.tabId === "number") {
-      startForTab(msg.tabId);
-      return true;
-    } else {
-      chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
-        const activeTabId = tabs[0]?.id;
-        if (typeof activeTabId === "number") {
-          startForTab(activeTabId);
-        } else {
-          sendResponse({ ok: false, error: "No active tab found" });
-        }
-      });
-      return true;
-    }
+    const tabId = typeof msg.tabId === "number" ? msg.tabId : undefined;
+    runGoal(goal, tabId)
+      .then((res) => {
+        const resolvedTabId =
+          typeof tabId === "number"
+            ? tabId
+            : Array.from(sessionsByTab.entries()).find(
+                ([, sess]) => sess.goal === goal
+              )?.[0];
+        const session =
+          typeof resolvedTabId === "number"
+            ? sessionsByTab.get(resolvedTabId)
+            : null;
+        sendResponse({ ok: true, session, result: res });
+      })
+      .catch((err: unknown) =>
+        sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) })
+      );
+    return true;
   }
   if (msg?.type === "cba.humanDecision" && typeof msg.sessionId === "string") {
     const resolver = pendingHumanDecisions.get(msg.sessionId);
@@ -105,7 +135,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   if (msg?.type === "privis.runStep" && typeof msg.tabId === "number") {
     const goal = typeof msg.goal === "string" && msg.goal ? msg.goal : DEFAULT_GOAL;
-    runStep(msg.tabId, goal)
+    runGoal(goal, msg.tabId)
       .then(sendResponse)
       .catch((err: unknown) =>
         sendResponse({ error: err instanceof Error ? err.message : String(err) })

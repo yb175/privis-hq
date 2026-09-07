@@ -520,6 +520,8 @@ async function main(): Promise<void> {
     console.log("\n[Audit] Persistence & network (static source scan)");
     const RUNTIME_FILES = [
       "background/service-worker.ts",
+      "extension/src/background/index.ts",
+      "orchestrator/runGoal.ts",
       "orchestrator/runStep.ts",
       "orchestrator/session.ts",
       "content/capture-content.ts",
