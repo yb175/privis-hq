@@ -73,10 +73,19 @@ export function labelFor(el: HTMLElement): string | null {
 /**
  * Extracts visible interactive elements, media, and form controls.
  */
+/** Resolves an in-memory generated id without mutating the page DOM. */
+export function resolveGeneratedElement(id: string): HTMLElement | null {
+  for (const el of document.querySelectorAll<HTMLElement>(INTERACTIVE_SELECTOR)) {
+    if (!el.id && elementId(el) === id) return el;
+  }
+  return null;
+}
+
 export function extractElements(): ElementMeta[] {
   const out: ElementMeta[] = [];
   for (const el of document.querySelectorAll<HTMLElement>(INTERACTIVE_SELECTOR)) {
     if (!isVisible(el)) continue;
+    const id = elementId(el);
     const rect = el.getBoundingClientRect();
     const input = el as HTMLInputElement;
     // Password values are never extracted (contract rule); other controls
@@ -90,13 +99,14 @@ export function extractElements(): ElementMeta[] {
           ? (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
           : (el.textContent ?? "").trim();
     out.push({
-      element_id: elementId(el),
+      element_id: id,
       tag: el.tagName.toLowerCase(),
       type: el.tagName === "INPUT" ? (input.type || null) : null,
       role: el.getAttribute("role"),
       label: labelFor(el),
       text,
       bbox: roundBBox(rect),
+      generated: !el.id,
     });
   }
   return out;

@@ -95,10 +95,8 @@ function stubPlan(elements: ElementMeta[]): Action[] {
 
 /**
  * Builds a resolver-friendly target. Real DOM ids resolve via getElementById;
- * generated ids (el-<tag>-<n>) fall back to a tag/attribute CSS selector.
+ * generated ids use the content-script's in-memory lookup token.
  */
 function selectorFor(el: ElementMeta): string {
-  if (!/^el-/.test(el.element_id)) return `#${el.element_id}`;
-  if (el.tag === "input" && el.type) return `input[type="${el.type}"]`;
-  return el.tag;
+  return el.generated ? `__privis_generated:${el.element_id}` : `#${el.element_id}`;
 }

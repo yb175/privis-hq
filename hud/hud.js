@@ -358,13 +358,24 @@ function renderLiveStep(msg) {
         );
         break;
 
-      case 6:
-        note(
-          b,
-          `Resolved <span class="hud-mono">#submit</span> on real DOM and executed click.<br />` +
-            `<strong>Status:</strong> <span style="color:#4cc38a;font-weight:700;">OK (Form Submitted)</span>.`
-        );
+      case 6: {
+        const failed = msg.outcome === "ask_human" ||
+          (Array.isArray(msg.results) && msg.results.some((r) => r?.ok === false));
+        if (failed) {
+          note(
+            b,
+            `<strong>Status:</strong> <span style="color:#e06c75;font-weight:700;">ESCALATED</span>`
+          );
+          b.append(el("p", "hud-mono", msg.reason || msg.results?.[0]?.error || "Action could not be completed"));
+        } else {
+          note(
+            b,
+            `Resolved <span class="hud-mono">#submit</span> on real DOM and executed click.<br />` +
+              `<strong>Status:</strong> <span style="color:#4cc38a;font-weight:700;">OK (Form Submitted)</span>.`
+          );
+        }
         break;
+      }
     }
   });
 }
