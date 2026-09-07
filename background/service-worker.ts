@@ -34,6 +34,7 @@ import { loadModelSettings } from "../extension/src/settings/models.js";
 import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-server.js";
 import { agentActionToExecutorActions } from "../executor/agent-action.js";
 import { applyActions } from "../executor/local-executor.js";
+import { navigateTab } from "../executor/navigate.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
 
 // Toolbar clicks carry no typed goal; run with the demo default.
@@ -281,6 +282,34 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
     goal,
     agentAction,
   });
+
+  // CBA-5: navigate cannot run in the content-script executor (no chrome.tabs
+  // access). Navigate the tab here, then loop to recapture the new page — the
+  // gate runs again on the freshly loaded page, so a sensitive target
+  // (e.g. IRCTC) is still Human/Block after load, never bypassed.
+  if (agentAction.type === "navigate") {
+    const result = await navigateTab(tabId, agentAction.url);
+    const stepRecord: SessionStep = {
+      step: session.history.length + 1,
+      url: pkg.browserState.url,
+      action: agentAction,
+      result,
+      timestamp: Date.now(),
+    };
+    session.history.push(stepRecord);
+    session.step = session.history.length;
+    broadcastHudStep(6, { actions: [], results: [result] });
+    if (!result.ok || session.step >= (session.maxSteps ?? 10)) {
+      session.status = result.ok ? "done" : "error";
+      if (!result.ok) session.error = result.error;
+      notifySessionUpdate(session, gate);
+      return { decision: gate.decision, reason: gate.reason, actions: [result] };
+    }
+    // Recapture: continue the loop on the navigated tab (bounded by maxSteps).
+    session.status = "running";
+    notifySessionUpdate(session, gate);
+    return runStep(tabId, goal);
+  }
 
   // Convert the AgentAction contract into executor Actions (name/role/bbox
   // targets resolved against the sanitized elements; placeholder → real-value
