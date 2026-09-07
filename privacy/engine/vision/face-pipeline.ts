@@ -91,13 +91,42 @@ function getSharedDetector(): Promise<FaceDetector> {
   return sharedDetector;
 }
 
-/**
- * Runs the M6-D vision path on the in-memory screenshot and returns the
- * FUSED Detection[] (DOM + vision, M4 rules). Any failure (decode, model
- * load, inference, fusion input) rejects — callers must treat the rejection
- * as "abort the step, send nothing to the remote agent".
- */
-export async function runVisionPath(opts: VisionPathOptions): Promise<Detection[]> {
+const OFFSCREEN_DOCUMENT_PATH = "extension/src/offscreen/offscreen.html";
+
+async function ensureOffscreenDocument(): Promise<void> {
+  if (typeof chrome === "undefined" || !chrome.offscreen) return;
+  if (typeof chrome.offscreen.hasDocument === "function") {
+    if (await chrome.offscreen.hasDocument()) return;
+  }
+  await chrome.offscreen.createDocument({
+    url: OFFSCREEN_DOCUMENT_PATH,
+    reasons: ["WORKERS" as chrome.offscreen.Reason, "BLOBS" as chrome.offscreen.Reason],
+    justification: "Local ONNX Runtime Web WASM face detection",
+  });
+}
+
+async function runVisionPathViaOffscreen(opts: VisionPathOptions): Promise<Detection[]> {
+  await ensureOffscreenDocument();
+  const response = await chrome.runtime.sendMessage({
+    type: "privis.offscreen.detectFaces",
+    payload: {
+      dataUrl: opts.dataUrl,
+      elements: opts.elements,
+      domDetections: opts.domDetections,
+      viewport: opts.viewport,
+    },
+  });
+  if (!response || typeof response !== "object") {
+    throw new Error("runVisionPath: invalid response from offscreen worker");
+  }
+  const result = response as { ok?: boolean; detections?: Detection[]; error?: string };
+  if (!result.ok) {
+    throw new Error(result.error || "runVisionPath: offscreen inference failed");
+  }
+  return result.detections ?? [];
+}
+
+async function runVisionPathLocal(opts: VisionPathOptions): Promise<Detection[]> {
   const decode = opts.decode ?? decodeDataUrlToRGBA;
   const loadDetector = opts.loadDetector ?? getSharedDetector;
 
@@ -115,4 +144,28 @@ export async function runVisionPath(opts: VisionPathOptions): Promise<Detection[
     { w: input.width, h: input.height },
     opts.viewport
   );
+}
+
+/**
+ * Runs the M6-D vision path on the in-memory screenshot and returns the
+ * FUSED Detection[] (DOM + vision, M4 rules). Any failure (decode, model
+ * load, inference, fusion input) rejects — callers must treat the rejection
+ * as "abort the step, send nothing to the remote agent".
+ */
+export async function runVisionPath(opts: VisionPathOptions): Promise<Detection[]> {
+  // If running inside a Service Worker with chrome.offscreen available, delegate
+  // to the offscreen document (W3C ServiceWorker disallows dynamic import() for WASM glue).
+  if (
+    typeof (globalThis as any).importScripts === "function" &&
+    typeof window === "undefined" &&
+    typeof chrome !== "undefined" &&
+    chrome.offscreen &&
+    !opts.loadDetector &&
+    !opts.decode
+  ) {
+    return runVisionPathViaOffscreen(opts);
+  }
+
+  // Otherwise (offscreen document, Window, or Node.js test environment), run in-process:
+  return runVisionPathLocal(opts);
 }
