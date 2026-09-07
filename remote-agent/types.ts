@@ -49,7 +49,7 @@ export type AgentAction =
 
 export type AgentActionType = AgentAction["type"];
 
-export type SessionStatus = "idle" | "running" | "waiting_human" | "done" | "error";
+export type SessionStatus = "idle" | "running" | "waiting_human" | "done" | "error" | "blocked";
 
 export interface SessionStep {
   step: number;
@@ -63,11 +63,25 @@ export interface AgentSession {
   sessionId: string;
   tabId: number;
   goal: string;
-  step: number;
-  maxSteps: number;
+  step?: number;
+  maxSteps?: number;
   status: SessionStatus;
+  gateDecision?: "allow" | "human_approval" | "block";
   history: SessionStep[];
   lastAction?: AgentAction;
+  /** Exact redacted-only package view dispatched to the remote planner. */
+  outboundPayload?: {
+    sanitizedScreenshot: string;
+    elements: Array<{
+      tag: string;
+      type: string | null;
+      role: string | null;
+      text: string;
+    }>;
+    placeholders: string[];
+    url: string;
+    model: "chatgpt" | "gemini";
+  };
   error?: string;
 }
 

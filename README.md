@@ -164,7 +164,7 @@ cd demo-portal && python3 -m http.server 8000
 
 ```bash
 npm run serve:agent
-# [PRIVIS Remote Agent (Hono)] listening on http://0.0.0.0:8080 (auth: bearer token required)
+# [PRIVIS Remote Agent (Hono)] listening on http://0.0.0.0:3201 (auth: bearer token required)
 ```
 
 Point out: all LLM keys live **here**, on the operator server — the extension
@@ -180,7 +180,7 @@ const cur = (await chrome.storage.local.get(KEY))[KEY] ?? {};
 await chrome.storage.local.set({
   [KEY]: {
     ...cur,
-    serverUrl: "http://localhost:8080",
+    serverUrl: "http://localhost:3201",
     agentAuthToken: "<same token as remote-agent/.env>",
     model: "gemini",            // preference only — server decides with its keys
   },
@@ -209,7 +209,7 @@ console.log("settings saved");
   `privis_model_settings`) contains no `OPENAI_API_KEY` / `GEMINI_API_KEY` —
   show it in DevTools.
 - **Nothing raw crosses the wire**: in the service worker's DevTools → Network,
-  the only outbound POST is to `http://localhost:8080/plan`. Its body shows
+  the only outbound POST is to `http://localhost:3201/plan`. Its body shows
   `PAN_1`-style tokens and a visibly redacted screenshot — no PAN, no Aadhaar,
   no face pixels.
 - **Model switch without code changes**: flip `PRIVIS_MODEL=chatgpt` ↔
@@ -230,7 +230,7 @@ console.log("settings saved");
 |---|---|
 | Server logs `auth: OFF` | `AGENT_AUTH_TOKEN` not set in `.env` — restart the server |
 | Extension step errors with `401` | `agentAuthToken` in extension storage doesn't match `AGENT_AUTH_TOKEN` |
-| `Remote agent server error` / connection refused | Server not running, or `serverUrl` mismatch (default `http://localhost:8080`) |
+| `Remote agent server error` / connection refused | Server not running, or `serverUrl` mismatch (default `http://localhost:3201`) |
 | `ask_human` with `no_api_key` | Key for the selected model missing in `remote-agent/.env` |
 | Content scripts not injecting | Open `http://localhost:8000` (http/https only, not `file://`) |
 

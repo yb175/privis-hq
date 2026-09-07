@@ -25,7 +25,7 @@ export async function queryServer(
   pkg: SanitizedPackage,
   options?: ServerOptions
 ): Promise<AgentAction> {
-  const serverUrl = (options?.serverUrl || "http://localhost:8080").replace(/\/+$/, "");
+  const serverUrl = (options?.serverUrl || "http://localhost:3201").replace(/\/+$/, "");
   const fetchClient = options?.fetchFn || (typeof fetch !== "undefined" ? fetch : null);
 
   if (!fetchClient) {

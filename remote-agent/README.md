@@ -37,7 +37,7 @@ happens on-device, after response
 ## Running
 
 ```bash
-npm run serve:agent          # build + start (default http://0.0.0.0:8080)
+npm run serve:agent          # build + start (default http://0.0.0.0:3201)
 PORT=9000 npm run serve:agent
 ```
 

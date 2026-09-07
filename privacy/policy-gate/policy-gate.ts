@@ -62,16 +62,20 @@ export function decide(params: {
 }): PolicyGateResult {
   const { detections, browserState } = params;
 
-  // 1. v0 pragmatic demo rule: allow when all detections >= 0.8 and URL is file:// or trusted local/demo host
+  // 1. v0 pragmatic demo rule: allow on file:// or trusted local/demo hosts
+  // as long as no detection would independently require human approval.
+  // Aligned to the 0.6 human-approval threshold below so label-only hits
+  // (0.7) don't silently disable the demo, while truly low-confidence
+  // detections (< 0.6) still fail closed even on demo URLs.
   const isDemoOrLocal = isDemoOrLocalUrl(browserState.url);
-  const allHighConfidence =
-    detections.length === 0 || detections.every((d) => d.confidence >= 0.8);
+  const allConfident =
+    detections.length === 0 || detections.every((d) => d.confidence >= 0.6);
 
-  if (isDemoOrLocal && allHighConfidence) {
+  if (isDemoOrLocal && allConfident) {
     return {
       decision: "allow",
       reason:
-        "Allowed under v0 demo exception: all detections have confidence >= 0.8 on local/demo URL",
+        "Allowed under v0 demo exception: trusted local/demo URL with no low-confidence detections",
     };
   }
 
