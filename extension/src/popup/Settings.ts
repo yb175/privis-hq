@@ -1,8 +1,11 @@
 // extension/src/popup/Settings.ts
-// Settings tab component: Model switcher wired directly to models.ts
+// Settings tab component: operator server connection + model toggle.
+// No provider API keys are collected here — they stay on the operator server.
 
 import {
   type ModelChoice,
+  type ModelSettings,
+  DEFAULT_MODEL_SETTINGS,
   loadModelSettings,
   saveModelSettings,
 } from "../settings/models.js";
@@ -21,59 +24,87 @@ export class SettingsComponent {
     try {
       const settings = await loadModelSettings();
       this.currentChoice = settings.model;
-      this.render();
+      this.render(settings);
     } catch (err) {
       console.error("Failed to load model settings:", err);
       this.currentChoice = "chatgpt";
-      this.render();
+      this.render({ model: "chatgpt", serverUrl: DEFAULT_MODEL_SETTINGS.serverUrl });
     }
   }
 
   private renderLoading() {
     this.container.innerHTML = `
       <div style="color: var(--color-text-dim); padding: 12px; font-size: 12px;">
-        Loading model configurations…
+        Loading settings…
       </div>
     `;
   }
 
-  private render() {
+  private render(settings: ModelSettings) {
     this.container.replaceChildren();
 
-    // Section Title
-    const title = document.createElement("div");
-    title.className = "settings-section-title";
-    title.textContent = "Remote Brain Selection";
-    this.container.appendChild(title);
+    // --- Model selection ---
+    const modelTitle = document.createElement("div");
+    modelTitle.className = "settings-section-title";
+    modelTitle.textContent = "Remote Brain Selection";
+    this.container.appendChild(modelTitle);
 
-    // Radio Group
     const group = document.createElement("div");
     group.className = "radio-group";
-
-    // 1. ChatGPT Card
-    const chatgptCard = this.createModelCard({
-      id: "model-chatgpt",
-      name: "ChatGPT",
-      modelTag: "gpt-4o-mini",
-      description: "Fast OpenAI-compatible reasoning model for action planning.",
-      value: "chatgpt",
-      checked: this.currentChoice === "chatgpt",
-    });
-
-    // 2. Gemini Card
-    const geminiCard = this.createModelCard({
-      id: "model-gemini",
-      name: "Google Gemini",
-      modelTag: "gemini-3.5-flash-lite-preview",
-      description: "Low-latency multimodal model with direct token parsing.",
-      value: "gemini",
-      checked: this.currentChoice === "gemini",
-    });
-
-    group.append(chatgptCard, geminiCard);
+    group.append(
+      this.createModelCard({
+        id: "model-chatgpt",
+        name: "ChatGPT",
+        modelTag: "gpt-4o-mini",
+        description: "Fast OpenAI-compatible reasoning model for action planning.",
+        value: "chatgpt",
+        checked: this.currentChoice === "chatgpt",
+      }),
+      this.createModelCard({
+        id: "model-gemini",
+        name: "Google Gemini",
+        modelTag: "gemini-3.5-flash-lite-preview",
+        description: "Low-latency multimodal model with direct token parsing.",
+        value: "gemini",
+        checked: this.currentChoice === "gemini",
+      })
+    );
     this.container.appendChild(group);
 
-    // Feedback Container
+    // --- Operator server connection ---
+    const serverTitle = document.createElement("div");
+    serverTitle.className = "settings-section-title";
+    serverTitle.textContent = "Operator Server";
+    this.container.appendChild(serverTitle);
+
+    const urlField = this.createTextField({
+      id: "settings-server-url",
+      label: "Server URL",
+      value: settings.serverUrl || DEFAULT_MODEL_SETTINGS.serverUrl,
+      placeholder: "http://localhost:3201",
+      type: "text",
+      hint: "The PRIVIS agent server that owns the provider API keys.",
+    });
+    this.container.appendChild(urlField);
+
+    const tokenField = this.createTextField({
+      id: "settings-auth-token",
+      label: "Auth token (optional)",
+      value: settings.agentAuthToken || "",
+      placeholder: "Bearer token for the server",
+      type: "password",
+      hint: "Sent as Authorization: Bearer <token> when the server requires it.",
+    });
+    this.container.appendChild(tokenField);
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "settings-save-btn";
+    saveBtn.textContent = "Save connection";
+    saveBtn.addEventListener("click", () => this.saveConnection());
+    this.container.appendChild(saveBtn);
+
+    // Feedback Container (shared by model + connection saves)
     const feedback = document.createElement("div");
     feedback.id = "settings-feedback";
     this.container.appendChild(feedback);
@@ -86,13 +117,46 @@ export class SettingsComponent {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
         </svg>
-        Zero Local Keys (Privacy-Mode)
+        Provider API keys stay on the operator server
       </div>
       <div class="privacy-banner-text">
-        API keys never reside on your client browser. Only structural placeholders and redacted screenshots are dispatched to your configured operator server.
+        This extension never stores or sends OpenAI/Gemini keys. Only structural placeholders and redacted screenshots are dispatched to the server you configure above.
       </div>
     `;
     this.container.appendChild(banner);
+  }
+
+  private createTextField(config: {
+    id: string;
+    label: string;
+    value: string;
+    placeholder: string;
+    type: "text" | "password";
+    hint: string;
+  }): HTMLElement {
+    const field = document.createElement("div");
+    field.className = "settings-field";
+
+    const label = document.createElement("label");
+    label.className = "settings-label";
+    label.htmlFor = config.id;
+    label.textContent = config.label;
+
+    const input = document.createElement("input");
+    input.className = "settings-input";
+    input.id = config.id;
+    input.type = config.type;
+    input.value = config.value;
+    input.placeholder = config.placeholder;
+    input.autocomplete = "off";
+    input.spellcheck = false;
+
+    const hint = document.createElement("div");
+    hint.className = "settings-hint";
+    hint.textContent = config.hint;
+
+    field.append(label, input, hint);
+    return field;
   }
 
   private createModelCard(config: {
@@ -138,6 +202,22 @@ export class SettingsComponent {
     label.append(radio, body);
 
     return label;
+  }
+
+  private async saveConnection() {
+    const urlInput = document.getElementById("settings-server-url") as HTMLInputElement | null;
+    const tokenInput = document.getElementById("settings-auth-token") as HTMLInputElement | null;
+
+    try {
+      await saveModelSettings({
+        serverUrl: urlInput?.value ?? undefined,
+        agentAuthToken: tokenInput?.value ?? undefined,
+      });
+      this.showFeedback("Saved server connection");
+    } catch (err) {
+      console.error("Failed to save server connection:", err);
+      this.showFeedback("Failed to save settings", true);
+    }
   }
 
   private async selectModel(choice: ModelChoice) {
