@@ -1,19 +1,30 @@
 // extension/src/settings/models.ts
-// Configuration and persistence for CBA-2 Model Router settings (chatgpt vs Gemini)
+// Configuration and persistence for CBA-8 Settings (server URL + model toggle).
+//
+// Privacy boundary: the extension persists ONLY non-provider-key settings —
+// model preference, operator server URL, and optional server auth token.
+// Provider API keys (OpenAI/Gemini) live server-side in the operator's .env
+// and are never accepted from, persisted by, or sent from the extension.
 
 export type ModelChoice = "chatgpt" | "gemini";
 
-export interface ModelSettings {
+/**
+ * Settings the extension may hold and persist in chrome.storage.local.
+ * Provider API keys are deliberately absent — they stay on the operator server.
+ */
+export interface ClientSettings {
   model: ModelChoice;
-  /**
-   * Privacy mode (default): the extension never holds LLM keys. It POSTs the
-   * sanitized package to the operator's server, which owns the keys and picks
-   * the actual brain (chatgpt/gemini). `model` above is sent as a preference
-   * the server MAY honor.
-   */
   serverUrl?: string;
   /** Bearer token for the operator server (sent as Authorization header). */
   agentAuthToken?: string;
+}
+
+/**
+ * Full settings shape used by the operator server (remote-agent). Provider keys
+ * exist ONLY here, sourced from the server's environment — never from
+ * chrome.storage or the extension.
+ */
+export interface ModelSettings extends ClientSettings {
   openaiApiKey?: string;
   openaiBaseUrl?: string;
   openaiModel?: string;
@@ -25,8 +36,19 @@ export interface ModelSettings {
 export const STORAGE_KEY_MODEL_SETTINGS = "privis_model_settings";
 
 /**
+ * The only fields the extension is allowed to persist. Provider keys excluded.
+ */
+export function toClientSettings(settings: ModelSettings): ClientSettings {
+  return {
+    model: settings.model,
+    serverUrl: settings.serverUrl,
+    agentAuthToken: settings.agentAuthToken,
+  };
+}
+
+/**
  * Non-secret defaults (always defined). API keys are NOT defaulted — they come
- * from chrome.storage / env only.
+ * from the server's env only.
  */
 export const DEFAULT_MODEL_SETTINGS: Required<
   Omit<ModelSettings, "openaiApiKey" | "geminiApiKey" | "agentAuthToken">
@@ -73,10 +95,12 @@ export function normalizeModelSettings(settings?: Partial<ModelSettings> | null)
 }
 
 /**
- * Loads model settings from chrome.storage.local (or env variables in Node/test environments).
+ * Loads settings. In the extension this reads ONLY client fields from
+ * chrome.storage.local (provider keys are dropped even if a stale blob carries
+ * them). On the server (no chrome) provider keys come from environment variables.
  */
 export async function loadModelSettings(): Promise<ModelSettings> {
-  let stored: Partial<ModelSettings> | null = null;
+  let stored: ClientSettings | null = null;
 
   if (
     typeof chrome !== "undefined" &&
@@ -86,14 +110,17 @@ export async function loadModelSettings(): Promise<ModelSettings> {
     try {
       const res = await chrome.storage.local.get(STORAGE_KEY_MODEL_SETTINGS);
       if (res && res[STORAGE_KEY_MODEL_SETTINGS]) {
-        stored = res[STORAGE_KEY_MODEL_SETTINGS] as Partial<ModelSettings>;
+        // Strip provider keys: the extension never reads keys back from storage.
+        stored = toClientSettings(
+          normalizeModelSettings(res[STORAGE_KEY_MODEL_SETTINGS] as Partial<ModelSettings>)
+        );
       }
     } catch {
       // Storage read error; fallback to defaults
     }
   }
 
-  // Fallback to environment variables if available (e.g. Node CLI / testing environment)
+  // Server-side: provider keys come from environment variables (Node).
   const envSettings: Partial<ModelSettings> = {};
   if (typeof process !== "undefined" && process.env) {
     if (process.env.PRIVIS_MODEL === "gemini" || process.env.PRIVIS_MODEL === "chatgpt") {
@@ -126,7 +153,9 @@ export async function loadModelSettings(): Promise<ModelSettings> {
 }
 
 /**
- * Persists updated model settings to chrome.storage.local.
+ * Persists updated settings. Only client fields (model, serverUrl,
+ * agentAuthToken) are written to chrome.storage.local — provider API keys are
+ * never persisted, even if a caller passes them.
  */
 export async function saveModelSettings(
   updates: Partial<ModelSettings>
@@ -141,7 +170,7 @@ export async function saveModelSettings(
   ) {
     try {
       await chrome.storage.local.set({
-        [STORAGE_KEY_MODEL_SETTINGS]: merged,
+        [STORAGE_KEY_MODEL_SETTINGS]: toClientSettings(merged),
       });
     } catch {
       // Persistence is optional (e.g. quota exceeded, MV3 shutdown) — routing

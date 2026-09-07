@@ -121,7 +121,7 @@ const mockStorage: Record<string, unknown> = {};
   },
 };
 
-// Save settings to mock chrome storage
+// Save settings to mock chrome storage — provider keys are NEVER persisted
 await saveModelSettings({
   model: "gemini",
   geminiApiKey: "test-gemini-key-123",
@@ -130,19 +130,13 @@ assert.deepStrictEqual(mockStorage[STORAGE_KEY_MODEL_SETTINGS], {
   model: "gemini",
   serverUrl: "http://localhost:3201",
   agentAuthToken: undefined,
-  openaiApiKey: undefined,
-  openaiBaseUrl: "https://api.openai.com/v1",
-  openaiModel: "gpt-4o-mini",
-  geminiApiKey: "test-gemini-key-123",
-  geminiBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
-  geminiModel: "gemini-3.5-flash-lite-preview",
 });
 
-// Load settings from mock chrome storage
+// Load settings from mock chrome storage (provider keys stay server-side)
 const loaded = await loadModelSettings();
 assert.strictEqual(loaded.model, "gemini");
-assert.strictEqual(loaded.geminiApiKey, "test-gemini-key-123");
-console.log("  ✔ chrome.storage.local save & load cycle verified");
+assert.strictEqual(loaded.geminiApiKey, undefined);
+console.log("  ✔ chrome.storage.local persists client fields only (no provider keys)");
 
 // Malformed (non-string) stored values must not break normalization — falls back to defaults
 const malformedNorm = normalizeModelSettings({

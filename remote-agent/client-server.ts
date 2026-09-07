@@ -25,7 +25,17 @@ export async function queryServer(
   pkg: SanitizedPackage,
   options?: ServerOptions
 ): Promise<AgentAction> {
-  const serverUrl = (options?.serverUrl || "http://localhost:3201").replace(/\/+$/, "");
+  // An explicitly empty URL means the user cleared Settings without one — fail
+  // with a fix-it hint rather than silently calling localhost. Undefined still
+  // falls back to the local default (serverOptionsFromSettings always supplies
+  // a value, so this only triggers when Settings has a blank Server URL).
+  const configured = options?.serverUrl;
+  if (typeof configured === "string" && configured.trim() === "") {
+    throw new Error(
+      "No agent server configured — open PRIVIS Settings, set the Server URL, then start it with `npm run serve:agent`."
+    );
+  }
+  const serverUrl = (configured || "http://localhost:3201").replace(/\/+$/, "");
   const fetchClient = options?.fetchFn || (typeof fetch !== "undefined" ? fetch : null);
 
   if (!fetchClient) {

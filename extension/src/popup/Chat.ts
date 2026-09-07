@@ -246,7 +246,9 @@ export class ChatComponent {
     const isConnRefused =
       errorMessage.includes("Failed to fetch") ||
       errorMessage.includes("connection") ||
-      errorMessage.includes("ECONNREFUSED");
+      errorMessage.includes("ECONNREFUSED") ||
+      errorMessage.includes("agent server") ||
+      errorMessage.includes("configure");
 
     card.innerHTML = `
       <div class="chat-error-header">
@@ -260,7 +262,7 @@ export class ChatComponent {
       <div class="chat-error-body"></div>
       ${
         isConnRefused
-          ? `<div class="chat-error-hint">Hint: Start the agent server with <code>npm run serve:agent</code> (listening on port 3201).</div>`
+          ? `<div class="chat-error-hint">Hint: Check the Server URL in Settings, then start the agent server with <code>npm run serve:agent</code> (listening on port 3201).</div>`
           : ""
       }
     `;

@@ -16,8 +16,9 @@
     "test:popup": "esbuild tests/test-popup-session.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist-test/test-popup-session.mjs && node dist-test/test-popup-session.mjs",
     "test:loop": "esbuild tests/test-session-loop.ts --bundle --format=esm --platform=node --outfile=dist-test/test-session-loop.mjs && node dist-test/test-session-loop.mjs",
     "test:session-e2e": "esbuild tests/test-session-e2e.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist-test/test-session-e2e.mjs && node dist-test/test-session-e2e.mjs",
+    "test:settings": "esbuild tests/test-settings.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist-test/test-settings.mjs && node dist-test/test-settings.mjs",
     "serve:agent": "esbuild remote-agent/server.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist/remote-agent/server.mjs && node dist/remote-agent/server.mjs",
-    "test": "npm run typecheck && npm run test:cba && npm run test:navigate && npm run test:router && npm run test:guard && npm run test:privacy && npm run test:popup && npm run test:loop && npm run test:session-e2e",
+    "test": "npm run typecheck && npm run test:cba && npm run test:navigate && npm run test:router && npm run test:guard && npm run test:privacy && npm run test:popup && npm run test:loop && npm run test:session-e2e && npm run test:settings",
     "typecheck": "tsc --noEmit",
     "watch": "npm run build -- --watch"
   },
