@@ -128,7 +128,7 @@ await saveModelSettings({
 });
 assert.deepStrictEqual(mockStorage[STORAGE_KEY_MODEL_SETTINGS], {
   model: "gemini",
-  serverUrl: "http://localhost:8080",
+  serverUrl: "http://localhost:3201",
   agentAuthToken: undefined,
   openaiApiKey: undefined,
   openaiBaseUrl: "https://api.openai.com/v1",

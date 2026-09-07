@@ -15,6 +15,17 @@ import { loadModelSettings } from "../extension/src/settings/models.js";
 export function createAgentApp() {
   const app = new Hono();
 
+  // Request logger (outermost): one line per request with status + timing.
+  // Body digests for /plan are logged inside handlePlan, which consumes the
+  // body — no payloads are read twice.
+  app.use("*", async (c, next) => {
+    const started = Date.now();
+    await next();
+    console.log(
+      `[agent] ${c.req.method} ${c.req.path} -> ${c.res.status} (${Date.now() - started}ms)`
+    );
+  });
+
   // CORS restricted to configured trusted origins. Dev fallback (when
   // AGENT_ALLOWED_ORIGINS is unset): localhost/127.0.0.1 and chrome-extension://
   // so local extension + tooling work, arbitrary websites do not.
@@ -79,6 +90,7 @@ export function createAgentApp() {
 
   // Action / Plan endpoint
   const handlePlan = async (c: any) => {
+    const started = Date.now();
     try {
       // Body = SanitizedPackage + optional client model preference.
       // The client NEVER sends keys; keys come from THIS server's env/storage,
@@ -88,13 +100,36 @@ export function createAgentApp() {
         body.model === "chatgpt" || body.model === "gemini" ? body.model : undefined;
       const { model: _pref, ...pkg } = body;
       const serverSettings = await loadModelSettings();
+
+      // Compact digest of what arrived — lengths only, never element contents
+      // (keeps the log small and PII-free even though payloads are sanitized).
+      const short = (v: unknown, n = 80) => {
+        const s = typeof v === "string" ? v : JSON.stringify(v);
+        return s.length > n ? s.slice(0, n) + "…" : s;
+      };
+      console.log(
+        `[agent] /plan request goal=${short(body.goal)} model=${preferred ?? serverSettings.model} ` +
+          `redacted=${pkg.redacted} elements=${pkg.sanitizedContext?.elements?.length ?? 0} ` +
+          `screenshotChars=${pkg.sanitizedScreenshot?.length ?? 0}`
+      );
+
       const action = await routeAgentRequest(
         pkg,
         preferred ? { settings: { ...serverSettings, model: preferred } } : undefined
       );
+      const detail =
+        action.type === "type" || action.type === "click"
+          ? (action.target?.name || action.target?.css || "").toString()
+          : action.type === "scroll"
+            ? `${action.dy}px`
+            : (action as { reason?: string }).reason || "";
+      console.log(
+        `[agent] /plan OK after ${Date.now() - started}ms action=${action.type} detail=${short(detail)}`
+      );
       return c.json({ ok: true, action }, 200);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[agent] /plan FAILED after ${Date.now() - started}ms: ${errorMsg}`);
       return c.json({ ok: false, error: errorMsg }, 400);
     }
   };

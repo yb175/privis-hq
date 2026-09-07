@@ -32,7 +32,7 @@ export const DEFAULT_MODEL_SETTINGS: Required<
   Omit<ModelSettings, "openaiApiKey" | "geminiApiKey" | "agentAuthToken">
 > = {
   model: "chatgpt",
-  serverUrl: "http://localhost:8080",
+  serverUrl: "http://localhost:3201",
   openaiBaseUrl: "https://api.openai.com/v1",
   openaiModel: "gpt-4o-mini",
   geminiBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
@@ -48,10 +48,20 @@ export function normalizeModelSettings(settings?: Partial<ModelSettings> | null)
   const model: ModelChoice = settings?.model === "gemini" ? "gemini" : "chatgpt";
   const str = (v: unknown): string | undefined =>
     typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
+  const stripSlash = (s: string) => s.replace(/\/+$/, "");
+  const storedUrl = str(settings?.serverUrl);
+  // Migration: builds before the port alignment persisted the old default
+  // (8080) into chrome.storage; the agent server listens on 3201, so treat
+  // that stale value as unset instead of letting it strand the client.
+  const LEGACY_DEFAULT = "http://localhost:8080";
+  const serverUrl =
+    storedUrl && stripSlash(storedUrl) !== LEGACY_DEFAULT
+      ? storedUrl
+      : DEFAULT_MODEL_SETTINGS.serverUrl;
 
   return {
     model,
-    serverUrl: str(settings?.serverUrl) || DEFAULT_MODEL_SETTINGS.serverUrl,
+    serverUrl,
     agentAuthToken: str(settings?.agentAuthToken),
     openaiApiKey: str(settings?.openaiApiKey),
     openaiBaseUrl: str(settings?.openaiBaseUrl) || DEFAULT_MODEL_SETTINGS.openaiBaseUrl,
