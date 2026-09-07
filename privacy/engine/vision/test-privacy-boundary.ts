@@ -497,10 +497,10 @@ async function main(): Promise<void> {
       check("Defense: PAN pattern in context refused (Sanitizer-leak tripwire)", refused);
     }
 
-    // --- Policy ordering (static, on the real service worker) ---------------
-    console.log("\n[Order] service-worker.ts source ordering");
+    // --- Policy ordering (static, on the real orchestrator loop) -------------
+    console.log("\n[Order] orchestrator/runStep.ts source ordering");
     {
-      const sw = readFileSync("background/service-worker.ts", "utf-8");
+      const sw = readFileSync("orchestrator/runStep.ts", "utf-8");
       const order = [
         ["capturePackage(tabId)", sw.indexOf("await capturePackage(tabId)")],
         ["runVisionPath", sw.indexOf("await runVisionPath(")],
@@ -520,6 +520,8 @@ async function main(): Promise<void> {
     console.log("\n[Audit] Persistence & network (static source scan)");
     const RUNTIME_FILES = [
       "background/service-worker.ts",
+      "orchestrator/runStep.ts",
+      "orchestrator/session.ts",
       "content/capture-content.ts",
       "utils/screenshot.ts",
       "utils/messaging.ts",
@@ -555,6 +557,9 @@ async function main(): Promise<void> {
       const swSrc = readFileSync("background/service-worker.ts", "utf-8");
       check("Audit: service worker makes no fetch calls (only chrome APIs + modules)",
         !swSrc.includes("fetch("));
+      const orchSrc = readFileSync("orchestrator/runStep.ts", "utf-8");
+      check("Audit: orchestrator loop makes no fetch calls (remote path is queryServer only)",
+        !orchSrc.includes("fetch("));
     }
 
     if (failures.length === 0) {
