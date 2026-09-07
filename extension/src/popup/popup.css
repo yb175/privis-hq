@@ -687,3 +687,47 @@ html, body {
   gap: 4px;
   animation: chip-fade-in 0.2s ease-out;
 }
+
+/* Exact redacted package preview; this is the only payload surface in the popup. */
+.agent-payload {
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), var(--color-panel) 42%);
+  border-radius: 10px;
+  overflow: hidden;
+  animation: chip-fade-in 0.2s ease-out;
+}
+
+.agent-payload summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 7px;
+  list-style: none;
+  padding: 9px 10px;
+}
+
+.agent-payload summary::-webkit-details-marker { display: none; }
+.agent-payload summary:focus-visible { outline: 2px solid var(--color-line-focus); outline-offset: -2px; }
+.payload-lock { color: var(--color-accent); font-size: 13px; }
+.payload-safe { color: var(--color-allow); font-family: var(--font-mono); font-size: 9px; letter-spacing: .08em; margin-left: auto; }
+
+.payload-screenshot {
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-line);
+  border-top: 1px solid var(--color-line);
+  display: block;
+  height: 108px;
+  object-fit: cover;
+  object-position: top;
+  width: 100%;
+}
+
+.payload-meta { color: var(--color-text-dim); font-size: 10.5px; padding: 7px 10px; }
+.payload-context { border-top: 1px solid var(--color-line); padding: 6px 10px 9px; }
+.payload-url { color: var(--color-text-muted); font-family: var(--font-mono); font-size: 9px; overflow: hidden; padding: 3px 0 6px; text-overflow: ellipsis; white-space: nowrap; }
+.payload-row { align-items: baseline; display: flex; font-size: 10px; gap: 7px; line-height: 1.45; padding: 2px 0; }
+.payload-row code { color: #7dd3fc; flex: 0 0 68px; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.payload-row span { color: var(--color-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.payload-more { color: var(--color-text-muted); font-size: 10px; padding-top: 5px; }

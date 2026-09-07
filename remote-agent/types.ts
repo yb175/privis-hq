@@ -69,6 +69,19 @@ export interface AgentSession {
   gateDecision?: "allow" | "human_approval" | "block";
   history: SessionStep[];
   lastAction?: AgentAction;
+  /** Exact redacted-only package view dispatched to the remote planner. */
+  outboundPayload?: {
+    sanitizedScreenshot: string;
+    elements: Array<{
+      tag: string;
+      type: string | null;
+      role: string | null;
+      text: string;
+    }>;
+    placeholders: string[];
+    url: string;
+    model: "chatgpt" | "gemini";
+  };
   error?: string;
 }
 

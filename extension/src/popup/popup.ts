@@ -115,21 +115,23 @@ class PopupApp {
   }
 
   private initMessageListener() {
-    if (typeof chrome === "undefined" || !chrome.runtime || typeof chrome.runtime.onMessage === "function") {
-      chrome.runtime.onMessage.addListener((msg: unknown) => {
-        if (!msg || typeof msg !== "object") return;
-        const update = msg as SessionUpdateMessage;
-        if (update.type === "cba.sessionUpdate" && update.session) {
-          // If message is for our tab or active tab
-          if (
-            this.activeTabId === null ||
-            update.session.tabId === this.activeTabId
-          ) {
-            this.chatComponent?.updateSession(update.session, update.gateResult);
-          }
-        }
-      });
+    if (typeof chrome === "undefined" || !chrome.runtime || typeof chrome.runtime.onMessage?.addListener !== "function") {
+      return;
     }
+
+    chrome.runtime.onMessage.addListener((msg: unknown) => {
+      if (!msg || typeof msg !== "object") return;
+      const update = msg as SessionUpdateMessage;
+      if (update.type === "cba.sessionUpdate" && update.session) {
+        // If message is for our tab or active tab
+        if (
+          this.activeTabId === null ||
+          update.session.tabId === this.activeTabId
+        ) {
+          this.chatComponent?.updateSession(update.session, update.gateResult);
+        }
+      }
+    });
   }
 }
 

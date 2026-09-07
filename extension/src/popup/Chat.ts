@@ -166,6 +166,10 @@ export class ChatComponent {
       this.renderGateBadge(decision, reason, session.sessionId);
     }
 
+    if (session.outboundPayload) {
+      this.renderOutboundPayload(session.outboundPayload);
+    }
+
     // 3. Render Actions History (placeholder tokens only, never raw PII)
     if (Array.isArray(session.history) && session.history.length > 0) {
       for (const step of session.history) {
@@ -176,6 +180,47 @@ export class ChatComponent {
     }
 
     this.scrollToBottom();
+  }
+
+  private renderOutboundPayload(payload: NonNullable<AgentSession["outboundPayload"]>) {
+    const card = document.createElement("details");
+    card.className = "agent-payload";
+    card.open = true;
+
+    const summary = document.createElement("summary");
+    summary.innerHTML = `<span class="payload-lock">▣</span><span>Sent to AI agent</span><span class="payload-safe">REDACTED</span>`;
+    card.appendChild(summary);
+
+    const screenshot = document.createElement("img");
+    screenshot.className = "payload-screenshot";
+    screenshot.src = payload.sanitizedScreenshot;
+    screenshot.alt = "Redacted page screenshot sent to the AI agent";
+    card.appendChild(screenshot);
+
+    const meta = document.createElement("div");
+    meta.className = "payload-meta";
+    meta.textContent = `${payload.model} · ${payload.elements.length} page elements · ${payload.placeholders.length} placeholders`;
+    card.appendChild(meta);
+
+    const context = document.createElement("div");
+    context.className = "payload-context";
+    const url = document.createElement("div");
+    url.className = "payload-url";
+    url.textContent = payload.url;
+    context.appendChild(url);
+
+    for (const element of payload.elements) {
+      const row = document.createElement("div");
+      row.className = "payload-row";
+      const kind = document.createElement("code");
+      kind.textContent = element.role || element.type || element.tag;
+      const text = document.createElement("span");
+      text.textContent = element.text || "—";
+      row.append(kind, text);
+      context.appendChild(row);
+    }
+    card.appendChild(context);
+    this.streamContainer.appendChild(card);
   }
 
   private renderGateBadge(decision: PolicyGateDecision, reason?: string, sessionId?: string) {

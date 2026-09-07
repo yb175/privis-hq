@@ -247,6 +247,17 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
   // operator's remote-agent server, which holds the keys and picks the brain.
   const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
   const settings = await loadModelSettings();
+  session.outboundPayload = {
+    sanitizedScreenshot,
+    elements: remoteElements.map(({ tag, type, role, text }) => ({ tag, type, role, text })),
+    placeholders: remoteElements
+      .map((element) => element.text)
+      .filter((text) => /^[A-Z]+_\d+$/.test(text)),
+    url: pkg.browserState.url,
+    model: settings.model,
+  };
+  notifySessionUpdate(session, gate);
+
   let agentAction: AgentAction;
   try {
     agentAction = await queryServer(
