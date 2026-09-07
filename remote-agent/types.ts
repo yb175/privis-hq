@@ -97,7 +97,7 @@ export const PII_PATTERNS: { name: string; re: RegExp }[] = [
   { name: "PAN", re: /\b[a-z]{5}[0-9]{4}[a-z]\b/i },
   { name: "AADHAAR", re: /\b[2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4}\b/ },
   { name: "US_SSN", re: /\b(?!000|666|9\d{2})\d{3}[- ]?(?!00)\d{2}[- ]?(?!0000)\d{4}\b/ },
-  { name: "UK_NINO", re: /\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\s?[0-9]{2}\s?[0-9]{2}\s?[0-9]{2}\s?[A-D]\b/i },
+  { name: "UK_NINO", re: /\b(?:[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]|QQ)\s?[0-9]{2}\s?[0-9]{2}\s?[0-9]{2}\s?[A-D]\b/i },
   { name: "PASSPORT", re: /\b[A-Z][0-9]{7,8}\b/ },
 
   // Financial & Banking
@@ -113,14 +113,14 @@ export const PII_PATTERNS: { name: string; re: RegExp }[] = [
   },
   {
     name: "CURRENCY_AMOUNT",
-    re: /\b(?:[$€£₹¥]|USD|EUR|GBP|INR|CAD|AUD)\s?[0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?\b|\b[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?\s?(?:USD|EUR|GBP|INR|₹|Rs\.?)\b/i,
+    re: /(?:\b(?:USD|EUR|GBP|INR|CAD|AUD)\s?[0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?\b|[$€£₹¥]\s?[0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?\b|\b[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?\s?(?:USD|EUR|GBP|INR|₹|Rs\.?)\b)/i,
   },
 
   // Contact & Personal
   { name: "EMAIL", re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/ },
   {
     name: "PHONE",
-    re: /\b(?:\+\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b/,
+    re: /(?:\b\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b|\+\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,5}[-.\s]?\d{3,5}\b)/,
   },
   {
     name: "IPV4",

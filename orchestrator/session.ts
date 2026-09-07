@@ -1,8 +1,9 @@
 // orchestrator/session.ts
 // CBA-6: multi-page session state. One session per tab carrying tabId, step,
 // last action and goal. State lives in memory only (CONTRACT.md rule 1/2 —
-// never written to disk or storage). The Remote Agent is stateless; the loop
-// here IS the agent's memory.
+// raw captures and real values never written to disk or storage; sanitized
+// outbound wire packages logged separately under CBA-11). The Remote Agent
+// is stateless; the loop here IS the agent's memory.
 
 import type {
   AgentSession,

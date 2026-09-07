@@ -226,8 +226,12 @@ layout and meaning survive while PII does not:
 
 ## Hard rules (never negotiable)
 
-1. **Screenshot stays in memory.** `dataUrl` / `sanitizedScreenshot` exist only in
-   memory during a step. Never write raw or sanitized screenshots to disk or storage.
+1. **Raw captures and real-value map stay strictly in memory.** Raw `dataUrl`,
+   DOM detection trees, and the `element_id` → real-value map NEVER touch disk or
+   storage. As an explicit carve-out for jury auditing and verifiable transparency
+   (CBA-11), sanitized outbound payloads (`SanitizedPackage` containing redacted
+   screenshots and placeholder text only) MAY be persisted strictly on-device in
+   `chrome.storage.local` within bounded FIFO logs (`privis_transparency_log`).
 2. **The mapping table never leaves the device.** The `element_id` → real-value map
    lives only inside the extension. Only placeholders and layout cross to the Remote Agent.
 3. **The Remote Agent must never receive raw PAN, Aadhaar, password, or face pixels.**
