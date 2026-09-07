@@ -62,14 +62,22 @@ export class ChatComponent {
         type: "cba.startSession",
         tabId: this.tabId,
         goal,
+      }).then((res) => {
+        if (res && res.ok === false && res.error) {
+          this.setInputDisabled(false);
+          this.updateStatus("error");
+          this.renderErrorMessage(res.error);
+        }
       }).catch((err) => {
         this.setInputDisabled(false);
         this.updateStatus("error");
+        this.renderErrorMessage(err instanceof Error ? err.message : String(err));
         console.error("Failed to start agent session:", err);
       });
     } catch (err) {
       this.setInputDisabled(false);
       this.updateStatus("error");
+      this.renderErrorMessage(err instanceof Error ? err.message : String(err));
       console.error("Failed to send startSession message:", err);
     }
   }
@@ -170,7 +178,12 @@ export class ChatComponent {
       this.renderOutboundPayload(session.outboundPayload);
     }
 
-    // 3. Render Actions History (placeholder tokens only, never raw PII)
+    // 3. Error Banner (if session failed)
+    if (session.status === "error" && session.error && !decision) {
+      this.renderErrorMessage(session.error);
+    }
+
+    // 4. Render Actions History (placeholder tokens only, never raw PII)
     if (Array.isArray(session.history) && session.history.length > 0) {
       for (const step of session.history) {
         this.renderActionChip(step.action);
@@ -221,6 +234,40 @@ export class ChatComponent {
     }
     card.appendChild(context);
     this.streamContainer.appendChild(card);
+  }
+
+  private renderErrorMessage(errorMessage: string) {
+    const existing = this.streamContainer.querySelector(".chat-error-card");
+    if (existing) existing.remove();
+
+    const card = document.createElement("div");
+    card.className = "chat-error-card";
+
+    const isConnRefused =
+      errorMessage.includes("Failed to fetch") ||
+      errorMessage.includes("connection") ||
+      errorMessage.includes("ECONNREFUSED");
+
+    card.innerHTML = `
+      <div class="chat-error-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span>Error</span>
+      </div>
+      <div class="chat-error-body"></div>
+      ${
+        isConnRefused
+          ? `<div class="chat-error-hint">Hint: Start the agent server with <code>npm run serve:agent</code> (listening on port 3201).</div>`
+          : ""
+      }
+    `;
+
+    card.querySelector(".chat-error-body")!.textContent = errorMessage;
+    this.streamContainer.appendChild(card);
+    this.scrollToBottom();
   }
 
   private renderGateBadge(decision: PolicyGateDecision, reason?: string, sessionId?: string) {
