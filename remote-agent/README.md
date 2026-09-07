@@ -18,6 +18,54 @@ on-device Sanitizer.
 | `client-server.ts` | Extension-side client: POSTs sanitized package to this server, no keys on device |
 | `server.ts` | Standalone Hono HTTP server (`/plan`, `/health`) |
 
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph DEVICE["On-device (extension, no API keys)"]
+    CAP[capture] --> SAN[Sanitizer<br/>PII → placeholders<br/>redacted: true]
+    SAN --> QS[client-server.ts<br/>queryServer]
+    SW[placeholder → real value<br/>swap after response]
+  end
+
+  subgraph SERVER["remote-agent — Hono server :3201"]
+    MW["middleware<br/>CORS allowlist · bearer auth · logger"]
+    PLAN["POST /plan · /action · /<br/>GET /health"]
+    R[router.ts<br/>routeAgentRequest]
+    B{"assertSanitizedPackage<br/>privacy boundary<br/>redacted stamp + PII scan"}
+    P[packager.ts<br/>prompt + placeholder allowlist<br/>from prompt.md]
+    S[settings/models.ts<br/>loadModelSettings<br/>PRIVIS_MODEL default]
+    G[guard.ts<br/>guardAction<br/>schema · allowlist · PII · fail-closed]
+    MW --> PLAN --> R --> B
+    B -->|reject 400| ERR["{ok:false, error}"]
+    B -->|pass| S --> P
+  end
+
+  subgraph PROVIDERS["LLM providers (keys from .env)"]
+    OAI[client-openai.ts<br/>chatgpt · JSON mode + vision]
+    GEM[client-gemini.ts<br/>gemini · inline image]
+  end
+
+  QS -- "SanitizedPackage + model hint<br/>(never keys)" --> MW
+  P --> OAI
+  P --> GEM
+  OAI -->|AgentAction JSON| G
+  GEM -->|AgentAction JSON| G
+  G -->|ok| A[AgentAction]
+  G -->|violation / no key / error| H[ask_human fallback]
+  A -- "{ ok, action }" --> SW
+  H -- "{ ok, action }" --> SW
+
+  ENV[".env<br/>OPENAI_API_KEY<br/>GEMINI_API_KEY<br/>AGENT_AUTH_TOKEN"] -.-> S
+  ENV -.-> OAI
+  ENV -.-> GEM
+```
+
+Data is sanitized before it leaves the device, validated twice on the server
+(boundary on input, guard on output), and placeholders are only ever resolved
+back to real values on-device — the server never sees raw PII and the device
+never sees keys.
+
 ## Data flow
 
 ```

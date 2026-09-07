@@ -9,7 +9,19 @@
  * Captures the visible tab into an in-memory PNG data URL.
  * @param tabId Target tab ID
  */
-export async function takeScreenshot(tabId: number): Promise<{ dataUrl: string }> {
+// Chrome hard-throttles chrome.tabs.captureVisibleTab to ~2 calls/sec per
+// extension (MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND). One serialized
+// spacing point for ALL callers — retry loops, per-tab session loops, and
+// HUD-triggered captures can never stack past the quota again.
+// ponytail: single global chain; per-window chains if multi-window throughput matters.
+const MIN_CAPTURE_SPACING_MS = 600;
+let lastCaptureAt = 0;
+let captureChain: Promise<unknown> = Promise.resolve();
+
+async function captureSpaced(tabId: number): Promise<{ dataUrl: string }> {
+  const wait = lastCaptureAt + MIN_CAPTURE_SPACING_MS - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+
   // captureVisibleTab works on the active tab of a window; resolve the tab's window.
   let tab: chrome.tabs.Tab;
   try {
@@ -38,5 +50,16 @@ export async function takeScreenshot(tabId: number): Promise<{ dataUrl: string }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(`takeScreenshot: capture failed: ${detail}`);
+  } finally {
+    // Space even failed captures so a quota-reject retry respects the limit.
+    lastCaptureAt = Date.now();
   }
+}
+
+export function takeScreenshot(tabId: number): Promise<{ dataUrl: string }> {
+  const run = () => captureSpaced(tabId);
+  const result = captureChain.then(run);
+  // Keep the chain alive even when a capture rejects.
+  captureChain = result.catch(() => {});
+  return result;
 }

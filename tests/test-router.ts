@@ -983,16 +983,31 @@ assert.deepStrictEqual(
 assert.strictEqual(typeGen[0].value, "user@x.com");
 console.log("  ✔ Bridge passes css targets through with real values");
 
-// unresolvable target -> empty (executor no-op), not a crash
+// unresolvable target -> loud failure action (content script reports
+// "Target not found: __unresolved:<original target>"), not a silent no-op
 const unresolvable = agentActionToExecutorActions(
   { type: "click", target: { name: "Nonexistent" } },
   bridgeElements,
   bridgeMap
 );
-assert.strictEqual(unresolvable.length, 0);
+assert.strictEqual(unresolvable.length, 1);
+assert.ok(unresolvable[0].target.startsWith("__unresolved:"));
 // non-executable action types -> no-op
 assert.deepStrictEqual(agentActionToExecutorActions({ type: "done", reason: "x" }, bridgeElements, bridgeMap), []);
 console.log("  ✔ Bridge no-ops unresolvable targets and non-executable action types");
+
+// Regression: real-world click targets (no role ATTRIBUTE, label-ish ids, messy name)
+const nativeBtn: ElementMeta[] = [
+  { element_id: "1abc", tag: "button", type: null, role: null, label: null, text: "  Sign\u00a0In ", bbox: [5, 5, 80, 30] },
+];
+const clickNative = agentActionToExecutorActions(
+  { type: "click", target: { role: "button", name: "sign in" } },
+  nativeBtn,
+  {}
+);
+assert.strictEqual(clickNative.length, 1);
+assert.strictEqual(clickNative[0].target, "#\\31 abc"); // digit-start id needs CSS escaping
+console.log("  ✔ Native <button> matches role:button; messy name/CASE + id escaping work");
 
 // Restore developer environment after ALL isolation-dependent tests
 process.env = ENV_BACKUP;
