@@ -127,7 +127,7 @@ if (
     // .env optional; env may also come from the shell environment
   }
 
-  const PORT = Number(process.env.PORT || process.env.AGENT_PORT || 8080);
+  const PORT = Number(process.env.PORT || process.env.AGENT_PORT || 3201);
   const HOST = process.env.HOST || "0.0.0.0";
   serve(
     {
