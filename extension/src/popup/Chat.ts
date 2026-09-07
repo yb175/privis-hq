@@ -59,8 +59,9 @@ export class ChatComponent {
 
     try {
       chrome.runtime.sendMessage({
-        type: "cba.startSession",
+        type: "RUN_GOAL",
         tabId: this.tabId,
+        text: goal,
         goal,
       }).then((res) => {
         if (res && res.ok === false && res.error) {
@@ -78,7 +79,7 @@ export class ChatComponent {
       this.setInputDisabled(false);
       this.updateStatus("error");
       this.renderErrorMessage(err instanceof Error ? err.message : String(err));
-      console.error("Failed to send startSession message:", err);
+      console.error("Failed to send RUN_GOAL message:", err);
     }
   }
 
