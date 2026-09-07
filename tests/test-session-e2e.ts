@@ -27,7 +27,8 @@ import { pathToFileURL } from "node:url";
 import { installCanvasShims } from "../privacy/engine/vision/test-canvas-shim.js";
 import { runStep } from "../orchestrator/runStep.js";
 import { sessionsByTab } from "../orchestrator/session.js";
-import type { ElementMeta } from "../types/index.js";
+import { computeRequestDigest } from "../orchestrator/transparency-log.js";
+import type { ElementMeta, TransparencyLogStore } from "../types/index.js";
 
 // ---------------------------------------------------------------------------
 // Scripted world: home → form → thanks, plus an endless "loop" page.
@@ -126,6 +127,7 @@ const pngDataUrl =
   readFileSync(resolve("ml/dataset/images/f5_text_negative.png")).toString("base64");
 
 let agentPort = 0; // set after the stub server binds
+const storageStore: Record<string, unknown> = {};
 
 (globalThis as Record<string, unknown>).chrome = {
   runtime: {
@@ -143,9 +145,17 @@ let agentPort = 0; // set after the stub server binds
   },
   storage: {
     local: {
-      get: async () => ({
-        privis_model_settings: { serverUrl: `http://127.0.0.1:${agentPort}` },
-      }),
+      get: async (keys?: string | string[]) => {
+        const defaults: Record<string, unknown> = {
+          privis_model_settings: { serverUrl: `http://127.0.0.1:${agentPort}` },
+        };
+        if (!keys) return { ...defaults, ...storageStore };
+        const key = typeof keys === "string" ? keys : keys[0];
+        return { [key]: storageStore[key] ?? defaults[key] };
+      },
+      set: async (items: Record<string, unknown>) => {
+        Object.assign(storageStore, items);
+      },
     },
   },
   tabs: {
@@ -351,6 +361,23 @@ async function main() {
       "  PASS wire tripwire: 0 raw PII in any /plan body; placeholders crossed; real values only in on-device executor"
     );
 
+    // CBA-11: Verify transparency log in chrome.storage.local for Trail 1
+    const tStore = storageStore["privis_transparency_log"] as TransparencyLogStore | undefined;
+    assert.ok(tStore, "chrome.storage.local contains privis_transparency_log");
+    const tEntries = tStore.entries.filter((e) => e.sessionId === session.sessionId);
+    assert.strictEqual(tEntries.length, 6, "Transparency log contains exactly 6 entries for Trail 1");
+    assert.deepStrictEqual(
+      tEntries.map((e) => e.step),
+      [1, 2, 3, 4, 5, 6],
+      "Transparency steps are strictly ordered [1..6]"
+    );
+    for (const e of tEntries) {
+      const digest = await computeRequestDigest(e.request);
+      assert.strictEqual(e.requestDigest, digest, "Request digest matches recomputed SHA-256");
+      assert.ok(e.response, "Step produced valid AgentAction");
+    }
+    console.log("  PASS CBA-11: Trail 1 wire transparency entries persisted, ordered, and SHA-256 verified");
+
     // --- Trail 2: never-done brain → cap at 8 → ask_human ------------------
     formCalls = 0;
     executedActions.length = 0;
@@ -399,6 +426,16 @@ async function main() {
     assert.strictEqual(planCalls.length, callsBefore, "ZERO-CALL guard: remote never consulted");
     assert.strictEqual(blocked.decision, "block");
     assert.ok(blocked.reason.includes("PASSWORD"));
+
+    // CBA-11: Verify gate block is recorded in transparency log with response: null (AC-6)
+    const blockedEntries = (storageStore["privis_transparency_log"] as TransparencyLogStore).entries.filter(
+      (e) => e.sessionId === bs.sessionId
+    );
+    assert.strictEqual(blockedEntries.length, 1, "Blocked step logged exactly 1 transparency entry");
+    assert.strictEqual(blockedEntries[0].response, null, "Blocked step response is null");
+    assert.strictEqual(blockedEntries[0].gate.decision, "block", "Blocked step records gate decision block");
+    assert.ok(blockedEntries[0].error?.includes("PASSWORD"), "Blocked step records refusal reason");
+    console.log("  PASS CBA-11: Gate-blocked step logged with response: null + gate reason");
     console.log("  PASS gate block mid-run stops immediately, chat told, remote never called");
 
     console.log("\nALL CBA-6 E2E LOOP TESTS PASSED");

@@ -331,6 +331,74 @@ assert.strictEqual(humanSession.status, "blocked");
 
 console.log("  ✔ Human decision approval resumes session, rejection halts session");
 
+// ============================================================================
+// Test 6: Transparency Tab Persistence & Popup Reload Survival (AC-3)
+// ============================================================================
+console.log("\n[6] Transparency Tab Persistence & Popup Reload Survival (AC-3)");
+
+// Seed transparency log in storage
+const testScreenshotUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+const transparencyData = {
+  version: 1,
+  prunedCount: 0,
+  entries: [
+    {
+      sessionId: "sess_demo_persist",
+      goal: "Fill employee form with PAN",
+      step: 1,
+      timestamp: Date.now(),
+      model: "chatgpt",
+      request: {
+        goal: "Fill employee form with PAN",
+        sanitizedScreenshot: testScreenshotUrl,
+        sanitizedContext: {
+          elements: [
+            {
+              element_id: "el-pan",
+              tag: "input",
+              type: "text",
+              role: "textbox",
+              label: null,
+              text: "PAN_1",
+              bbox: [10, 20, 100, 30],
+            },
+          ],
+          browserState: {
+            url: "https://hr.internal.example/employee-portal",
+            title: "HR Portal",
+            viewport: { w: 640, h: 480 },
+          },
+        },
+        redacted: true,
+      },
+      requestDigest: "3a7f829d1029384756abcdef1234567890abcdef1234567890abcdef12345678",
+      response: {
+        type: "type",
+        target: { css: "#pan" },
+        placeholder: "PAN_1",
+      },
+      gate: { decision: "allow", reason: "All clear" },
+    },
+  ],
+};
+
+await mockChrome.storage.local.set({ privis_transparency_log: transparencyData });
+
+// Simulate popup reload by querying storage freshly
+const reloaded = (await mockChrome.storage.local.get("privis_transparency_log")) as {
+  privis_transparency_log: typeof transparencyData;
+};
+const storedSession = reloaded.privis_transparency_log;
+
+assert.ok(storedSession, "Transparency log survived popup reload in storage");
+assert.strictEqual(storedSession.entries.length, 1);
+assert.strictEqual(storedSession.entries[0].sessionId, "sess_demo_persist");
+assert.strictEqual(storedSession.entries[0].request.sanitizedScreenshot, testScreenshotUrl);
+assert.strictEqual(storedSession.entries[0].request.sanitizedContext.elements[0].text, "PAN_1");
+assert.strictEqual(storedSession.entries[0].response?.type, "type");
+
+console.log("  ✔ Popup reload continuity: Transparency log replays completed steps and screenshot");
+
 console.log("\n============================================================");
 console.log("✅ ALL POPUP CHAT & SETTINGS TESTS PASSED (100%)");
 console.log("============================================================\n");

@@ -27,6 +27,16 @@
           </button>
           <button
             type="button"
+            id="tab-btn-transparency"
+            class="tab-btn"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-transparency"
+          >
+            Transparency
+          </button>
+          <button
+            type="button"
             id="tab-btn-settings"
             class="tab-btn"
             role="tab"
@@ -82,6 +92,13 @@
         <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-settings">
           <div id="settings-container" class="settings-container">
             <!-- Populated by Settings.ts -->
+          </div>
+        </section>
+
+        <!-- Transparency Tab -->
+        <section id="tab-transparency" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-transparency">
+          <div id="transparency-container" class="transparency-container">
+            <!-- Populated by Transparency.ts -->
           </div>
         </section>
       </main>

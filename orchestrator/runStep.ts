@@ -48,6 +48,10 @@ import {
   endLoop,
   type Outcome,
 } from "./session.js";
+import {
+  computeRequestDigest,
+  logTransparencyEntry,
+} from "./transparency-log.js";
 
 /**
  * Snapshot the content-script DOM package for a tab, then run DOM-path
@@ -234,6 +238,31 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     session.status = "blocked";
     session.error = gate.reason;
     notifySessionUpdate(session, gate);
+
+    // CBA-11: Log blocked step to transparency audit store with response: null
+    const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
+    const settings = await loadModelSettings();
+    const refusedPkg = {
+      goal,
+      sanitizedScreenshot,
+      sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
+      redacted: true as const,
+    };
+    const requestDigest = await computeRequestDigest(refusedPkg);
+    await logTransparencyEntry({
+      sessionId: session.sessionId,
+      tabIdHint: tabId,
+      goal,
+      step: session.history.length + 1,
+      timestamp: Date.now(),
+      model: settings.model,
+      request: refusedPkg,
+      requestDigest,
+      response: null,
+      gate: { decision: gate.decision, reason: gate.reason },
+      error: gate.reason,
+    });
+
     return { decision: gate.decision, reason: gate.reason, stop: true };
   }
 
@@ -246,6 +275,31 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       session.status = "blocked";
       session.error = "Human rejected action";
       notifySessionUpdate(session, gate);
+
+      // CBA-11: Log rejected step to transparency audit store
+      const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
+      const settings = await loadModelSettings();
+      const refusedPkg = {
+        goal,
+        sanitizedScreenshot,
+        sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
+        redacted: true as const,
+      };
+      const requestDigest = await computeRequestDigest(refusedPkg);
+      await logTransparencyEntry({
+        sessionId: session.sessionId,
+        tabIdHint: tabId,
+        goal,
+        step: session.history.length + 1,
+        timestamp: Date.now(),
+        model: settings.model,
+        request: refusedPkg,
+        requestDigest,
+        response: null,
+        gate: { decision: gate.decision, reason: "Human rejected action" },
+        error: "Human rejected action",
+      });
+
       return { decision: gate.decision, reason: "Human rejected action", stop: true };
     }
     session.status = "running";
@@ -271,23 +325,57 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   };
   notifySessionUpdate(session, gate);
 
+  const outboundPkg = {
+    goal,
+    sanitizedScreenshot,
+    sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
+    redacted: true as const, // sanitizer provenance: structural + visual redaction applied above
+  };
+  const requestDigest = await computeRequestDigest(outboundPkg);
+
   let agentAction: AgentAction;
   try {
     agentAction = await queryServer(
-      {
-        goal,
-        sanitizedScreenshot,
-        sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
-        redacted: true, // sanitizer provenance: structural + visual redaction applied above
-      },
+      outboundPkg,
       serverOptionsFromSettings(settings)
     );
   } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
     session.status = "error";
-    session.error = err instanceof Error ? err.message : String(err);
+    session.error = errorMsg;
     notifySessionUpdate(session, gate);
+
+    // CBA-11: Log failed request to transparency audit store
+    await logTransparencyEntry({
+      sessionId: session.sessionId,
+      tabIdHint: tabId,
+      goal,
+      step: session.history.length + 1,
+      timestamp: Date.now(),
+      model: settings.model,
+      request: outboundPkg,
+      requestDigest,
+      response: null,
+      gate: { decision: gate.decision, reason: gate.reason },
+      error: errorMsg,
+    });
+
     throw err;
   }
+
+  // CBA-11: Record completed outbound wire exchange in transparency log
+  await logTransparencyEntry({
+    sessionId: session.sessionId,
+    tabIdHint: tabId,
+    goal,
+    step: session.history.length + 1,
+    timestamp: Date.now(),
+    model: settings.model,
+    request: outboundPkg,
+    requestDigest,
+    response: agentAction,
+    gate: { decision: gate.decision, reason: gate.reason },
+  });
 
   session.lastAction = agentAction;
   broadcastHudStep(5, {

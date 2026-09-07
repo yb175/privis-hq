@@ -3,6 +3,7 @@
 
 import { ChatComponent } from "./Chat.js";
 import { SettingsComponent } from "./Settings.js";
+import { TransparencyComponent } from "./Transparency.js";
 import type { AgentSession, PolicyGateResult } from "../../../types/index.js";
 
 interface SessionUpdateMessage {
@@ -13,18 +14,23 @@ interface SessionUpdateMessage {
 
 class PopupApp {
   private chatTabBtn: HTMLButtonElement;
+  private transparencyTabBtn: HTMLButtonElement;
   private settingsTabBtn: HTMLButtonElement;
   private chatPanel: HTMLElement;
+  private transparencyPanel: HTMLElement;
   private settingsPanel: HTMLElement;
 
   private chatComponent: ChatComponent | null = null;
+  private transparencyComponent: TransparencyComponent | null = null;
   private settingsComponent: SettingsComponent | null = null;
   private activeTabId: number | null = null;
 
   constructor() {
     this.chatTabBtn = document.getElementById("tab-btn-chat") as HTMLButtonElement;
+    this.transparencyTabBtn = document.getElementById("tab-btn-transparency") as HTMLButtonElement;
     this.settingsTabBtn = document.getElementById("tab-btn-settings") as HTMLButtonElement;
     this.chatPanel = document.getElementById("tab-chat") as HTMLElement;
+    this.transparencyPanel = document.getElementById("tab-transparency") as HTMLElement;
     this.settingsPanel = document.getElementById("tab-settings") as HTMLElement;
 
     this.initTabs();
@@ -34,44 +40,56 @@ class PopupApp {
 
   private initTabs() {
     this.chatTabBtn.addEventListener("click", () => this.switchTab("chat"));
+    this.transparencyTabBtn.addEventListener("click", () => this.switchTab("transparency"));
     this.settingsTabBtn.addEventListener("click", () => this.switchTab("settings"));
+
+    const tabs: Array<{ id: "chat" | "transparency" | "settings"; btn: HTMLButtonElement }> = [
+      { id: "chat", btn: this.chatTabBtn },
+      { id: "transparency", btn: this.transparencyTabBtn },
+      { id: "settings", btn: this.settingsTabBtn },
+    ];
 
     // Keyboard tab navigation (Left / Right arrow keys)
     const handleKeyNav = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
         e.preventDefault();
-        const isChat = this.chatTabBtn.classList.contains("active");
-        if (isChat) {
-          this.switchTab("settings");
-          this.settingsTabBtn.focus();
-        } else {
-          this.switchTab("chat");
-          this.chatTabBtn.focus();
-        }
+        const currentIndex = tabs.findIndex((t) => t.btn.classList.contains("active"));
+        if (currentIndex === -1) return;
+        const delta = e.key === "ArrowRight" ? 1 : -1;
+        const nextIndex = (currentIndex + delta + tabs.length) % tabs.length;
+        this.switchTab(tabs[nextIndex].id);
+        tabs[nextIndex].btn.focus();
       }
     };
 
     this.chatTabBtn.addEventListener("keydown", handleKeyNav);
+    this.transparencyTabBtn.addEventListener("keydown", handleKeyNav);
     this.settingsTabBtn.addEventListener("keydown", handleKeyNav);
   }
 
-  private switchTab(tab: "chat" | "settings") {
+  private switchTab(tab: "chat" | "transparency" | "settings") {
+    const allBtns = [this.chatTabBtn, this.transparencyTabBtn, this.settingsTabBtn];
+    const allPanels = [this.chatPanel, this.transparencyPanel, this.settingsPanel];
+
+    allBtns.forEach((b) => {
+      b.classList.remove("active");
+      b.setAttribute("aria-selected", "false");
+    });
+    allPanels.forEach((p) => p.classList.remove("active"));
+
     if (tab === "chat") {
       this.chatTabBtn.classList.add("active");
       this.chatTabBtn.setAttribute("aria-selected", "true");
-      this.settingsTabBtn.classList.remove("active");
-      this.settingsTabBtn.setAttribute("aria-selected", "false");
-
       this.chatPanel.classList.add("active");
-      this.settingsPanel.classList.remove("active");
+    } else if (tab === "transparency") {
+      this.transparencyTabBtn.classList.add("active");
+      this.transparencyTabBtn.setAttribute("aria-selected", "true");
+      this.transparencyPanel.classList.add("active");
+      void this.transparencyComponent?.refresh();
     } else {
       this.settingsTabBtn.classList.add("active");
       this.settingsTabBtn.setAttribute("aria-selected", "true");
-      this.chatTabBtn.classList.remove("active");
-      this.chatTabBtn.setAttribute("aria-selected", "false");
-
       this.settingsPanel.classList.add("active");
-      this.chatPanel.classList.remove("active");
     }
   }
 
@@ -89,6 +107,7 @@ class PopupApp {
 
     // Initialize UI components
     this.chatComponent = new ChatComponent(this.activeTabId);
+    this.transparencyComponent = new TransparencyComponent();
     this.settingsComponent = new SettingsComponent();
 
     // Rehydrate session continuity if active tab is known
