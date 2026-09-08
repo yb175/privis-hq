@@ -96,25 +96,55 @@ function assertPlaceholderInContext(pkg: SanitizedPackage, action: AgentAction):
 }
 
 /**
- * Deterministic first hop: when the goal names an explicit URL or domain and
- * the current page is somewhere else, navigate straight there without spending
- * an LLM call. Any website works — no per-site table. If the goal has no
- * URL-like token, the model decides (prompt rule 6 covers well-known services).
- * ponytail: TLD-list heuristic; upgrade path is a search/lookup action.
+ * Deterministic first hop: when the goal names a destination — an explicit
+ * URL/domain or a known brand ("open uber") — navigate straight there without
+ * spending an LLM call or asking the human for a link. Unknown brands still
+ * fall through to the model (prompt rule 6 covers well-known services).
+ * ponytail: fixed brand table; extend it when a demo brand matters, or add a
+ * search/lookup action once guessing stops being enough.
  */
 const URL_OR_DOMAIN_RE =
   /https?:\/\/[^\s"']+|\b[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.(?:com\.in|co\.in|com|in|org|net|io|dev|ai|app|edu|gov)(?![.\w])/i;
+
+const BRAND_URLS: Record<string, string> = {
+  uber: "https://m.uber.com/go/home",
+  ola: "https://book.ola.com/",
+  flipkart: "https://www.flipkart.com/",
+  amazon: "https://www.amazon.in/",
+  myntra: "https://www.myntra.com/",
+  irctc: "https://www.irctc.co.in/",
+  gmail: "https://mail.google.com/",
+  google: "https://www.google.com/",
+  youtube: "https://www.youtube.com/",
+};
+
+function hostOverlap(a: string, b: string): boolean {
+  return a === b || a.endsWith("." + b) || b.endsWith("." + a);
+}
 
 export function planQuickNavigate(
   goal: string,
   pageUrl: string
 ): { type: "navigate"; url: string } | null {
-  const match = goal.match(URL_OR_DOMAIN_RE);
-  if (!match) return null;
+  let destination: string | null = null;
+  const urlMatch = goal.match(URL_OR_DOMAIN_RE);
+  if (urlMatch) {
+    destination = urlMatch[0].startsWith("http") ? urlMatch[0] : `https://${urlMatch[0]}`;
+  } else {
+    const goalLower = goal.toLowerCase();
+    for (const [brand, url] of Object.entries(BRAND_URLS)) {
+      if (new RegExp(`\\b${brand}\\b`).test(goalLower)) {
+        destination = url;
+        break;
+      }
+    }
+  }
+  if (!destination) return null;
+
   let target: URL;
   let current: URL;
   try {
-    target = new URL(match[0].startsWith("http") ? match[0] : `https://${match[0]}`);
+    target = new URL(destination);
     current = new URL(pageUrl);
   } catch {
     return null;
@@ -122,13 +152,7 @@ export function planQuickNavigate(
   if (target.protocol !== "http:" && target.protocol !== "https:") return null;
   // Already on that site (same host or sub/superdomain) — the page-level agent
   // loop must run, not re-navigate.
-  if (
-    current.hostname === target.hostname ||
-    current.hostname.endsWith("." + target.hostname) ||
-    target.hostname.endsWith("." + current.hostname)
-  ) {
-    return null;
-  }
+  if (hostOverlap(current.hostname, target.hostname)) return null;
   return { type: "navigate", url: target.toString() };
 }
 

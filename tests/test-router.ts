@@ -583,15 +583,41 @@ const onSite = await routeAgentRequest(
 );
 assert.strictEqual(onSite.type, "scroll", "same-site goals stay with the model");
 
-// No URL-like token in the goal (e.g. "book uber ride …") → model decides
+// No destination at all in the goal → model decides
 const noToken = await routeAgentRequest(
   createValidSanitizedPackage({
-    goal: "book uber ride from my location to rithala metro",
+    goal: "fill this verification form and submit it",
   }),
   { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
 );
-assert.strictEqual(noToken.type, "scroll", "service-name-only goals fall through to the model");
-console.log("  ✔ Quick-navigate routes any user-named site deterministically; falls back safely");
+assert.strictEqual(noToken.type, "scroll", "goals without a destination stay with the model");
+
+// Brand-only mention (the "open uber" demo failure): navigate, zero LLM calls
+const navBrand = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "open uber and book a ride from my location to rithala metro",
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: noLlmFetch }
+);
+assert.deepStrictEqual(
+  navBrand,
+  { type: "navigate", url: "https://m.uber.com/go/home" },
+  "named brand navigates without asking the human for a link"
+);
+
+// Already on the brand site → model runs the page flow
+const onBrand = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "book uber ride from my location to rithala metro",
+    sanitizedContext: {
+      elements: pkg.sanitizedContext.elements,
+      browserState: { ...pkg.sanitizedContext.browserState, url: "https://m.uber.com/go/ride" },
+    },
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
+);
+assert.strictEqual(onBrand.type, "scroll", "on-site brand mentions stay with the model");
+console.log("  ✔ Quick-navigate routes URL, domain, and brand destinations; falls back safely");
 
 // --------------------------------------------------------------------------
 // 5. Router End-to-End Dispatching & Polymorphic Action Verification
