@@ -483,6 +483,15 @@ const rideElements: ElementMeta[] = [
     text: "Up to ₹50 off",
     bbox: [0, 0, 100, 30],
   },
+  {
+    element_id: "ride-promo-usd",
+    tag: "input",
+    type: "text",
+    role: "textbox",
+    label: null,
+    text: "USD5 off",
+    bbox: [0, 30, 100, 30],
+  },
 ];
 const rideRedaction = applyPlaceholders(rideElements, detectSensitive(rideElements));
 assert.doesNotThrow(() =>

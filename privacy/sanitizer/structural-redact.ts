@@ -29,7 +29,11 @@ const EMAIL_RE = /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/;
 // Indian mobile: optional +91 country code, starts 6-9, 10 digits total.
 const PHONE_RE = /^(\+91)?[6-9][0-9]{9}$/;
 // Currency symbol / currency unit in value text.
-const AMOUNT_TEXT_RE = /[₹$€£]|\b(?:inr|rs\.?)\b/i;
+// Must stay a superset of the router's CURRENCY_AMOUNT PII pattern (see
+// remote-agent/types.ts) — anything the wire-scan rejects, the sanitizer
+// must redact, or the package fails closed (Uber promo: "USD 5 off" leaked
+// because only inr/rs/$/€/£ were known locally).
+const AMOUNT_TEXT_RE = /[₹$€£¥]|\b(?:inr|usd|eur|gbp|cad|aud|rs\.?)/i;
 
 // Label-only fallbacks are restricted to the documented password / amount / name
 // rules; PAN, phone, Aadhaar, and email are only detected from strong regex/type
