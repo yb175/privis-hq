@@ -59,6 +59,8 @@ assert.strictEqual(sysPrompt, promptMd, "SYSTEM_PROMPT must be loaded verbatim f
 assert.ok(sysPrompt.includes("PRIVIS Remote Browser Agent"));
 assert.ok(sysPrompt.includes("CRITICAL PRIVACY RULE"));
 assert.ok(sysPrompt.includes("PAN_1"));
+assert.ok(sysPrompt.includes("If the current page is unrelated"));
+assert.ok(sysPrompt.includes("https://m.uber.com/go/home"));
 console.log("  ✔ System prompt is loaded verbatim from prompt.md (no drift possible)");
 
 // 1.2 Placeholder Allowlist Extraction
