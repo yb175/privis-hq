@@ -73,6 +73,7 @@ for (const envKey of [
   "GEMINI_API_KEY",
   "GEMINI_BASE_URL",
   "GEMINI_MODEL",
+  "SERPAPI_KEY",
 ]) {
   delete process.env[envKey];
 }
@@ -618,6 +619,83 @@ const onBrand = await routeAgentRequest(
 );
 assert.strictEqual(onBrand.type, "scroll", "on-site brand mentions stay with the model");
 console.log("  ✔ Quick-navigate routes URL, domain, and brand destinations; falls back safely");
+
+// --------------------------------------------------------------------------
+// 4c. Server-side 'search' tool: model searches, the SERVER runs SerpAPI and
+// answers navigate — the extension never sees the search.
+// --------------------------------------------------------------------------
+console.log("\n[4c] Router search tool (SerpAPI resolved server-side)");
+
+// Goal has no URL/brand token, so quick-navigate lets it reach the model.
+const searchPkg = createValidSanitizedPackage({
+  goal: "find the best official site for second-hand furniture and open it",
+});
+const modelSaysSearch = async () =>
+  ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              type: "search",
+              query: "official second-hand furniture website india",
+            }),
+          },
+        },
+      ],
+    }),
+  } as Response);
+
+// Happy path: first http(s) organic result becomes a navigate action.
+process.env.SERPAPI_KEY = "serp-test-key";
+const searchFetch: typeof fetch = async (input: any) => {
+  const u = typeof input === "string" ? input : String((input as any)?.url ?? input);
+  if (u.includes("serpapi.com")) {
+    assert.ok(u.includes("api_key=serp-test-key"), "key stays server-side, in the SERP request only");
+    assert.ok(u.includes("official+second-hand") || decodeURIComponent(u).includes("official second-hand"));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        organic_results: [{ title: "Olx", link: "https://www.olx.in/" }],
+      }),
+    } as Response;
+  }
+  return modelSaysSearch();
+};
+const searched = await routeAgentRequest(searchPkg, {
+  settings: { model: "chatgpt", openaiApiKey: "sk-key" },
+  fetchFn: searchFetch,
+});
+assert.deepStrictEqual(searched, { type: "navigate", url: "https://www.olx.in/" });
+
+// No key → degrade to ask_human, model call still happened but no navigation.
+delete process.env.SERPAPI_KEY;
+const noKey = await routeAgentRequest(searchPkg, {
+  settings: { model: "chatgpt", openaiApiKey: "sk-key" },
+  fetchFn: async () => (await modelSaysSearch()) as Response,
+});
+assert.strictEqual(noKey.type, "ask_human");
+assert.ok((noKey as { reason: string }).reason.includes("SERPAPI_KEY"));
+
+// SERP returns nothing usable → ask_human, never a blind navigate.
+process.env.SERPAPI_KEY = "serp-test-key";
+const emptySerp = await routeAgentRequest(searchPkg, {
+  settings: { model: "chatgpt", openaiApiKey: "sk-key" },
+  fetchFn: async (input: any) => {
+    const u = typeof input === "string" ? input : String((input as any)?.url ?? "");
+    if (u.includes("serpapi.com")) {
+      return { ok: true, status: 200, json: async () => ({ organic_results: [] }) } as Response;
+    }
+    return (await modelSaysSearch()) as Response;
+  },
+});
+delete process.env.SERPAPI_KEY;
+assert.strictEqual(emptySerp.type, "ask_human");
+assert.ok((emptySerp as { reason: string }).reason.includes("no usable result"));
+console.log("  ✔ search resolves server-side to navigate; missing key/results degrade to ask_human");
 
 // --------------------------------------------------------------------------
 // 5. Router End-to-End Dispatching & Polymorphic Action Verification

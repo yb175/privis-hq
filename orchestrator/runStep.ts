@@ -383,6 +383,18 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     agentAction,
   });
 
+  // 'search' is a server-side tool resolved to navigate before the wire
+  // answer. If one leaks out (old server, bug), fail closed to the human —
+  // executing it locally would re-plan against an unchanged page until the
+  // step budget dies.
+  if (agentAction.type === "search") {
+    agentAction = {
+      type: "ask_human",
+      reason: `The agent server returned an unresolved search ("${agentAction.query}") — check the server's SERPAPI_KEY config.`,
+    };
+    session.lastAction = agentAction;
+  }
+
   // Terminal actions: the remote says the goal is complete, or gives up and
   // asks the human. Record, stop the loop, tell the chat. No executor run.
   if (agentAction.type === "done" || agentAction.type === "ask_human") {

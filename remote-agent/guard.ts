@@ -304,6 +304,29 @@ function validateActionWithGuard(
       return { ok: true, action: { type: "scroll", dy: obj.dy } };
     }
 
+    case "search": {
+      if (typeof obj.query !== "string" || obj.query.trim().length === 0) {
+        return {
+          ok: false,
+          error: "'search' action requires a non-empty 'query' string",
+        };
+      }
+      const trimmedQuery = obj.query.trim();
+      if (trimmedQuery.length > 200) {
+        return { ok: false, error: "'search' query exceeds 200 characters" };
+      }
+      // The query leaves this device for a third party (SerpAPI) — it must be
+      // as PII-clean as anything else crossing the wire.
+      const piiMatch = findPiiInValue(trimmedQuery);
+      if (piiMatch) {
+        return {
+          ok: false,
+          error: `Raw ${piiMatch} detected in search query — search terms must be PII-free`,
+        };
+      }
+      return { ok: true, action: { type: "search", query: trimmedQuery } };
+    }
+
     case "done": {
       if (typeof obj.reason !== "string" || obj.reason.trim().length === 0) {
         return { ok: false, error: "'done' action requires a non-empty 'reason' string" };

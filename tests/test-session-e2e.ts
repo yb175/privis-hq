@@ -37,6 +37,7 @@ const HOME = "http://localhost:8671/";
 const FORM = "http://localhost:8671/form";
 const THANKS = "http://localhost:8671/thanks";
 const LOOP = "http://localhost:8671/loop";
+const LEAK = "http://localhost:8671/leak";
 const BANK = "https://onlinesbi.example.net/login";
 const UBER = "https://riders.uber.com/login";
 
@@ -104,6 +105,11 @@ const pages: Record<string, FakePage> = {
     url: LOOP,
     title: "HR Portal",
     elements: [el("stay", "button", "Continue", { role: "button" })],
+  },
+  [LEAK]: {
+    url: LEAK,
+    title: "Leaky Brain",
+    elements: [el("open", "button", "Open", { role: "button" })],
   },
   [BANK]: {
     url: BANK,
@@ -261,6 +267,7 @@ let uberScriptCalls = 0;
 function scriptAction(call: PlanCall): unknown {
   if (call.url === HOME) return { type: "navigate", url: FORM };
   if (call.url === LOOP) return { type: "click", target: { css: "#stay" } }; // never done → cap
+  if (call.url === LEAK) return { type: "search", query: "leaky server search" }; // leaks the server-side tool
   if (call.url === FORM) {
     formCalls++;
     const ids = ["name", "email", "pan"];
@@ -498,6 +505,16 @@ async function main() {
       "executor typed the REAL phone value on-device (placeholder swap)"
     );
     console.log("  PASS Uber-style login: gate asks the human, wire stays clean, secret field delegated back to the human");
+
+    // --- Trail 6: a leaked 'search' action fails closed, never re-plans ----
+    const leakTab = 505;
+    currentPage = LEAK;
+    await runStep(leakTab, "do the thing");
+    const ls = sessionsByTab.get(leakTab)!;
+    assert.strictEqual(ls.lastAction?.type, "ask_human", "leaked search must escalate");
+    assert.match((ls.lastAction as { reason?: string }).reason ?? "", /SERPAPI_KEY/);
+    assert.strictEqual(ls.status, "waiting_human", "loop stops; page state stays untouched");
+    console.log("  PASS leaked search action fails closed to ask_human in the extension");
 
     console.log("\nALL CBA-6 E2E LOOP TESTS PASSED");
   } finally {
