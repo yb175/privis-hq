@@ -87,8 +87,8 @@ function resolveTarget(
  *   elements (then mapped to a resolver-friendly selector).
  * - type:  resolves the real value from the ON-DEVICE placeholder map — the
  *   executor types real values, never placeholder strings (CONTRACT.md rule 2).
- * - navigate/scroll/done/ask_human: not executable by the content-script
- *   executor yet (CBA-3 scope); no-ops.
+ * - navigate/done/ask_human: handled by the orchestrator; scroll is bridged
+ *   to the content script.
  */
 export function agentActionToExecutorActions(
   action: AgentAction,
@@ -97,6 +97,8 @@ export function agentActionToExecutorActions(
   goal?: string
 ): Action[] {
   switch (action.type) {
+    case "scroll":
+      return [{ type: "scroll", target: "", dy: action.dy }];
     case "click": {
       const t = action.target;
       const css =

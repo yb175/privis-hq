@@ -47,9 +47,10 @@ export interface BrowserState {
 }
 
 export interface Action {
-  type: "click" | "type" | string;
+  type: "click" | "type" | "scroll" | string;
   target: string;
   value?: string;
+  dy?: number;
 }
 
 export interface ActionResult {
