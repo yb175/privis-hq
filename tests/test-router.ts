@@ -14,6 +14,7 @@ import {
 import { queryOpenAI, buildPrompt } from "../remote-agent/client-openai.js";
 import { queryGemini } from "../remote-agent/client-gemini.js";
 import { routeAgentRequest, assertSanitizedPackage } from "../remote-agent/router.js";
+import { applyPlaceholders, detectSensitive } from "../privacy/sanitizer/structural-redact.js";
 
 console.log("=== Running CBA-2 Model Router Test Suite (chatgpt vs Gemini) ===");
 
@@ -466,6 +467,29 @@ assert.throws(
   {
     message: /missing or empty sanitizedScreenshot/i,
   }
+);
+
+// Currency in a CTA must be sanitized too. Uber exposes promo/fare amounts
+// in button-like controls; skipping buttons lets the router fail closed before
+// the agent can plan the ride.
+const rideElements: ElementMeta[] = [
+  {
+    element_id: "ride-promo",
+    tag: "button",
+    type: null,
+    role: "button",
+    label: "Ride offer",
+    text: "Up to ₹50 off",
+    bbox: [0, 0, 100, 30],
+  },
+];
+const rideRedaction = applyPlaceholders(rideElements, detectSensitive(rideElements));
+assert.doesNotThrow(() =>
+  assertSanitizedPackage(
+    createValidSanitizedPackage({
+      sanitizedContext: { ...pkg.sanitizedContext, elements: rideRedaction.sanitized },
+    })
+  )
 );
 
 // Reject raw PII leaked inside sanitizedContext
