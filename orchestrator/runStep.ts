@@ -445,7 +445,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   // Convert the AgentAction contract into executor Actions (name/role/bbox
   // targets resolved against the sanitized elements; placeholder → real-value
   // swap happens HERE, on-device, from the local map — CONTRACT.md rule 2).
-  const actions: Action[] = agentActionToExecutorActions(agentAction, sanitized, map);
+  const actions: Action[] = agentActionToExecutorActions(agentAction, sanitized, map, goal);
 
   // A type action without a local mapping must never become a silent no-op or
   // type its placeholder. Escalate so the human can repair the mapping/page.

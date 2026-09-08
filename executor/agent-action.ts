@@ -93,7 +93,8 @@ function resolveTarget(
 export function agentActionToExecutorActions(
   action: AgentAction,
   sanitized: ElementMeta[],
-  map: Record<string, string>
+  map: Record<string, string>,
+  goal?: string
 ): Action[] {
   switch (action.type) {
     case "click": {
@@ -130,7 +131,18 @@ export function agentActionToExecutorActions(
             return el ? selectorFor(el) : undefined;
           })();
       const real = valueEl ? map[valueEl.element_id] : undefined;
-      return css && real !== undefined ? [{ type: "type", target: css, value: real }] : [];
+      if (css && real !== undefined) return [{ type: "type", target: css, value: real }];
+      // Non-token placeholder: a literal phrase (e.g. a search query). The
+      // SERVER's guard only allows goal substrings, but the server is not
+      // trusted for execution — re-verify against the on-device goal before
+      // typing. Anything else stays a no-op so runStep escalates.
+      if (css && goal) {
+        const needle = action.placeholder.trim().toLowerCase();
+        if (needle && goal.toLowerCase().replace(/\s+/g, " ").includes(needle)) {
+          return [{ type: "type", target: css, value: action.placeholder.trim() }];
+        }
+      }
+      return [];
     }
     default:
       return [];

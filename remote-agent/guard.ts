@@ -166,7 +166,8 @@ export function findPiiInValue(val: unknown): string | null {
  */
 function validateActionWithGuard(
   candidate: unknown,
-  allowlist: Set<string> | null
+  allowlist: Set<string> | null,
+  goalText = ""
 ): { ok: true; action: AgentAction } | { ok: false; error: string } {
   if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
     return { ok: false, error: "Action must be a non-null JSON object" };
@@ -269,16 +270,25 @@ function validateActionWithGuard(
         };
       }
 
-      // 3. Enforce placeholder token format (e.g. PAN_1, EMAIL_1)
-      if (!PLACEHOLDER_TOKEN_REGEX.test(trimmedPlaceholder)) {
-        return {
-          ok: false,
-          error: `Invalid placeholder format: "${obj.placeholder}". Must match CATEGORY_INDEX format (e.g. 'PAN_1').`,
-        };
+      // 3. Placeholder must be a category token (PAN_1) — or an exact phrase
+      //    from the user's own goal, which the device re-verifies before
+      //    typing (search boxes are not PII fields). GuardOptions carries the
+      //    goal via sanitizedPackage.
+      const isToken = PLACEHOLDER_TOKEN_REGEX.test(trimmedPlaceholder);
+      if (!isToken) {
+        const goal = goalText;
+        const inGoal = goal.toLowerCase().includes(trimmedPlaceholder.toLowerCase());
+        if (!inGoal) {
+          return {
+            ok: false,
+            error: `Invalid placeholder format: "${obj.placeholder}". Must be a CATEGORY_N token from the allowlist or an exact phrase from the USER GOAL.`,
+          };
+        }
       }
 
-      // 4. Enforce placeholder allowlist if available
-      if (allowlist && !allowlist.has(trimmedPlaceholder)) {
+      // 4. Enforce placeholder allowlist if available (tokens only — literal
+      //    goal phrases are not in the placeholder map by definition)
+      if (isToken && allowlist && !allowlist.has(trimmedPlaceholder)) {
         return {
           ok: false,
           error: `Placeholder "${trimmedPlaceholder}" does not exist in sanitized context allowlist [${Array.from(
@@ -372,7 +382,11 @@ export function guardModelOutput(
 
   try {
     const normalized = normalizeRawOutput(rawOutput);
-    const result = validateActionWithGuard(normalized, allowlist);
+    const result = validateActionWithGuard(
+      normalized,
+      allowlist,
+      options?.sanitizedPackage?.goal ?? ""
+    );
     if (!result.ok) {
       return {
         ok: false,
@@ -407,7 +421,11 @@ export function guardAction(
   options?: GuardOptions
 ): GuardResult {
   const allowlist = resolveAllowlist(options);
-  const result = validateActionWithGuard(action, allowlist);
+  const result = validateActionWithGuard(
+    action,
+    allowlist,
+    options?.sanitizedPackage?.goal ?? ""
+  );
   if (!result.ok) {
     return {
       ok: false,

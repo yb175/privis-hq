@@ -1182,6 +1182,30 @@ assert.deepStrictEqual(
 assert.strictEqual(typeGen[0].value, "user@x.com");
 console.log("  ✔ Bridge passes css targets through with real values");
 
+// Goal-substring literals: search boxes are not PII fields, but the DEVICE
+// (not the server) decides — the phrase must appear in the on-device goal.
+const literal = agentActionToExecutorActions(
+  { type: "type", target: { css: "#el-input-7" }, placeholder: "HC Verma" },
+  bridgeElements,
+  bridgeMap,
+  "find HC verma books on amazon"
+);
+assert.deepStrictEqual(
+  literal,
+  [{ type: "type", target: "#el-input-7", value: "HC Verma" }],
+  "goal phrase typed verbatim when it is a case-insensitive substring of the goal"
+);
+assert.deepStrictEqual(
+  agentActionToExecutorActions(
+    { type: "type", target: { css: "#el-input-7" }, placeholder: "password123" },
+    bridgeElements,
+    bridgeMap,
+    "find HC verma books on amazon"
+  ),
+  [],
+  "a server-sent phrase NOT in the device goal fails closed (server untrusted)"
+);
+
 // unresolvable target -> loud failure action (content script reports
 // "Target not found: __unresolved:<original target>"), not a silent no-op
 const unresolvable = agentActionToExecutorActions(

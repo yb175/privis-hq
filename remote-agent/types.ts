@@ -259,12 +259,12 @@ export function validateAgentAction(
         }
       }
 
-      // Enforce valid token naming convention (e.g. CATEGORY_INDEX)
-      if (!PLACEHOLDER_TOKEN_REGEX.test(trimmedPlaceholder)) {
-        return {
-          ok: false,
-          error: `Invalid placeholder token format: "${obj.placeholder}". Must match CATEGORY_N format (e.g. 'PAN_1', 'EMAIL_1').`,
-        };
+      // Category-token format is NOT enforced here: a literal phrase from the
+      // user's own goal is legal (see guard.ts 'type' — token-or-goal-substring
+      // — and the on-device re-check in executor/agent-action.ts, which is the
+      // real trust boundary). Keep a size cap so no prompt-scale blob arrives.
+      if (trimmedPlaceholder.length > 300) {
+        return { ok: false, error: "'placeholder' exceeds 300 characters" };
       }
 
       return {
