@@ -532,6 +532,68 @@ assert.throws(
 console.log("  ✔ All Router sanitization boundary guards verified (incl. redacted provenance)");
 
 // --------------------------------------------------------------------------
+// 4b. Quick navigation: a user-named URL/domain must never come back as
+// ask_human "please provide the URL" — the router navigates deterministically
+// before any LLM call. (Demo regression: goal named the site, agent asked.)
+// --------------------------------------------------------------------------
+console.log("\n[4b] Router quick-navigate (any website from the goal, no LLM round)");
+
+const noLlmFetch: typeof fetch = async () => {
+  throw new Error("FAIL: LLM must not be consulted when the goal names the destination");
+};
+const passThroughFetch: typeof fetch = async () =>
+  ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      choices: [{ message: { content: JSON.stringify({ type: "scroll", dy: 100 }) } }],
+    }),
+  } as Response);
+
+// Explicit URL in the goal, current page elsewhere → navigate, zero LLM calls
+const navFromUrl = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "Go to https://shopping.example.com/cart and checkout the items",
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: noLlmFetch }
+);
+assert.deepStrictEqual(
+  navFromUrl,
+  { type: "navigate", url: "https://shopping.example.com/cart" },
+  "explicit URL in goal navigates without consulting the model"
+);
+
+// Bare domain in the goal → https navigate
+const navFromDomain = await routeAgentRequest(
+  createValidSanitizedPackage({ goal: "open amazon.in and track my order" }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: noLlmFetch }
+);
+assert.deepStrictEqual(navFromDomain, { type: "navigate", url: "https://amazon.in/" });
+
+// Already on the named site → fall through to the model (no nav loop)
+const onSite = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "open amazon.in and track my order",
+    sanitizedContext: {
+      elements: pkg.sanitizedContext.elements,
+      browserState: { ...pkg.sanitizedContext.browserState, url: "https://www.amazon.in/order" },
+    },
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
+);
+assert.strictEqual(onSite.type, "scroll", "same-site goals stay with the model");
+
+// No URL-like token in the goal (e.g. "book uber ride …") → model decides
+const noToken = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "book uber ride from my location to rithala metro",
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
+);
+assert.strictEqual(noToken.type, "scroll", "service-name-only goals fall through to the model");
+console.log("  ✔ Quick-navigate routes any user-named site deterministically; falls back safely");
+
+// --------------------------------------------------------------------------
 // 5. Router End-to-End Dispatching & Polymorphic Action Verification
 // --------------------------------------------------------------------------
 console.log("\n[5] Model Router end-to-end dispatch & schema consistency");

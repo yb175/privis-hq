@@ -96,6 +96,43 @@ function assertPlaceholderInContext(pkg: SanitizedPackage, action: AgentAction):
 }
 
 /**
+ * Deterministic first hop: when the goal names an explicit URL or domain and
+ * the current page is somewhere else, navigate straight there without spending
+ * an LLM call. Any website works — no per-site table. If the goal has no
+ * URL-like token, the model decides (prompt rule 6 covers well-known services).
+ * ponytail: TLD-list heuristic; upgrade path is a search/lookup action.
+ */
+const URL_OR_DOMAIN_RE =
+  /https?:\/\/[^\s"']+|\b[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.(?:com\.in|co\.in|com|in|org|net|io|dev|ai|app|edu|gov)(?![.\w])/i;
+
+export function planQuickNavigate(
+  goal: string,
+  pageUrl: string
+): { type: "navigate"; url: string } | null {
+  const match = goal.match(URL_OR_DOMAIN_RE);
+  if (!match) return null;
+  let target: URL;
+  let current: URL;
+  try {
+    target = new URL(match[0].startsWith("http") ? match[0] : `https://${match[0]}`);
+    current = new URL(pageUrl);
+  } catch {
+    return null;
+  }
+  if (target.protocol !== "http:" && target.protocol !== "https:") return null;
+  // Already on that site (same host or sub/superdomain) — the page-level agent
+  // loop must run, not re-navigate.
+  if (
+    current.hostname === target.hostname ||
+    current.hostname.endsWith("." + target.hostname) ||
+    target.hostname.endsWith("." + current.hostname)
+  ) {
+    return null;
+  }
+  return { type: "navigate", url: target.toString() };
+}
+
+/**
  * Routes the sanitized package to the configured model brain ("chatgpt" OpenAI-compatible or "gemini").
  * Returns a validated AgentAction adhering to the CBA-1 schema.
  */
@@ -105,6 +142,14 @@ export async function routeAgentRequest(
 ): Promise<AgentAction> {
   // 1. Strict Privacy & Sanitization Boundary Check
   assertSanitizedPackage(pkg);
+
+  // 1b. User told us where to go — go there; don't ask.
+  const quickNav = planQuickNavigate(pkg.goal, pkg.sanitizedContext.browserState.url);
+  if (quickNav) {
+    const guardRes = guardAction(quickNav, { sanitizedPackage: pkg });
+    if (guardRes.ok) return guardRes.action;
+    // Guard rejected (e.g. PII in the URL): fall through to the model.
+  }
 
   // 2. Resolve settings
   let settings: ModelSettings;
