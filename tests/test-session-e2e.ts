@@ -26,7 +26,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { installCanvasShims } from "../privacy/engine/vision/test-canvas-shim.js";
 import { runStep } from "../orchestrator/runStep.js";
-import { sessionsByTab } from "../orchestrator/session.js";
+import { MAX_SESSION_STEPS, pendingHumanDecisions, sessionsByTab } from "../orchestrator/session.js";
 import { computeRequestDigest } from "../orchestrator/transparency-log.js";
 import type { ElementMeta, TransparencyLogStore } from "../types/index.js";
 
@@ -37,7 +37,9 @@ const HOME = "http://localhost:8671/";
 const FORM = "http://localhost:8671/form";
 const THANKS = "http://localhost:8671/thanks";
 const LOOP = "http://localhost:8671/loop";
+const LEAK = "http://localhost:8671/leak";
 const BANK = "https://onlinesbi.example.net/login";
+const UBER = "https://riders.uber.com/login";
 
 const SECRET_VALUES = [
   "Asha Rao",
@@ -46,6 +48,7 @@ const SECRET_VALUES = [
   "+91 98765 43210",
   "\u20B912,00,000",
   "demo-pass-123",
+  "uber-pass-1",
 ];
 
 function el(
@@ -103,12 +106,26 @@ const pages: Record<string, FakePage> = {
     title: "HR Portal",
     elements: [el("stay", "button", "Continue", { role: "button" })],
   },
+  [LEAK]: {
+    url: LEAK,
+    title: "Leaky Brain",
+    elements: [el("open", "button", "Open", { role: "button" })],
+  },
   [BANK]: {
     url: BANK,
     title: "Bank Login",
     elements: [
       el("user", "input", "asha.rao", { role: "textbox", label: "User name" }),
       el("pwd", "input", "demo-pass-123", { type: "password", role: "textbox" }),
+    ],
+  },
+  [UBER]: {
+    url: UBER,
+    title: "Uber Login",
+    elements: [
+      el("phone", "input", "+91 98765 43210", { type: "tel", role: "textbox" }),
+      el("pwd", "input", "uber-pass-1", { type: "password", role: "textbox" }),
+      el("login", "button", "Log in", { role: "button" }),
     ],
   },
 };
@@ -139,6 +156,18 @@ const storageStore: Record<string, unknown> = {};
           steps: msg.session.history.length,
           lastAction: msg.session.lastAction?.type,
         });
+        // Trail 5 (Uber login): simulate the human clicking Approve the
+        // moment the popup is told a gate decision needs them. The loop
+        // registers waitForHumanDecision right AFTER this broadcast, so let
+        // the current task finish before resolving.
+        if (msg.session.status === "waiting_human") {
+          await new Promise((r) => setTimeout(r, 0));
+          const resolver = pendingHumanDecisions.get(msg.session.sessionId);
+          if (resolver) {
+            resolver(true);
+            pendingHumanDecisions.delete(msg.session.sessionId);
+          }
+        }
       }
       return {};
     },
@@ -233,10 +262,12 @@ interface PlanCall {
 }
 const planCalls: PlanCall[] = [];
 let formCalls = 0;
+let uberScriptCalls = 0;
 
 function scriptAction(call: PlanCall): unknown {
   if (call.url === HOME) return { type: "navigate", url: FORM };
   if (call.url === LOOP) return { type: "click", target: { css: "#stay" } }; // never done → cap
+  if (call.url === LEAK) return { type: "search", query: "leaky server search" }; // leaks the server-side tool
   if (call.url === FORM) {
     formCalls++;
     const ids = ["name", "email", "pan"];
@@ -249,6 +280,16 @@ function scriptAction(call: PlanCall): unknown {
     return { type: "click", target: { name: "Submit" } };
   }
   if (call.url === THANKS) return { type: "done", reason: "form submitted, thanks page reached" };
+  if (call.url === UBER) {
+    uberScriptCalls++;
+    if (uberScriptCalls === 1) {
+      return { type: "type", target: { css: "#phone" }, placeholder: "PHONE_1" };
+    }
+    return {
+      type: "ask_human",
+      reason: "Please enter your password in the page, then send a chat reply to continue",
+    };
+  }
   return { type: "ask_human", reason: "unexpected page " + call.url };
 }
 
@@ -303,7 +344,7 @@ async function main() {
       "navigate → 3× type → submit click → done, one session"
     );
     assert.strictEqual(session.step, 6);
-    assert.ok(session.step <= 8, "within the 8-step budget");
+    assert.ok(session.step <= MAX_SESSION_STEPS, "within the step budget");
 
     // Multi-page recapture actually happened on all three pages (each
     // capturePackage = 2 DOM snapshots; retry-on-drift can add more).
@@ -378,7 +419,7 @@ async function main() {
     }
     console.log("  PASS CBA-11: Trail 1 wire transparency entries persisted, ordered, and SHA-256 verified");
 
-    // --- Trail 2: never-done brain → cap at 8 → ask_human ------------------
+    // --- Trail 2: never-done brain → cap → ask_human ---------------------
     formCalls = 0;
     executedActions.length = 0;
     currentPage = LOOP;
@@ -386,8 +427,8 @@ async function main() {
     const loopSession = sessionsByTab.get(LOOP_TAB)!;
     assert.strictEqual(
       loopSession.history.filter((h) => h.action.type === "click").length,
-      8,
-      "exactly 8 executed steps"
+      MAX_SESSION_STEPS,
+      "exactly MAX_SESSION_STEPS executed steps"
     );
     assert.strictEqual(
       loopSession.history[loopSession.history.length - 1].action.type,
@@ -396,7 +437,7 @@ async function main() {
     );
     assert.strictEqual(loopSession.lastAction?.type, "ask_human", "budget exhausted → ask_human");
     assert.strictEqual(loopSession.status, "waiting_human");
-    console.log("  PASS hit step 8 without done → ask_human, session parks in waiting_human");
+    console.log(`  PASS hit step ${MAX_SESSION_STEPS} without done → ask_human, session parks in waiting_human`);
 
     // --- Trail 3: new goal after an escalation is not deadlocked -----------
     const oldId = loopSession.sessionId;
@@ -410,8 +451,8 @@ async function main() {
     );
     assert.strictEqual(
       after.history.filter((h) => h.action.type === "click").length,
-      8,
-      "the new run executes its own 8-step budget"
+      MAX_SESSION_STEPS,
+      "the new run executes its own step budget"
     );
     console.log("  PASS post-escalation goal starts a fresh bounded session");
 
@@ -425,7 +466,7 @@ async function main() {
     assert.strictEqual(bs.history.length, 0, "blocked before any action was planned or executed");
     assert.strictEqual(planCalls.length, callsBefore, "ZERO-CALL guard: remote never consulted");
     assert.strictEqual(blocked.decision, "block");
-    assert.ok(blocked.reason.includes("PASSWORD"));
+    assert.ok(blocked.reason.toLowerCase().includes("deny-listed"));
 
     // CBA-11: Verify gate block is recorded in transparency log with response: null (AC-6)
     const blockedEntries = (storageStore["privis_transparency_log"] as TransparencyLogStore).entries.filter(
@@ -434,9 +475,46 @@ async function main() {
     assert.strictEqual(blockedEntries.length, 1, "Blocked step logged exactly 1 transparency entry");
     assert.strictEqual(blockedEntries[0].response, null, "Blocked step response is null");
     assert.strictEqual(blockedEntries[0].gate.decision, "block", "Blocked step records gate decision block");
-    assert.ok(blockedEntries[0].error?.includes("PASSWORD"), "Blocked step records refusal reason");
+    assert.ok(blockedEntries[0].error?.toLowerCase().includes("deny-listed"), "Blocked step records refusal reason");
     console.log("  PASS CBA-11: Gate-blocked step logged with response: null + gate reason");
     console.log("  PASS gate block mid-run stops immediately, chat told, remote never called");
+
+    // --- Trail 5: Uber-style login — PASSWORD asks the human, not a block --
+    // The v0 gate hard-blocked any page with a password field, so login flows
+    // (Uber) could never run. Now: human_approval → human clears it → the
+    // agent acts with the password VALUE blanked, and hands the secret field
+    // back to the human via ask_human.
+    const uberTab = 404;
+    currentPage = UBER;
+    const uberCallsBefore = planCalls.length;
+    await runStep(uberTab, "Book an uber ride to the airport");
+    const us = sessionsByTab.get(uberTab)!;
+    assert.strictEqual(us.gateDecision, "human_approval", "PASSWORD page asks the human instead of hard-blocking");
+    assert.strictEqual(us.lastAction?.type, "ask_human", "model delegates the password back to the human");
+    assert.match((us.lastAction as { reason?: string }).reason ?? "", /password/i);
+    assert.strictEqual(us.status, "waiting_human", "session parks for the human's password + reply");
+    const uberWire = planCalls.slice(uberCallsBefore);
+    assert.ok(uberWire.length >= 2, "remote consulted after the human cleared the login page");
+    for (const call of uberWire) {
+      assert.ok(!call.raw.includes("uber-pass-1"), `PII LEAK: password value crossed the wire`);
+      assert.ok(call.raw.includes('"text":""'), "password field blanked in the wire context");
+    }
+    assert.ok(uberWire.some((c) => c.placeholders.includes("PHONE_1")), "phone placeholder crossed so the agent can act");
+    assert.ok(
+      executedActions.some((a) => a.type === "type" && a.value === "+91 98765 43210"),
+      "executor typed the REAL phone value on-device (placeholder swap)"
+    );
+    console.log("  PASS Uber-style login: gate asks the human, wire stays clean, secret field delegated back to the human");
+
+    // --- Trail 6: a leaked 'search' action fails closed, never re-plans ----
+    const leakTab = 505;
+    currentPage = LEAK;
+    await runStep(leakTab, "do the thing");
+    const ls = sessionsByTab.get(leakTab)!;
+    assert.strictEqual(ls.lastAction?.type, "ask_human", "leaked search must escalate");
+    assert.match((ls.lastAction as { reason?: string }).reason ?? "", /SERPAPI_KEY/);
+    assert.strictEqual(ls.status, "waiting_human", "loop stops; page state stays untouched");
+    console.log("  PASS leaked search action fails closed to ask_human in the extension");
 
     console.log("\nALL CBA-6 E2E LOOP TESTS PASSED");
   } finally {

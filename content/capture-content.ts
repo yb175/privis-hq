@@ -67,8 +67,16 @@ const PLACEHOLDER_RE = /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME)_\d+$/;
  * @param action The requested action (click, type, etc.)
  */
 export async function executeAction(action: Action): Promise<ActionResult> {
-  const el = resolveTarget(action.target);
-  if (!el) return { ok: false, error: `Target not found: ${action.target}` };
+  if (action.type === "scroll") {
+    if (typeof action.dy !== "number" || !Number.isFinite(action.dy)) {
+      return { ok: false, error: "Invalid scroll distance" };
+    }
+    window.scrollBy({ top: action.dy, left: 0, behavior: "auto" });
+    return { ok: true };
+  }
+
+  const el = resolveTarget(action.target ?? "");
+  if (!el) return { ok: false, error: `Target not found: ${action.target ?? ""}` };
 
   switch (action.type) {
     case "click":

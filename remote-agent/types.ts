@@ -29,6 +29,16 @@ export interface ScrollAction {
   dy: number;
 }
 
+/**
+ * Destination discovery: the model asks the SERVER to run a web search
+ * (SerpAPI) and answers with a navigate action. Never reaches the extension
+ * — runStep fails closed if one leaks through.
+ */
+export interface SearchAction {
+  type: "search";
+  query: string;
+}
+
 export interface DoneAction {
   type: "done";
   reason: string;
@@ -44,6 +54,7 @@ export type AgentAction =
   | ClickAction
   | TypeAction
   | ScrollAction
+  | SearchAction
   | DoneAction
   | AskHumanAction;
 
@@ -248,12 +259,12 @@ export function validateAgentAction(
         }
       }
 
-      // Enforce valid token naming convention (e.g. CATEGORY_INDEX)
-      if (!PLACEHOLDER_TOKEN_REGEX.test(trimmedPlaceholder)) {
-        return {
-          ok: false,
-          error: `Invalid placeholder token format: "${obj.placeholder}". Must match CATEGORY_N format (e.g. 'PAN_1', 'EMAIL_1').`,
-        };
+      // Category-token format is NOT enforced here: a literal phrase from the
+      // user's own goal is legal (see guard.ts 'type' — token-or-goal-substring
+      // — and the on-device re-check in executor/agent-action.ts, which is the
+      // real trust boundary). Keep a size cap so no prompt-scale blob arrives.
+      if (trimmedPlaceholder.length > 300) {
+        return { ok: false, error: "'placeholder' exceeds 300 characters" };
       }
 
       return {
@@ -271,6 +282,16 @@ export function validateAgentAction(
         return { ok: false, error: "'scroll' action requires a finite number 'dy'" };
       }
       return { ok: true, action: { type: "scroll", dy: obj.dy } };
+    }
+
+    case "search": {
+      if (typeof obj.query !== "string" || obj.query.trim().length === 0) {
+        return { ok: false, error: "'search' action requires a non-empty 'query' string" };
+      }
+      if (obj.query.trim().length > 200) {
+        return { ok: false, error: "'search' query exceeds 200 characters" };
+      }
+      return { ok: true, action: { type: "search", query: obj.query.trim() } };
     }
 
     case "done": {

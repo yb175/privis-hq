@@ -29,7 +29,11 @@ const EMAIL_RE = /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/;
 // Indian mobile: optional +91 country code, starts 6-9, 10 digits total.
 const PHONE_RE = /^(\+91)?[6-9][0-9]{9}$/;
 // Currency symbol / currency unit in value text.
-const AMOUNT_TEXT_RE = /[₹$€£]|\b(?:inr|rs\.?)\b/i;
+// Must stay a superset of the router's CURRENCY_AMOUNT PII pattern (see
+// remote-agent/types.ts) — anything the wire-scan rejects, the sanitizer
+// must redact, or the package fails closed (Uber promo: "USD 5 off" leaked
+// because only inr/rs/$/€/£ were known locally).
+const AMOUNT_TEXT_RE = /[₹$€£¥]|\b(?:inr|usd|eur|gbp|cad|aud|rs\.?)/i;
 
 // Label-only fallbacks are restricted to the documented password / amount / name
 // rules; PAN, phone, Aadhaar, and email are only detected from strong regex/type
@@ -57,10 +61,6 @@ function detectElement(
   const text = el.text.trim();
   const compact = compactDigits(text);
 
-  // Buttons are CTAs, not data fields: skip so a label like "Pay ₹100" isn't
-  // treated as AMOUNT and its whole label replaced with a placeholder.
-  if (tag === "button" || role === "button") return null;
-
   // Pass 1: strong regex / input-type hits only. These always win, regardless
   // of any label, so "Phone" with an email value is EMAIL, not PHONE.
   // PHONE before AADHAAR so "+91 98765 43210" isn't read as 12 digits.
@@ -70,6 +70,11 @@ function detectElement(
   if (/^[0-9]{12}$/.test(compact)) return { category: "AADHAAR", confidence: CONFIDENCE_HIT };
   if (type === "email" || EMAIL_RE.test(text)) return { category: "EMAIL", confidence: CONFIDENCE_HIT };
   if (AMOUNT_TEXT_RE.test(text)) return { category: "AMOUNT", confidence: CONFIDENCE_HIT };
+
+  // Ordinary CTA labels are not fields, but strong PII in a button's text
+  // still has to be redacted (Uber promo/fare buttons are a real example).
+  // Keep label-only fallbacks below this guard so "Pay" remains a normal CTA.
+  if (tag === "button" || role === "button") return null;
 
   // Pass 2: label-only fallbacks (0.7) — documented password / amount / name.
   if (PASSWORD_LABEL_RE.test(label)) return { category: "PASSWORD", confidence: CONFIDENCE_LABEL };

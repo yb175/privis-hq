@@ -72,7 +72,8 @@ console.log("=== Running PRIVIS Popup Chat & Settings Architecture Test Suite ==
 // ============================================================================
 console.log("[1] Gate Mock Test (Zero-Call Guard)");
 
-// Scenario: PASSWORD present on external site triggers BLOCK
+// Scenario A: PASSWORD present on a normal external site (e.g. Uber login)
+// → human_approval (the password VALUE is never sent; the human clears it)
 const blockDetections: Detection[] = [
   {
     element_id: "el_pwd",
@@ -84,8 +85,8 @@ const blockDetections: Detection[] = [
 ];
 
 const externalBrowserState: BrowserState = {
-  url: "https://secure-banking.example.com/login",
-  title: "Bank Login",
+  url: "https://riders.uber.com/login",
+  title: "Uber Login",
   viewport: { w: 1280, h: 800 },
 };
 
@@ -94,8 +95,16 @@ const gateDecision = decide({
   browserState: externalBrowserState,
 });
 
-assert.strictEqual(gateDecision.decision, "block");
+assert.strictEqual(gateDecision.decision, "human_approval", "PASSWORD page asks the human (no hard block)");
 assert.ok(gateDecision.reason.includes("PASSWORD"));
+
+// Scenario B: deny-listed host → hard BLOCK (banking/tax/EPFO never leave device)
+const denyGate = decide({
+  detections: blockDetections,
+  browserState: { ...externalBrowserState, url: "https://onlinesbi.example.net/login" },
+});
+assert.strictEqual(denyGate.decision, "block", "deny-listed host hard-blocks");
+assert.ok(denyGate.reason.toLowerCase().includes("deny-listed"));
 
 // Verify that when gate.decision === 'block', queryServer is NEVER called
 let queryServerCallCount = 0;
@@ -128,12 +137,27 @@ const blockedSession: AgentSession = {
   history: [],
 };
 
-runGuardedStep(gateDecision, blockedSession);
+runGuardedStep(denyGate, blockedSession);
 
 assert.strictEqual(blockedSession.status, "blocked");
 assert.strictEqual(blockedSession.gateDecision, "block");
 assert.strictEqual(queryServerCallCount, 0, "queryServer MUST have 0 calls when Gate is BLOCK");
 console.log("  ✔ Gate BLOCK correctly halts execution with 0 model/network calls");
+
+// A PASSWORD page (Uber login) parks in waiting_human — remote stays silent
+// until the human approves, and the password value is never on the wire.
+const approvalSession: AgentSession = {
+  sessionId: "sess_approval_test",
+  tabId: 42,
+  goal: "book an uber ride",
+  status: "running",
+  history: [],
+};
+runGuardedStep(gateDecision, approvalSession);
+assert.strictEqual(approvalSession.status, "waiting_human", "PASSWORD page parks for human approval");
+assert.strictEqual(approvalSession.gateDecision, "human_approval");
+assert.strictEqual(queryServerCallCount, 0, "queryServer has 0 calls while waiting for the human");
+console.log("  ✔ Gate HUMAN_APPROVAL parks the session with 0 model/network calls");
 
 // ============================================================================
 // Test 2: Action Chips Display & PII Isolation

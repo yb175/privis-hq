@@ -6,6 +6,7 @@
 // Bypassing Policy Gate by directly invoking the remote agent is forbidden.
 
 import type { StepResult } from "../types/index.js";
+import { getSession, pendingHumanDecisions, resumeSession } from "./session.js";
 import { runStep } from "./runStep.js";
 
 /**
@@ -37,5 +38,21 @@ export async function runGoal(text: string, tabId?: number): Promise<StepResult>
   }
 
   const targetTabId = typeof tabId === "number" ? tabId : await resolveActiveTabId();
+
+  // A session parked on an escalation (remote ask_human / step cap) is resumed
+  // by the human's chat reply — same session, same history, fresh step budget.
+  // A session parked on a gate approval still has a pending decision; the loop
+  // is live there, so leave it to the Approve/Reject card (runStep's loop guard
+  // rejects the call anyway).
+  const parked = getSession(targetTabId);
+  if (
+    parked &&
+    parked.status === "waiting_human" &&
+    !pendingHumanDecisions.has(parked.sessionId)
+  ) {
+    resumeSession(parked, goalText);
+    return runStep(targetTabId, parked.goal);
+  }
+
   return runStep(targetTabId, goalText);
 }
