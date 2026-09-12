@@ -29,6 +29,60 @@ export function isAllowedNavigateUrl(url: string): boolean {
  * tabs.create branch is dead code here. If a future "open in new tab" flow
  * needs it, re-bind the session to the new tabId.
  */
+export interface NavigationWait {
+  promise: Promise<ActionResult>;
+  cancel: () => void;
+}
+
+/**
+ * Starts listening before a history/reload action is dispatched. This avoids
+ * accepting the old document's already-complete status as the new result.
+ */
+export function waitForTabTransition(
+  tabId: number,
+  previousUrl: string,
+  kind: "go_back" | "go_forward" | "reload",
+  timeoutMs = 10000
+): NavigationWait {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let settled = false;
+  let sawLoading = false;
+  let resolvePromise: (result: ActionResult) => void = () => {};
+
+  const cleanup = () => {
+    if (timer) clearTimeout(timer);
+    chrome.tabs.onUpdated?.removeListener(listener);
+  };
+  const finish = (result: ActionResult) => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    resolvePromise(result);
+  };
+  const listener = (updatedTabId: number, changeInfo: { status?: string }, tab: { url?: string }) => {
+    if (updatedTabId !== tabId) return;
+    if (changeInfo.status === "loading") sawLoading = true;
+    if (
+      changeInfo.status === "complete" &&
+      (sawLoading || (kind !== "reload" && typeof tab.url === "string" && tab.url !== previousUrl))
+    ) {
+      finish({ ok: true });
+    }
+  };
+
+  const promise = new Promise<ActionResult>((resolve) => {
+    resolvePromise = resolve;
+    if (!chrome.tabs?.onUpdated?.addListener) {
+      finish({ ok: false, code: "EXECUTION_ERROR", error: "Tab update events are unavailable" });
+      return;
+    }
+    chrome.tabs.onUpdated.addListener(listener);
+    timer = setTimeout(() => finish({ ok: false, code: "TIMEOUT", error: `Timed out waiting for ${kind}` }), timeoutMs);
+  });
+
+  return { promise, cancel: () => finish({ ok: false, code: "EXECUTION_ERROR", error: "Navigation wait cancelled" }) };
+}
+
 export async function navigateTab(tabId: number, url: string): Promise<ActionResult> {
   if (typeof chrome === "undefined" || !chrome.tabs?.update) {
     return { ok: false, error: "chrome.tabs.update is not available" };

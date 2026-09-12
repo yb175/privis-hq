@@ -39,7 +39,7 @@ import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-s
 import { agentActionToExecutorActions } from "../executor/agent-action.js";
 import { redactPii } from "../remote-agent/guard.js";
 import { applyActions } from "../executor/local-executor.js";
-import { navigateTab } from "../executor/navigate.js";
+import { navigateTab, waitForTabTransition } from "../executor/navigate.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
 import {
   notifySessionUpdate,
@@ -505,7 +505,23 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   }
 
   // Local Executor: apply the returned actions on the real page DOM.
+  // History/reload waits start before dispatch so an old "complete" status
+  // cannot be mistaken for the new document.
+  const historyKind = ["go_back", "go_forward", "reload"].includes(agentAction.type)
+    ? (agentAction.type as "go_back" | "go_forward" | "reload")
+    : undefined;
+  const navigationWait = historyKind
+    ? waitForTabTransition(tabId, pkg.browserState.url, historyKind)
+    : undefined;
   const results = await applyActions(tabId, actions);
+  if (navigationWait) {
+    if (results[0]?.ok) {
+      const transition = await navigationWait.promise;
+      if (!transition.ok) results[0] = transition;
+    } else {
+      navigationWait.cancel();
+    }
+  }
   const stepRecord = {
     step: session.history.length + 1,
     url: pkg.browserState.url,

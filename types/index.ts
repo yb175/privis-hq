@@ -62,6 +62,7 @@ export interface Action {
   key?: string;
   condition?: "element" | "text" | "url" | "gone" | "stable";
   timeoutMs?: number;
+  targetLocator?: { css?: string; role?: string; name?: string; bbox?: [number, number, number, number] };
   dy?: number;
 }
 

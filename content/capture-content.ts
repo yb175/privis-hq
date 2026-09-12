@@ -39,7 +39,51 @@ const localValues: Record<string, string> = {};
  * Resolves a target selector or element id to a live DOM element.
  * @param target Element ID or CSS selector
  */
-export function resolveTarget(target: string): HTMLElement | null {
+interface LiveTarget {
+  css?: string;
+  role?: string;
+  name?: string;
+  bbox?: [number, number, number, number];
+}
+
+function liveTarget(locator: LiveTarget): HTMLElement | null {
+  if (locator.css?.trim()) {
+    try {
+      return document.querySelector<HTMLElement>(locator.css) ?? null;
+    } catch {
+      return null;
+    }
+  }
+  const normalized = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+  const elements = Array.from(document.querySelectorAll<HTMLElement>("*"));
+  return elements.find((element) => {
+    const role = element.getAttribute("role") || (() => {
+      switch (element.tagName) {
+        case "BUTTON": return "button";
+        case "A": return "link";
+        case "TEXTAREA": return "textbox";
+        case "SELECT": return "combobox";
+        case "INPUT": return ["checkbox", "radio"].includes((element as HTMLInputElement).type)
+          ? (element as HTMLInputElement).type
+          : "textbox";
+        default: return null;
+      }
+    })();
+    if (locator.role && (!role || normalized(role) !== normalized(locator.role))) return false;
+    const name = element.getAttribute("aria-label") ||
+      (element as HTMLInputElement).placeholder || element.textContent || "";
+    if (locator.name && normalized(name) !== normalized(locator.name)) return false;
+    if (locator.bbox) {
+      const [bx, by, bw, bh] = locator.bbox;
+      const rect = element.getBoundingClientRect();
+      if (!(rect.x < bx + bw && bx < rect.x + rect.width && rect.y < by + bh && by < rect.y + rect.height)) return false;
+    }
+    return true;
+  }) ?? null;
+}
+
+export function resolveTarget(target: string, locator?: LiveTarget): HTMLElement | null {
+  if (locator) return liveTarget(locator);
   const generatedPrefix = "__privis_generated:";
   if (target.startsWith(generatedPrefix)) {
     return resolveGeneratedElement(target.slice(generatedPrefix.length));
@@ -80,16 +124,21 @@ async function waitFor(action: Action): Promise<ActionResult> {
     if (action.condition === "stable") return true;
     if (action.condition === "url") return window.location.href.includes(action.value ?? "");
     if (action.condition === "text") return document.body?.innerText.includes(action.value ?? "") ?? false;
-    const element = resolveTarget(action.target ?? "");
+    const element = resolveTarget(action.target ?? "", action.targetLocator);
     return action.condition === "gone" ? !element : Boolean(element);
   };
 
   let previousHtml = document.body?.innerHTML ?? "";
+  let stableSince = Date.now();
   while (Date.now() < deadline) {
     if (action.condition === "stable") {
       const currentHtml = document.body?.innerHTML ?? "";
-      if (currentHtml === previousHtml) return { ok: true };
-      previousHtml = currentHtml;
+      if (currentHtml !== previousHtml) {
+        previousHtml = currentHtml;
+        stableSince = Date.now();
+      } else if (Date.now() - stableSince >= 150) {
+        return { ok: true };
+      }
     } else if (matches()) {
       return { ok: true };
     }
@@ -150,7 +199,56 @@ export async function executeAction(action: Action): Promise<ActionResult> {
       const control = action.key === "Control+A";
       const key = control ? "a" : action.key === "Shift+Tab" ? "Tab" : action.key;
       const init = { key, code: key, bubbles: true, cancelable: true, ctrlKey: control, shiftKey: action.key === "Shift+Tab" };
-      el.dispatchEvent(new KeyboardEvent("keydown", init));
+      const down = new KeyboardEvent("keydown", init);
+      el.dispatchEvent(down);
+      if (down.defaultPrevented) return { ok: true };
+
+      const field = el as HTMLInputElement | HTMLTextAreaElement;
+      const hasSelection = typeof field.selectionStart === "number" && typeof field.selectionEnd === "number";
+      const replaceSelection = (value: string) => {
+        if (!hasSelection) return false;
+        const start = field.selectionStart ?? value.length;
+        const end = field.selectionEnd ?? start;
+        field.value = `${field.value.slice(0, start)}${value}${field.value.slice(end)}`;
+        field.setSelectionRange(start + value.length, start + value.length);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      };
+
+      if (control && hasSelection) {
+        field.setSelectionRange(0, field.value.length);
+      } else if ((action.key === "Backspace" || action.key === "Delete") && hasSelection) {
+        const start = field.selectionStart ?? 0;
+        const end = field.selectionEnd ?? start;
+        if (start !== end) replaceSelection("");
+        else if (action.key === "Backspace" && start > 0) {
+          field.setSelectionRange(start - 1, start);
+          replaceSelection("");
+        } else if (action.key === "Delete" && start < field.value.length) {
+          field.setSelectionRange(start, start + 1);
+          replaceSelection("");
+        }
+      } else if (action.key === "Enter" && !(typeof HTMLTextAreaElement !== "undefined" && el instanceof HTMLTextAreaElement) && "form" in el && (el as HTMLInputElement).form) {
+        (el as HTMLInputElement).form?.requestSubmit();
+      } else if (action.key === "Tab" || action.key === "Shift+Tab") {
+        const focusable = Array.from(document.querySelectorAll<HTMLElement>(
+          "input, textarea, select, button, a, [tabindex]:not([tabindex='-1'])"
+        ));
+        const index = focusable.indexOf(el);
+        focusable[index + (action.key === "Shift+Tab" ? -1 : 1)]?.focus();
+      } else if (el instanceof HTMLSelectElement && (action.key === "ArrowUp" || action.key === "ArrowDown")) {
+        const delta = action.key === "ArrowDown" ? 1 : -1;
+        el.selectedIndex = Math.max(0, Math.min(el.options.length - 1, el.selectedIndex + delta));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      } else if ((action.key === "ArrowLeft" || action.key === "ArrowRight") && hasSelection) {
+        const position = field.selectionStart ?? 0;
+        const end = field.selectionEnd ?? position;
+        const next = position !== end
+          ? (action.key === "ArrowLeft" ? position : end)
+          : Math.max(0, Math.min(field.value.length, position + (action.key === "ArrowRight" ? 1 : -1)));
+        field.setSelectionRange(next, next);
+      }
       el.dispatchEvent(new KeyboardEvent("keyup", init));
       return { ok: true };
     }
@@ -170,9 +268,12 @@ export async function executeAction(action: Action): Promise<ActionResult> {
       if (!(el instanceof HTMLInputElement) || !["checkbox", "radio"].includes(el.type)) {
         return failure("UNSUPPORTED_CONTROL", `Not a checkbox or radio: ${action.target}`);
       }
-      el.checked = action.type === "check";
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
+      if (action.type === "uncheck" && el.type === "radio") {
+        return failure("UNSUPPORTED_CONTROL", "Radio buttons cannot be unchecked");
+      }
+      const desired = action.type === "check";
+      if (el.checked !== desired) el.click();
+      if (el.checked !== desired) return failure("NOT_INTERACTABLE", `Could not set control state: ${action.target}`);
       return { ok: true };
     }
 

@@ -1107,6 +1107,10 @@ const bridgeElements: ElementMeta[] = [
   { element_id: "submit-btn", tag: "button", type: "submit", role: "button", label: null, text: "Submit Form", bbox: [10, 100, 120, 40] },
 ];
 const bridgeMap = { "pan-input": "ABCDE1234F", "el-input-7": "user@x.com" };
+const namedBridgeElements: ElementMeta[] = [
+  ...bridgeElements,
+  { element_id: "email-input", tag: "input", type: "email", role: "textbox", label: "Email", text: "EMAIL_2", bbox: [10, 180, 200, 30] as [number, number, number, number] },
+];
 
 // click by name (no css) -> resolved to #submit-btn
 const clickByName = agentActionToExecutorActions(
@@ -1129,6 +1133,14 @@ clickByRoleCheck: {
   assert.strictEqual(clickByRole[0].target, "#submit-btn");
 }
 console.log("  ✔ Bridge resolves click target by role");
+
+const namedFocus = agentActionToExecutorActions(
+  { type: "focus", target: { role: "textbox", name: "Email" } },
+  namedBridgeElements,
+  { ...bridgeMap, "email-input": "second@x.com" }
+);
+assert.deepStrictEqual(namedFocus, [{ type: "focus", target: "#email-input", key: undefined }]);
+console.log("  ✔ Compound role/name targets resolve conjunctively");
 
 // click by bbox overlap -> nearest matching element
 const clickByBbox = agentActionToExecutorActions(
@@ -1216,7 +1228,19 @@ const waitAction = agentActionToExecutorActions(
   bridgeMap
 );
 assert.deepStrictEqual(waitAction, [{ type: "wait_for", target: "", condition: "text", value: "Added to cart", timeoutMs: 5000 }]);
-console.log("  ✔ Bridge maps focus, select, and wait actions to local executor actions");
+const dynamicWait = agentActionToExecutorActions(
+  { type: "wait_for", condition: "element", target: { role: "button", name: "Added" }, timeoutMs: 5000 },
+  bridgeElements,
+  bridgeMap
+);
+assert.deepStrictEqual(dynamicWait, [{
+  type: "wait_for",
+  target: "",
+  targetLocator: { role: "button", name: "Added" },
+  condition: "element",
+  timeoutMs: 5000,
+}]);
+console.log("  ✔ Bridge maps focus, select, and dynamic wait actions to local executor actions");
 
 // Goal-substring literals: search boxes are not PII fields, but the DEVICE
 // (not the server) decides — the phrase must appear in the on-device goal.
