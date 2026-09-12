@@ -146,8 +146,9 @@ export function createAgentApp() {
       return c.json({ ok: true, action }, 200);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error(`[agent] /plan FAILED after ${Date.now() - started}ms: ${errorMsg}`);
-      return c.json({ ok: false, error: errorMsg }, 400);
+      const safeErrorMsg = redactPii(errorMsg);
+      console.error(`[agent] /plan FAILED after ${Date.now() - started}ms: ${safeErrorMsg}`);
+      return c.json({ ok: false, error: safeErrorMsg }, 400);
     }
   };
 

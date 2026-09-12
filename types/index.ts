@@ -133,7 +133,7 @@ export interface SanitizedPackage {
    * Every outbound boundary (queryServer, operator server) recomputes both
    * digests and refuses to transmit/serve on mismatch.
    */
-  redactionManifest?: RedactionManifest;
+  redactionManifest: RedactionManifest;
   /**
    * Provenance stamp — REQUIRED. Only the on-device Sanitizer path sets it to
    * true after structural + visual redaction. Every outbound boundary (router,

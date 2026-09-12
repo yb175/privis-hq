@@ -10,7 +10,7 @@ import {
 } from "../shared/settings.js";
 import { queryOpenAI, type OpenAIOptions } from "./client-openai.js";
 import { queryGemini, type GeminiOptions } from "./client-gemini.js";
-import { guardAction } from "./guard.js";
+import { guardAction, findPiiInValue } from "./guard.js";
 import { assertSanitizedPackage } from "./assert.js";
 
 // Re-exported for compatibility: the outbound boundary lives in assert.ts (a
@@ -113,6 +113,14 @@ async function resolveSearchToNavigate(
   pkg: SanitizedPackage,
   fetchFn?: typeof fetch
 ): Promise<AgentAction> {
+  const piiMatch = findPiiInValue(query);
+  if (piiMatch || /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_\d+$/.test(query.trim()) || /\b(?:my\s+account|my\s+password|user\s+name|ssn|dob|card|address|phone|email|pan|aadhaar|secret|otp|pin|credentials)\b/i.test(query)) {
+    return {
+      type: "ask_human",
+      reason: `Refusing to search for "${query}": query contains sensitive personal data or placeholder reference`,
+    };
+  }
+
   const apiKey = process.env.SERPAPI_KEY;
   if (!apiKey) {
     return {

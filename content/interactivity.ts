@@ -77,6 +77,29 @@ export function checkInteractivity(el: Element): InteractivityState {
     return { interactive: true, actionable: false, reason: "aria-hidden" };
   }
 
+  // Modern browser checkVisibility API
+  if (typeof (el as any).checkVisibility === "function") {
+    try {
+      if ((el as any).checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) === false) {
+        return { interactive: true, actionable: false, reason: "hidden-ancestor" };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Walk ancestors for hidden state / display:none / visibility:hidden
+  let parent = el.parentElement;
+  while (parent && parent !== (typeof document !== "undefined" ? document.body : null) && parent !== (typeof document !== "undefined" ? document.documentElement : null)) {
+    if (parent.hasAttribute("hidden") || parent.getAttribute("aria-hidden") === "true" || parent.hasAttribute("inert")) {
+      return { interactive: true, actionable: false, reason: "hidden-ancestor" };
+    }
+    if (parent.style && (parent.style.display === "none" || parent.style.visibility === "hidden")) {
+      return { interactive: true, actionable: false, reason: "hidden-ancestor" };
+    }
+    parent = parent.parentElement;
+  }
+
   // Disabled fieldset check for form controls
   if (typeof el.closest === "function") {
     const disabledFieldset = el.closest("fieldset[disabled], fieldset:disabled");

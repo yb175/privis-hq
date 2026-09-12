@@ -132,7 +132,7 @@ export function agentActionToExecutorActions(
             const el = resolveTarget(t, sanitized);
             return el ? selectorFor(el) : undefined;
           })();
-      const real = valueEl ? map[valueEl.element_id] : undefined;
+      const real = (valueEl ? map[valueEl.element_id] : undefined) ?? map[action.placeholder];
       if (css && real !== undefined) return [{ type: "type", target: css, value: real }];
       // Non-token placeholder: a literal phrase (e.g. a search query). The
       // SERVER's guard only allows goal substrings, but the server is not

@@ -32,7 +32,7 @@ export function deduplicateDetections(detections: readonly Detection[]): Detecti
   const byKey = new Map<string, Detection>();
 
   for (const det of normalized) {
-    const key = `${det.element_id}\u0000${det.category}`;
+    const key = `${det.element_id}\u0000${det.category}\u0000${det.bbox.join(",")}`;
     const existing = byKey.get(key);
 
     if (!existing) {
@@ -93,6 +93,12 @@ export function mergeOverlappingDetections(
 
       // Distinct categories NEVER merge
       if (current.category !== other.category) continue;
+
+      // Only merge if on the same element or both are synthetic vision elements
+      // Detections on distinct DOM elements must NEVER drop one element's ID (structural sanitization relies on element IDs)
+      const isSameElement = current.element_id === other.element_id;
+      const isBothVision = current.element_id.startsWith("vision-") && other.element_id.startsWith("vision-");
+      if (!isSameElement && !isBothVision) continue;
 
       const overlap = iou(current.bbox, other.bbox);
       if (overlap >= iouThreshold || isContained(current.bbox, other.bbox) || isContained(other.bbox, current.bbox)) {

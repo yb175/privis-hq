@@ -86,6 +86,15 @@ export function verifyPlan(
     }
   }
 
+  if (context?.sanitizedPackage?.goal) {
+    const goalTokens = context.sanitizedPackage.goal.match(/\b(?:EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME|CARD|IFSC|GSTIN|UPI|ACCOUNT|DOB|PASSPORT|LICENCE|PASSWORD|OTP|SECRET)_\d+\b/g);
+    if (goalTokens) {
+      for (const t of goalTokens) {
+        knownPlaceholders.add(t);
+      }
+    }
+  }
+
   actions.forEach((action, idx) => {
     if (!action || typeof action !== "object") {
       violations.push({

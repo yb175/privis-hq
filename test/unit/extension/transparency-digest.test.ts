@@ -40,6 +40,18 @@ async function runDigestTests() {
       },
     },
     redacted: true,
+    redactionManifest: {
+      counts: {},
+      redactedFraction: 0,
+      overRedactedFraction: 0,
+      policyVersion: "2.0.0",
+      receipt: {
+        algo: "SHA-256",
+        hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        manifestHash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        sealedAt: 1700000000000,
+      },
+    },
   };
 
   // 1. Valid SHA-256 Hex Digest Format

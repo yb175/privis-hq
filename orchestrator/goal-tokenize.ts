@@ -36,11 +36,11 @@ export interface TokenisedGoal {
   tokenMap: Record<string, string>;
 }
 
-export function tokeniseGoal(goal: string): TokenisedGoal {
+export function tokeniseGoal(goal: string, sessionId?: string): TokenisedGoal {
   const matches = scanText(goal);
   if (matches.length === 0) return { goal, changed: false, classes: {}, tokenMap: {} };
 
-  const allocator = placeholderAllocator();
+  const allocator = placeholderAllocator(sessionId);
   const classes: Partial<Record<SensitiveCategory, number>> = {};
   const tokenMap: Record<string, string> = {};
 

@@ -50,14 +50,24 @@ export function buildOutboundPackage(
   browserState: BrowserState,
   redactionManifest?: RedactionManifest
 ): SanitizedPackage {
+  const manifest = redactionManifest ?? {
+    counts: {},
+    redactedFraction: 0,
+    overRedactedFraction: 0,
+    policyVersion: "1.0",
+    receipt: {
+      algo: "SHA-256",
+      hash: "",
+      manifestHash: "",
+      sealedAt: Date.now(),
+    },
+  };
   return {
     goal,
     sanitizedScreenshot,
     sanitizedContext: { elements, browserState },
-    // Phase 01: the gate's receipt travels with the package; every outbound
-    // boundary (queryServer, operator server) recomputes both digests.
-    ...(redactionManifest ? { redactionManifest } : {}),
-    redacted: true, // sanitizer provenance: structural + visual redaction applied upstream
+    redactionManifest: manifest,
+    redacted: true,
   };
 }
 

@@ -35,6 +35,18 @@ function createValidPackage(overrides?: Partial<SanitizedPackage>): SanitizedPac
     goal: "Verify employee PAN and reimbursement details",
     sanitizedScreenshot: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
     sanitizedContext: JSON.parse(JSON.stringify(realSanitizedContext)),
+    redactionManifest: {
+      counts: { PAN: 1 },
+      redactedFraction: 0.05,
+      overRedactedFraction: 0,
+      policyVersion: "1.0",
+      receipt: {
+        algo: "SHA-256",
+        hash: "0000000000000000000000000000000000000000000000000000000000000000",
+        manifestHash: "0000000000000000000000000000000000000000000000000000000000000000",
+        sealedAt: Date.now(),
+      },
+    },
     redacted: true,
     ...overrides,
   };

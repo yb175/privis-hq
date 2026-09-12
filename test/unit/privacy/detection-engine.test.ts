@@ -198,11 +198,16 @@ console.log("\n[7] Deterministic Deduplication & Overlap Merging");
   const reversed = deduplicateDetections([d3, d2, d1]);
   check("Deduplication result is order-independent", JSON.stringify(deduped) === JSON.stringify(reversed));
 
-  // Overlapping detections with same category merge
+  // Overlapping detections with same category and same element merge
   const box1: Detection = { element_id: "e-a", category: "EMAIL", bbox: [10, 10, 50, 20], confidence: 0.9, source: "dom" };
-  const box2: Detection = { element_id: "e-b", category: "EMAIL", bbox: [30, 10, 50, 20], confidence: 0.95, source: "dom" };
+  const box2: Detection = { element_id: "e-a", category: "EMAIL", bbox: [30, 10, 50, 20], confidence: 0.95, source: "dom" };
   const merged = mergeOverlappingDetections([box1, box2], 0.2);
-  check("Overlapping same-category boxes merge into union bbox", merged.length === 1 && merged[0]?.bbox[2] === 70);
+  check("Overlapping same-category boxes on same element merge into union bbox", merged.length === 1 && merged[0]?.bbox[2] === 70);
+
+  // Overlapping detections on DIFFERENT elements NEVER drop element IDs
+  const boxDiffEl: Detection = { element_id: "e-b", category: "EMAIL", bbox: [30, 10, 50, 20], confidence: 0.95, source: "dom" };
+  const mergedDiffEl = mergeOverlappingDetections([box1, boxDiffEl], 0.2);
+  check("Overlapping detections on distinct elements preserve both element IDs", mergedDiffEl.length === 2 && mergedDiffEl.some((d) => d.element_id === "e-a") && mergedDiffEl.some((d) => d.element_id === "e-b"));
 
   // Distinct categories NEVER merge
   const boxPan: Detection = { element_id: "e-c", category: "PAN", bbox: [10, 10, 50, 20], confidence: 0.9, source: "dom" };

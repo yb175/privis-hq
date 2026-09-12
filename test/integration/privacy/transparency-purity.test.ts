@@ -101,6 +101,18 @@ function createValidPackage(goal = "Submit form"): SanitizedPackage {
         viewport: { w: 640, h: 480 },
       },
     },
+    redactionManifest: {
+      counts: { PAN: 1 },
+      redactedFraction: 0.05,
+      overRedactedFraction: 0,
+      policyVersion: "1.0",
+      receipt: {
+        algo: "SHA-256",
+        hash: "0000000000000000000000000000000000000000000000000000000000000000",
+        manifestHash: "0000000000000000000000000000000000000000000000000000000000000000",
+        sealedAt: Date.now(),
+      },
+    },
     redacted: true,
   };
 }

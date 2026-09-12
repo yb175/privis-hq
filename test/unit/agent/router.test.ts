@@ -67,6 +67,18 @@ function createValidSanitizedPackage(overrides?: Partial<SanitizedPackage>): San
       elements,
       browserState,
     },
+    redactionManifest: {
+      counts: { PAN: 1 },
+      redactedFraction: 0.05,
+      overRedactedFraction: 0,
+      policyVersion: POLICY_VERSION,
+      receipt: {
+        algo: "SHA-256",
+        hash: "0000000000000000000000000000000000000000000000000000000000000000",
+        manifestHash: "0000000000000000000000000000000000000000000000000000000000000000",
+        sealedAt: Date.now(),
+      },
+    },
     redacted: true, // sanitizer provenance stamp (router refuses packages without it)
     ...overrides,
   };

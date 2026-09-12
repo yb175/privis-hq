@@ -88,15 +88,66 @@ export function startSession(tabId: number, goal: string): AgentSession {
   return session;
 }
 
+import { tokeniseGoal } from "./goal-tokenize.js";
+
+/**
+ * Sanitize untrusted human replies: tokenize lexical PII, redact raw passwords/OTPs/credentials,
+ * and ensure raw sensitive values never become part of session.goal or outbound payloads.
+ */
+export function sanitizeHumanReply(
+  humanReply: string,
+  session?: AgentSession
+): { safeText: string; secretValue?: string } {
+  const trimmed = humanReply.trim();
+
+  const nonSecretWords = /^(?:entered|submitted|done|typed|provided|ready|ok|continue|confirmed|filled|here|now)$/i;
+
+  // Check if reply contains a password, OTP, PIN, or secret credential
+  const passwordMatch = trimmed.match(/(?:password|passwd|pwd|passphrase)\s*(?:is|was|[:=])\s*([^\s,;]+)/i) ??
+    trimmed.match(/(?:password|passwd|pwd|passphrase)\s+([^\s,;]+)/i);
+  const otpMatch = trimmed.match(
+    /(?:otp|one[- ]?time[- ]?(?:password|code|pin)|2fa|mfa|verification code|security code)\s*(?:is|was|[:=])?\s*([0-9a-zA-Z]{4,10})/i
+  );
+  const pinMatch = trimmed.match(/(?:pin|cvv|cvc|secret)\s*(?:is|was|[:=])\s*([^\s,;]+)/i);
+  const bareOtpMatch = /^[0-9]{4,8}$/.test(trimmed) ? trimmed : null;
+
+  let secretValue: string | undefined = undefined;
+  let sanitized = trimmed;
+
+  if (passwordMatch && passwordMatch[1] && !nonSecretWords.test(passwordMatch[1])) {
+    secretValue = passwordMatch[1];
+    sanitized = sanitized.replace(passwordMatch[1], "[SECRET_CREDENTIAL]");
+  } else if (otpMatch && otpMatch[1] && !nonSecretWords.test(otpMatch[1])) {
+    secretValue = otpMatch[1];
+    sanitized = sanitized.replace(otpMatch[1], "[OTP_CREDENTIAL]");
+  } else if (pinMatch && pinMatch[1] && !nonSecretWords.test(pinMatch[1])) {
+    secretValue = pinMatch[1];
+    sanitized = sanitized.replace(pinMatch[1], "[SECRET_PIN]");
+  } else if (bareOtpMatch) {
+    secretValue = bareOtpMatch;
+    sanitized = "[OTP_CREDENTIAL]";
+  } else if (
+    session?.lastAction?.type === "ask_human" &&
+    /password|otp|pin|credential|secret|login/i.test((session.lastAction as any).reason ?? "") &&
+    !nonSecretWords.test(trimmed)
+  ) {
+    secretValue = trimmed;
+    sanitized = "[SECRET_CREDENTIAL]";
+  }
+
+  // Tokenize any remaining lexical PII (emails, PANs, Aadhaar, etc.)
+  const tokenised = tokeniseGoal(sanitized, session?.sessionId);
+  return { safeText: tokenised.goal, secretValue };
+}
+
 /**
  * Resume a session parked in `waiting_human` (remote asked the human, or the
- * step cap escalated): the human's chat reply is appended to the goal, and a
- * fresh step budget is granted — each human continuation buys another
- * MAX_SESSION_STEPS, so the loop is bounded between human touches but never
- * abandons an unfinished task.
+ * step cap escalated): the human's chat reply is sanitized/tokenized and appended to the goal,
+ * granting a fresh step budget. Raw secrets and PII never enter session.goal.
  */
 export function resumeSession(session: AgentSession, humanReply: string): void {
-  session.goal = `${session.goal}\n[Human follow-up]: ${humanReply}`;
+  const { safeText } = sanitizeHumanReply(humanReply, session);
+  session.goal = `${session.goal}\n[Human follow-up]: ${safeText}`;
   session.status = "running";
   session.error = undefined;
   session.maxSteps = (session.step ?? 0) + MAX_SESSION_STEPS;

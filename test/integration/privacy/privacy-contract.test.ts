@@ -121,6 +121,18 @@ function validPackage(overrides: Partial<SanitizedPackage> = {}): SanitizedPacka
       elements: [el("e-1", "input", [0, 0, 10, 10], { text: "PAN_1" })],
       browserState: VIEWPORT,
     },
+    redactionManifest: {
+      counts: { PAN: 1 },
+      redactedFraction: 0.05,
+      overRedactedFraction: 0,
+      policyVersion: "1.0",
+      receipt: {
+        algo: "SHA-256",
+        hash: "0000000000000000000000000000000000000000000000000000000000000000",
+        manifestHash: "0000000000000000000000000000000000000000000000000000000000000000",
+        sealedAt: Date.now(),
+      },
+    },
     redacted: true,
     ...overrides,
   };

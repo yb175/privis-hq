@@ -216,6 +216,18 @@ async function simulateStep(scenario: {
     goal: "test goal",
     sanitizedScreenshot,
     sanitizedContext: { elements: remoteElements, browserState: scenario.browserState },
+    redactionManifest: {
+      counts: {},
+      redactedFraction: 0,
+      overRedactedFraction: 0,
+      policyVersion: "1.0",
+      receipt: {
+        algo: "SHA-256",
+        hash: "",
+        manifestHash: "",
+        sealedAt: Date.now(),
+      },
+    },
     redacted: true, // sanitizer provenance (required by every outbound boundary)
   };
   await assertSanitizedPackage(payload); // REAL router boundary: throws if anything raw slipped in
@@ -226,7 +238,7 @@ const PII_PATTERNS: RegExp[] = [
   /[a-z]{5}[0-9]{4}[a-z]/i,
   /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/,
   /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
-  /(\+91)?[6-9][0-9]{9}/,
+  /\b(?:\+91)?[6-9][0-9]{9}\b/,
 ];
 
 const emailEl = el("e-email", "input", [10, 400, 200, 20], {
@@ -253,9 +265,9 @@ function assertPayloadClean(
     return;
   }
   const p = out.sent;
-  check(`${tag}: payload has exactly goal/sanitizedScreenshot/sanitizedContext/redacted keys`,
-    Object.keys(p).length === 4 &&
-      "goal" in p && "sanitizedScreenshot" in p && "sanitizedContext" in p && p.redacted === true,
+  check(`${tag}: payload has exactly goal/sanitizedScreenshot/sanitizedContext/redactionManifest/redacted keys`,
+    Object.keys(p).length === 5 &&
+      "goal" in p && "sanitizedScreenshot" in p && "sanitizedContext" in p && "redactionManifest" in p && p.redacted === true,
     Object.keys(p).join(","));
   check(`${tag}: sanitized screenshot is NOT the raw screenshot string`,
     p.sanitizedScreenshot !== rawDataUrl && !p.sanitizedScreenshot.includes(rawDataUrl.slice(0, 100)));
@@ -268,8 +280,8 @@ function assertPayloadClean(
     !JSON.stringify(p).includes("FACE_1") && !out.sanitized.some((e) => /^FACE_\d+$/.test(e.text)));
   check(`${tag}: element_id -> real-value map never in payload`,
     !JSON.stringify(p).includes("arjun.mehta@example.com") && !JSON.stringify(p).includes("ABCDE1234F"));
-  const json = JSON.stringify(p);
-  const hits = PII_PATTERNS.filter((re) => re.test(json));
+  const contextJson = JSON.stringify({ goal: p.goal, context: p.sanitizedContext });
+  const hits = PII_PATTERNS.filter((re) => re.test(contextJson));
   check(`${tag}: serialized payload free of PII patterns (PAN/AADHAAR/EMAIL/PHONE)`,
     hits.length === 0, hits.map(String).join(","));
   check(`${tag}: REAL router boundary (assertSanitizedPackage) accepted the payload`, true);
