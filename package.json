@@ -53,7 +53,10 @@
     "serve:agent": "esbuild remote-agent/server.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist/remote-agent/server.mjs && node dist/remote-agent/server.mjs",
     "test": "npm run typecheck && npm run test:unit && npm run test:integration && npm run test:browser && npm run test:security",
     "typecheck": "tsc --noEmit",
+        "test:failure-injection": "esbuild test/browser/e2e/failure_injection.test.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist-test/failure_injection.mjs && node dist-test/failure_injection.mjs",
+
     "watch": "npm run build -- --watch"
+
   },
   "devDependencies": {
     "@types/chrome": "^0.2.7",

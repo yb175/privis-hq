@@ -57,7 +57,7 @@ flowchart LR
   A -- "{ ok, action }" --> SW
   H -- "{ ok, action }" --> SW
 
-  ENV[".env<br/>OPENAI_API_KEY<br/>GEMINI_API_KEY<br/>AGENT_AUTH_TOKEN"] -.-> S
+  ENV[".env<br/>OPENAI_API_KEY<br/>GEMINI_API_KEY<br/>SERPAPI_KEY<br/>AGENT_AUTH_TOKEN"] -.-> S
   ENV -.-> OAI
   ENV -.-> GEM
 ```
@@ -109,6 +109,10 @@ OPENAI_API_KEY=sk-...       # required for chatgpt
 GEMINI_API_KEY=AIza...      # required for gemini
 # GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 # GEMINI_MODEL=gemini-3.5-flash-lite-preview
+
+# Destination discovery ('search' action): the server runs SerpAPI and answers
+# with a navigate. Without a key the search action degrades to ask_human.
+# SERPAPI_KEY=your_serpapi_key_here
 
 # Security (recommended before exposing beyond localhost)
 # AGENT_AUTH_TOKEN=change-me    # /plan then requires Authorization: Bearer <token>

@@ -43,7 +43,11 @@ const CONFIDENCE_HIT = 0.95;
 const CONFIDENCE_LABEL = 0.7;
 
 // Value-text currency marker (the lexical layer covers identifiers, not money).
-const AMOUNT_TEXT_RE = /[₹$€£]|\b(?:inr|rs\.?)\b/i;
+// Must stay a superset of the router's CURRENCY_AMOUNT PII pattern (see
+// remote-agent/types.ts) — anything the wire-scan rejects, the sanitizer
+// must redact, or the package fails closed (Uber promo: "USD 5 off" leaked
+// because only inr/rs/$/€/£ were known locally).
+const AMOUNT_TEXT_RE = /[₹$€£¥]|\b(?:inr|usd|eur|gbp|cad|aud|rs\.?)/i;
 
 // Label-only fallbacks are restricted to the documented password / amount / name
 // rules; identifier classes are only detected from checksum/type evidence,

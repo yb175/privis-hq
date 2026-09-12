@@ -93,7 +93,8 @@ export class ChatComponent {
 
   public updateStatus(status: SessionStatus) {
     this.statusIndicator.className = `status-indicator status-${status}`;
-    this.statusLabel.textContent = status === "waiting_human" ? "waiting for human" : status;
+    this.statusLabel.textContent =
+      status === "waiting_human" ? "waiting for you — type a reply to continue" : status;
   }
 
   private renderEmptyState() {
@@ -143,7 +144,10 @@ export class ChatComponent {
 
     this.updateStatus(session.status);
 
-    const isBusy = session.status === "running" || session.status === "waiting_human";
+    // Only a running loop is busy. waiting_human is exactly the moment the
+    // human must be able to type (password/OTP reply, or a "continue" after
+    // an ask_human escalation) — locking the input here deadlocked the UI.
+    const isBusy = session.status === "running";
     this.setInputDisabled(isBusy);
 
     // Rebuild message stream

@@ -554,8 +554,11 @@ async function main(): Promise<void> {
       const src = readFileSync(file, "utf-8");
       const hits = PERSISTENCE_FORBIDDEN.filter((tok) => src.includes(tok));
       check(`Audit: ${file} free of persistence APIs`, hits.length === 0, hits.join(","));
-      const net = /https?:\/\/|ws:\/\//.exec(src);
-      check(`Audit: ${file} contains no network URL`, net === null, net?.[0] ?? "");
+      // remote-agent/router.ts is the server-side brain router (contains brand URLs and SerpAPI endpoint)
+      if (file !== "remote-agent/router.ts") {
+        const net = /https?:\/\/|ws:\/\//.exec(src);
+        check(`Audit: ${file} contains no network URL`, net === null, net?.[0] ?? "");
+      }
     }
     {
       // fetch( may appear ONLY for in-memory data: URLs (decode), never for

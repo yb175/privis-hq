@@ -21,6 +21,7 @@ import {
   sessionsByTab,
   pendingHumanDecisions,
   waitForHumanDecision,
+  startSession,
 } from "../../../orchestrator/session.js";
 import type { ElementMeta, AgentSession } from "../../../types/index.js";
 
@@ -30,7 +31,9 @@ import type { ElementMeta, AgentSession } from "../../../types/index.js";
 const HOME = "http://localhost:8671/";
 const FORM = "http://localhost:8671/form";
 const THANKS = "http://localhost:8671/thanks";
-const BANK = "https://secure-banking.internal.example/login";
+// Deny-listed host (onlinesbi) so the gate BLOCK trail still exercises the
+// hard block; a plain password page is human_approval now (Uber fix).
+const BANK = "https://onlinesbi.example.net/login";
 
 function el(
   element_id: string,
@@ -368,8 +371,8 @@ async function runQA() {
       assert.strictEqual(bankSession.status, "blocked", "Session marked blocked");
       assert.strictEqual(bankSession.gateDecision, "block", "Gate decision is block");
       assert.ok(
-        bankSession.error?.includes("PASSWORD") || bankSession.error?.includes("Policy"),
-        "Blocked reason mentions password/policy"
+        bankSession.error?.toLowerCase().includes("deny-listed"),
+        "Blocked reason names the deny-listed host refusal"
       );
 
       // CRITICAL ASSERTION: Zero calls made to Remote Agent (/plan)
@@ -444,6 +447,30 @@ async function runQA() {
       const session = sessionsByTab.get(TAB)!;
       assert.strictEqual(session.goal, "Goal 3 fresh run", "Fresh goal replaces finished session");
       console.log("  ✔ Concurrency guarded and session recycling works seamlessly");
+    }
+
+    // -----------------------------------------------------------------------
+    // [5b] Human chat reply RESUMES a parked ask_human session
+    // -----------------------------------------------------------------------
+    console.log("\n[5b] Human reply resumes a parked session (same session, appended goal)");
+    {
+      const PARK_TAB = 909;
+      const parked = startSession(PARK_TAB, "book an uber ride");
+      parked.status = "waiting_human"; // parked on remote ask_human / step cap
+      parked.step = 4;
+      await runGoal("password entered, continue", PARK_TAB);
+      const s = sessionsByTab.get(PARK_TAB)!;
+      assert.strictEqual(s.sessionId, parked.sessionId, "resume keeps the SAME session (history preserved)");
+      assert.ok(
+        s.goal.includes("[Human follow-up]: password entered, continue"),
+        "human reply appended to the goal the agent receives"
+      );
+      assert.ok(
+        s.goal.startsWith("book an uber ride"),
+        "original goal is retained for context"
+      );
+      assert.strictEqual(s.status, "done", "resumed session runs to completion");
+      console.log("  ✔ Human follow-up resumes the parked session instead of starting over");
     }
 
     // -----------------------------------------------------------------------

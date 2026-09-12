@@ -13,7 +13,11 @@ import {
 } from "../../../shared/settings.js";
 import { queryOpenAI, buildPrompt } from "../../../remote-agent/client-openai.js";
 import { queryGemini } from "../../../remote-agent/client-gemini.js";
-import { routeAgentRequest, assertSanitizedPackage } from "../../../remote-agent/router.js";
+import {
+  routeAgentRequest,
+  assertSanitizedPackage,
+  planQuickNavigate,
+} from "../../../remote-agent/router.js";
 import {
   dataUrlToBytes,
   digest,
@@ -533,6 +537,204 @@ assert.throws(
 console.log("  ✔ All Router sanitization boundary guards verified (incl. redacted provenance)");
 
 // --------------------------------------------------------------------------
+// 4b. Deterministic Quick-Navigate (first-hop routing for explicit targets)
+// --------------------------------------------------------------------------
+console.log("\n[4b] Quick-navigate: URL, domain and known-brand goals");
+
+// Unit: planQuickNavigate pure logic
+assert.deepStrictEqual(
+  planQuickNavigate("open https://example.com/checkout now", "https://other.site/"),
+  { type: "navigate", url: "https://example.com/checkout" }
+);
+assert.deepStrictEqual(
+  planQuickNavigate("go to github.com/trending and star it", "https://other.site/"),
+  { type: "navigate", url: "https://github.com/trending" }
+);
+assert.deepStrictEqual(
+  planQuickNavigate("book an uber ride to central station", "https://other.site/"),
+  { type: "navigate", url: "https://m.uber.com/go/home" }
+);
+// Already on the site: returns null so the page-level agent loop runs instead
+assert.strictEqual(
+  planQuickNavigate("go to github.com/trending", "https://github.com/explore"),
+  null
+);
+assert.strictEqual(
+  planQuickNavigate("book an uber ride", "https://m.uber.com/go/home"),
+  null
+);
+// Unrecognized brand / ordinary goal: returns null
+assert.strictEqual(
+  planQuickNavigate("click the submit button on the form", "https://other.site/"),
+  null
+);
+// Disallowed protocols fail closed (return null)
+assert.strictEqual(
+  planQuickNavigate("open javascript:alert(1)", "https://other.site/"),
+  null
+);
+console.log("  ✔ planQuickNavigate pure helper handles URLs, bare domains, brands, and exclusions");
+
+// Integration: routeAgentRequest short-circuits to navigate WITHOUT calling any LLM.
+// If fetchFn is called during these, it throws.
+const noLlmFetch: typeof fetch = async () => {
+  throw new Error("routeAgentRequest must not invoke the model when a quick destination is present");
+};
+
+// URL in goal: navigates directly
+const navUrl = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "open https://example.org/dashboard and export the report",
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: noLlmFetch }
+);
+assert.deepStrictEqual(navUrl, { type: "navigate", url: "https://example.org/dashboard" });
+
+// Bare domain in goal: navigates with https://
+const navDomain = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "navigate to wikipedia.org and find Albert Einstein",
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: noLlmFetch }
+);
+assert.deepStrictEqual(navDomain, { type: "navigate", url: "https://wikipedia.org" });
+
+// Already on the requested site: falls through to the model normally
+const passThroughFetch: typeof fetch = async () =>
+  ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      choices: [{ message: { content: JSON.stringify({ type: "scroll", dy: 100 }) } }],
+    }),
+  } as Response);
+
+const onSite = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "open amazon.in and track my order",
+    sanitizedContext: {
+      elements: pkg.sanitizedContext.elements,
+      browserState: { ...pkg.sanitizedContext.browserState, url: "https://www.amazon.in/order" },
+    },
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
+);
+assert.strictEqual(onSite.type, "scroll", "same-site goals stay with the model");
+
+// No destination at all in the goal → model decides
+const noToken = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "fill this verification form and submit it",
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
+);
+assert.strictEqual(noToken.type, "scroll", "goals without a destination stay with the model");
+
+// Brand-only mention (the "open uber" demo failure): navigate, zero LLM calls
+const navBrand = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "open uber and book a ride from my location to rithala metro",
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: noLlmFetch }
+);
+assert.deepStrictEqual(
+  navBrand,
+  { type: "navigate", url: "https://m.uber.com/go/home" },
+  "named brand navigates without asking the human for a link"
+);
+
+// Already on the brand site → model runs the page flow
+const onBrand = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "book uber ride from my location to rithala metro",
+    sanitizedContext: {
+      elements: pkg.sanitizedContext.elements,
+      browserState: { ...pkg.sanitizedContext.browserState, url: "https://m.uber.com/go/ride" },
+    },
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
+);
+assert.strictEqual(onBrand.type, "scroll", "on-site brand mentions stay with the model");
+console.log("  ✔ Quick-navigate routes URL, domain, and brand destinations; falls back safely");
+
+// --------------------------------------------------------------------------
+// 4c. Server-side 'search' tool: model searches, the SERVER runs SerpAPI and
+// answers navigate — the extension never sees the search.
+// --------------------------------------------------------------------------
+console.log("\n[4c] Router search tool (SerpAPI resolved server-side)");
+
+// Goal has no URL/brand token, so quick-navigate lets it reach the model.
+const searchPkg = createValidSanitizedPackage({
+  goal: "find the best official site for second-hand furniture and open it",
+});
+const modelSaysSearch = async () =>
+  ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              type: "search",
+              query: "official second-hand furniture website india",
+            }),
+          },
+        },
+      ],
+    }),
+  } as Response);
+
+// Happy path: first http(s) organic result becomes a navigate action.
+process.env.SERPAPI_KEY = "serp-test-key";
+const searchFetch: typeof fetch = async (input: any) => {
+  const u = typeof input === "string" ? input : String((input as any)?.url ?? input);
+  if (u.includes("serpapi.com")) {
+    assert.ok(u.includes("api_key=serp-test-key"), "key stays server-side, in the SERP request only");
+    assert.ok(u.includes("official+second-hand") || decodeURIComponent(u).includes("official second-hand"));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        organic_results: [{ title: "Olx", link: "https://www.olx.in/" }],
+      }),
+    } as Response;
+  }
+  return modelSaysSearch();
+};
+const searched = await routeAgentRequest(searchPkg, {
+  settings: { model: "chatgpt", openaiApiKey: "sk-key" },
+  fetchFn: searchFetch,
+});
+assert.deepStrictEqual(searched, { type: "navigate", url: "https://www.olx.in/" });
+
+// No key → degrade to ask_human, model call still happened but no navigation.
+delete process.env.SERPAPI_KEY;
+const noKey = await routeAgentRequest(searchPkg, {
+  settings: { model: "chatgpt", openaiApiKey: "sk-key" },
+  fetchFn: async () => (await modelSaysSearch()) as Response,
+});
+assert.strictEqual(noKey.type, "ask_human");
+assert.ok((noKey as { reason: string }).reason.includes("SERPAPI_KEY"));
+
+// SERP returns nothing usable → ask_human, never a blind navigate.
+process.env.SERPAPI_KEY = "serp-test-key";
+const emptySerp = await routeAgentRequest(searchPkg, {
+  settings: { model: "chatgpt", openaiApiKey: "sk-key" },
+  fetchFn: async (input: any) => {
+    const u = typeof input === "string" ? input : String((input as any)?.url ?? "");
+    if (u.includes("serpapi.com")) {
+      return { ok: true, status: 200, json: async () => ({ organic_results: [] }) } as Response;
+    }
+    return (await modelSaysSearch()) as Response;
+  },
+});
+delete process.env.SERPAPI_KEY;
+assert.strictEqual(emptySerp.type, "ask_human");
+assert.ok((emptySerp as { reason: string }).reason.includes("no usable result"));
+console.log("  ✔ search resolves server-side to navigate; missing key/results degrade to ask_human");
+
+// --------------------------------------------------------------------------
 // 5. Router End-to-End Dispatching & Polymorphic Action Verification
 // --------------------------------------------------------------------------
 console.log("\n[5] Model Router end-to-end dispatch & schema consistency");
@@ -1007,6 +1209,30 @@ assert.deepStrictEqual(
 );
 assert.strictEqual(typeGen[0].value, "user@x.com");
 console.log("  ✔ Bridge passes css targets through with real values");
+
+// Goal-substring literals: search boxes are not PII fields, but the DEVICE
+// (not the server) decides — the phrase must appear in the on-device goal.
+const literal = agentActionToExecutorActions(
+  { type: "type", target: { css: "#el-input-7" }, placeholder: "HC Verma" },
+  bridgeElements,
+  bridgeMap,
+  "find HC verma books on amazon"
+);
+assert.deepStrictEqual(
+  literal,
+  [{ type: "type", target: "#el-input-7", value: "HC Verma" }],
+  "goal phrase typed verbatim when it is a case-insensitive substring of the goal"
+);
+assert.deepStrictEqual(
+  agentActionToExecutorActions(
+    { type: "type", target: { css: "#el-input-7" }, placeholder: "password123" },
+    bridgeElements,
+    bridgeMap,
+    "find HC verma books on amazon"
+  ),
+  [],
+  "a server-sent phrase NOT in the device goal fails closed (server untrusted)"
+);
 
 // unresolvable target -> loud failure action (content script reports
 // "Target not found: __unresolved:<original target>"), not a silent no-op
