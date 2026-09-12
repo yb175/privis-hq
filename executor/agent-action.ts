@@ -87,18 +87,15 @@ function resolveTarget(
  *   elements (then mapped to a resolver-friendly selector).
  * - type:  resolves the real value from the ON-DEVICE placeholder map — the
  *   executor types real values, never placeholder strings (CONTRACT.md rule 2).
- * - navigate/done/ask_human: handled by the orchestrator; scroll is bridged
- *   to the content script.
+ * - navigate/scroll/done/ask_human: not executable by the content-script
+ *   executor yet (CBA-3 scope); no-ops.
  */
 export function agentActionToExecutorActions(
   action: AgentAction,
   sanitized: ElementMeta[],
-  map: Record<string, string>,
-  goal?: string
+  map: Record<string, string>
 ): Action[] {
   switch (action.type) {
-    case "scroll":
-      return [{ type: "scroll", target: "", dy: action.dy }];
     case "click": {
       const t = action.target;
       const css =
@@ -133,18 +130,7 @@ export function agentActionToExecutorActions(
             return el ? selectorFor(el) : undefined;
           })();
       const real = valueEl ? map[valueEl.element_id] : undefined;
-      if (css && real !== undefined) return [{ type: "type", target: css, value: real }];
-      // Non-token placeholder: a literal phrase (e.g. a search query). The
-      // SERVER's guard only allows goal substrings, but the server is not
-      // trusted for execution — re-verify against the on-device goal before
-      // typing. Anything else stays a no-op so runStep escalates.
-      if (css && goal) {
-        const needle = action.placeholder.trim().toLowerCase();
-        if (needle && goal.toLowerCase().replace(/\s+/g, " ").includes(needle)) {
-          return [{ type: "type", target: css, value: action.placeholder.trim() }];
-        }
-      }
-      return [];
+      return css && real !== undefined ? [{ type: "type", target: css, value: real }] : [];
     }
     default:
       return [];

@@ -337,18 +337,6 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     agentAction,
   });
 
-  // 'search' is a server-side tool resolved to navigate before the wire
-  // answer. If one leaks out (old server, bug), fail closed to the human —
-  // executing it locally would re-plan against an unchanged page until the
-  // step budget dies.
-  if (agentAction.type === "search") {
-    agentAction = {
-      type: "ask_human",
-      reason: `The agent server returned an unresolved search ("${agentAction.query}") — check the server's SERPAPI_KEY config.`,
-    };
-    session.lastAction = agentAction;
-  }
-
   // Terminal actions: the remote says the goal is complete, or gives up and
   // asks the human. Record, stop the loop, tell the chat. No executor run.
   if (agentAction.type === "done" || agentAction.type === "ask_human") {
@@ -399,7 +387,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   // Convert the AgentAction contract into executor Actions (name/role/bbox
   // targets resolved against the sanitized elements; placeholder → real-value
   // swap happens HERE, on-device, from the local map — CONTRACT.md rule 2).
-  const actions: Action[] = agentActionToExecutorActions(agentAction, sanitized, map, goal);
+  const actions: Action[] = agentActionToExecutorActions(agentAction, sanitized, map);
 
   // A type action without a local mapping must never become a silent no-op or
   // type its placeholder. Escalate so the human can repair the mapping/page.

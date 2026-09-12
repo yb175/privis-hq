@@ -20,7 +20,6 @@ import {
   endLoop,
   notifySessionUpdate,
   pendingHumanDecisions,
-  resumeSession,
   runSessionLoop,
   sessionsByTab,
   startSession,
@@ -101,42 +100,14 @@ function scriptedRemote(actions: AgentAction[]): (s: AgentSession) => Promise<Ou
   };
   const result = await runSessionLoop(session, step);
   assert.strictEqual(passes, MAX_SESSION_STEPS, "loop runs exactly maxSteps passes");
-  assert.strictEqual(MAX_SESSION_STEPS, 25, "v1: max 25 steps (login flows need more than 8)");
+  assert.strictEqual(MAX_SESSION_STEPS, 8, "CBA-6 spec: max 8 steps");
   assert.strictEqual(session.status, "waiting_human");
   assert.strictEqual(session.lastAction?.type, "ask_human");
-  assert.ok(
-    result.reason.startsWith(`Step limit (${MAX_SESSION_STEPS}) reached without done`),
-    "escalation names the cap"
-  );
+  assert.match(result.reason, /Step limit \(8\).*asking human/);
   const last = sentUpdates[sentUpdates.length - 1];
   assert.strictEqual(last?.session.status, "waiting_human", "chat is told about the escalation");
   assert.strictEqual(last?.session.lastAction?.type, "ask_human");
   console.log("  PASS hit step 8 without done → ask_human, chat notified");
-}
-
-// 2b. resumeSession: a capped/parked session is continued by the human's
-// reply — same session, appended goal, fresh budget — instead of abandoning
-// the task.
-{
-  const session = makeSession(23);
-  session.status = "waiting_human"; // parked on ask_human / step cap
-  session.step = MAX_SESSION_STEPS;
-  resumeSession(session, "i typed the password, continue");
-  assert.strictEqual(session.status, "running");
-  assert.ok(
-    session.goal.endsWith("[Human follow-up]: i typed the password, continue"),
-    "human reply is appended to the goal the remote agent receives"
-  );
-  assert.strictEqual(session.maxSteps, MAX_SESSION_STEPS * 2, "each follow-up grants a fresh budget");
-  let passes = 0;
-  await runSessionLoop(session, async (s) => {
-    passes++;
-    s.step = (s.step ?? 0) + 1;
-    return { decision: "allow", reason: "" };
-  });
-  assert.strictEqual(passes, MAX_SESSION_STEPS, "resumed loop gets a full new budget");
-  assert.strictEqual(session.status, "waiting_human", "and escalates again if it still never finishes");
-  console.log("  PASS resumeSession: human follow-up continues the same session with a fresh budget");
 }
 
 // 3. Gate stop: step reports block with stop → loop exits after ONE pass.
@@ -156,7 +127,7 @@ function scriptedRemote(actions: AgentAction[]): (s: AgentSession) => Promise<Ou
 // 4. Session state semantics: reuse while running, reset after done.
 {
   const first = makeSession(44, "goal A");
-  assert.strictEqual(first.maxSteps, MAX_SESSION_STEPS);
+  assert.strictEqual(first.maxSteps, 8);
   first.status = "running";
   first.history.push({ step: 1, url: "u", action: { type: "scroll", dy: 1 }, timestamp: Date.now() });
   first.step = 1;

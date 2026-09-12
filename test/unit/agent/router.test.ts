@@ -2,19 +2,24 @@
 // Unit and production QA tests for CBA-2 Model Router (chatgpt vs Gemini), clients, and settings
 
 import assert from "node:assert";
-import type { SanitizedPackage, ElementMeta, BrowserState } from "../types/index.js";
-import { type AgentAction } from "../remote-agent/types.js";
+import type { SanitizedPackage, ElementMeta, BrowserState } from "../../../types/index.js";
+import { type AgentAction } from "../../../remote-agent/types.js";
 import {
   DEFAULT_MODEL_SETTINGS,
   normalizeModelSettings,
   loadModelSettings,
   saveModelSettings,
   STORAGE_KEY_MODEL_SETTINGS,
-} from "../extension/src/settings/models.js";
-import { queryOpenAI, buildPrompt } from "../remote-agent/client-openai.js";
-import { queryGemini } from "../remote-agent/client-gemini.js";
-import { routeAgentRequest, assertSanitizedPackage } from "../remote-agent/router.js";
-import { applyPlaceholders, detectSensitive } from "../privacy/sanitizer/structural-redact.js";
+} from "../../../shared/settings.js";
+import { queryOpenAI, buildPrompt } from "../../../remote-agent/client-openai.js";
+import { queryGemini } from "../../../remote-agent/client-gemini.js";
+import { routeAgentRequest, assertSanitizedPackage } from "../../../remote-agent/router.js";
+import {
+  dataUrlToBytes,
+  digest,
+  manifestDigest,
+  POLICY_VERSION,
+} from "../../../privacy/sanitizer/redaction-gate.js";
 
 console.log("=== Running CBA-2 Model Router Test Suite (chatgpt vs Gemini) ===");
 
@@ -73,7 +78,6 @@ for (const envKey of [
   "GEMINI_API_KEY",
   "GEMINI_BASE_URL",
   "GEMINI_MODEL",
-  "SERPAPI_KEY",
 ]) {
   delete process.env[envKey];
 }
@@ -160,6 +164,25 @@ delete (globalThis as any).chrome;
 console.log("\n[2] OpenAI-compatible client tests");
 
 const pkg = createValidSanitizedPackage();
+// Phase 01: /plan and queryServer now verify the redaction receipt over the
+// actual screenshot bytes. Give the fixture the receipt the gate would have
+// stamped — same digests the real seal→encode path produces.
+const pkgManifest = pkg.redactionManifest ?? {
+  counts: {},
+  redactedFraction: 0,
+  overRedactedFraction: 0,
+  policyVersion: POLICY_VERSION,
+};
+pkg.redactionManifest = {
+  ...pkgManifest,
+  policyVersion: POLICY_VERSION,
+  receipt: {
+    algo: "SHA-256",
+    hash: await digest(dataUrlToBytes(pkg.sanitizedScreenshot)),
+    manifestHash: await manifestDigest(pkgManifest),
+    sealedAt: Date.now(),
+  },
+};
 
 // Prompt builder check
 const promptText = buildPrompt(pkg);
@@ -470,38 +493,6 @@ assert.throws(
   }
 );
 
-// Currency in a CTA must be sanitized too. Uber exposes promo/fare amounts
-// in button-like controls; skipping buttons lets the router fail closed before
-// the agent can plan the ride.
-const rideElements: ElementMeta[] = [
-  {
-    element_id: "ride-promo",
-    tag: "button",
-    type: null,
-    role: "button",
-    label: "Ride offer",
-    text: "Up to ₹50 off",
-    bbox: [0, 0, 100, 30],
-  },
-  {
-    element_id: "ride-promo-usd",
-    tag: "input",
-    type: "text",
-    role: "textbox",
-    label: null,
-    text: "USD5 off",
-    bbox: [0, 30, 100, 30],
-  },
-];
-const rideRedaction = applyPlaceholders(rideElements, detectSensitive(rideElements));
-assert.doesNotThrow(() =>
-  assertSanitizedPackage(
-    createValidSanitizedPackage({
-      sanitizedContext: { ...pkg.sanitizedContext, elements: rideRedaction.sanitized },
-    })
-  )
-);
-
 // Reject raw PII leaked inside sanitizedContext
 const leakedPkg = createValidSanitizedPackage({
   sanitizedContext: {
@@ -540,171 +531,6 @@ assert.throws(
   }
 );
 console.log("  ✔ All Router sanitization boundary guards verified (incl. redacted provenance)");
-
-// --------------------------------------------------------------------------
-// 4b. Quick navigation: a user-named URL/domain must never come back as
-// ask_human "please provide the URL" — the router navigates deterministically
-// before any LLM call. (Demo regression: goal named the site, agent asked.)
-// --------------------------------------------------------------------------
-console.log("\n[4b] Router quick-navigate (any website from the goal, no LLM round)");
-
-const noLlmFetch: typeof fetch = async () => {
-  throw new Error("FAIL: LLM must not be consulted when the goal names the destination");
-};
-const passThroughFetch: typeof fetch = async () =>
-  ({
-    ok: true,
-    status: 200,
-    json: async () => ({
-      choices: [{ message: { content: JSON.stringify({ type: "scroll", dy: 100 }) } }],
-    }),
-  } as Response);
-
-// Explicit URL in the goal, current page elsewhere → navigate, zero LLM calls
-const navFromUrl = await routeAgentRequest(
-  createValidSanitizedPackage({
-    goal: "Go to https://shopping.example.com/cart and checkout the items",
-  }),
-  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: noLlmFetch }
-);
-assert.deepStrictEqual(
-  navFromUrl,
-  { type: "navigate", url: "https://shopping.example.com/cart" },
-  "explicit URL in goal navigates without consulting the model"
-);
-
-// Bare domain in the goal → https navigate
-const navFromDomain = await routeAgentRequest(
-  createValidSanitizedPackage({ goal: "open amazon.in and track my order" }),
-  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: noLlmFetch }
-);
-assert.deepStrictEqual(navFromDomain, { type: "navigate", url: "https://amazon.in/" });
-
-// Already on the named site → fall through to the model (no nav loop)
-const onSite = await routeAgentRequest(
-  createValidSanitizedPackage({
-    goal: "open amazon.in and track my order",
-    sanitizedContext: {
-      elements: pkg.sanitizedContext.elements,
-      browserState: { ...pkg.sanitizedContext.browserState, url: "https://www.amazon.in/order" },
-    },
-  }),
-  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
-);
-assert.strictEqual(onSite.type, "scroll", "same-site goals stay with the model");
-
-// No destination at all in the goal → model decides
-const noToken = await routeAgentRequest(
-  createValidSanitizedPackage({
-    goal: "fill this verification form and submit it",
-  }),
-  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
-);
-assert.strictEqual(noToken.type, "scroll", "goals without a destination stay with the model");
-
-// Brand-only mention (the "open uber" demo failure): navigate, zero LLM calls
-const navBrand = await routeAgentRequest(
-  createValidSanitizedPackage({
-    goal: "open uber and book a ride from my location to rithala metro",
-  }),
-  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: noLlmFetch }
-);
-assert.deepStrictEqual(
-  navBrand,
-  { type: "navigate", url: "https://m.uber.com/go/home" },
-  "named brand navigates without asking the human for a link"
-);
-
-// Already on the brand site → model runs the page flow
-const onBrand = await routeAgentRequest(
-  createValidSanitizedPackage({
-    goal: "book uber ride from my location to rithala metro",
-    sanitizedContext: {
-      elements: pkg.sanitizedContext.elements,
-      browserState: { ...pkg.sanitizedContext.browserState, url: "https://m.uber.com/go/ride" },
-    },
-  }),
-  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
-);
-assert.strictEqual(onBrand.type, "scroll", "on-site brand mentions stay with the model");
-console.log("  ✔ Quick-navigate routes URL, domain, and brand destinations; falls back safely");
-
-// --------------------------------------------------------------------------
-// 4c. Server-side 'search' tool: model searches, the SERVER runs SerpAPI and
-// answers navigate — the extension never sees the search.
-// --------------------------------------------------------------------------
-console.log("\n[4c] Router search tool (SerpAPI resolved server-side)");
-
-// Goal has no URL/brand token, so quick-navigate lets it reach the model.
-const searchPkg = createValidSanitizedPackage({
-  goal: "find the best official site for second-hand furniture and open it",
-});
-const modelSaysSearch = async () =>
-  ({
-    ok: true,
-    status: 200,
-    json: async () => ({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              type: "search",
-              query: "official second-hand furniture website india",
-            }),
-          },
-        },
-      ],
-    }),
-  } as Response);
-
-// Happy path: first http(s) organic result becomes a navigate action.
-process.env.SERPAPI_KEY = "serp-test-key";
-const searchFetch: typeof fetch = async (input: any) => {
-  const u = typeof input === "string" ? input : String((input as any)?.url ?? input);
-  if (u.includes("serpapi.com")) {
-    assert.ok(u.includes("api_key=serp-test-key"), "key stays server-side, in the SERP request only");
-    assert.ok(u.includes("official+second-hand") || decodeURIComponent(u).includes("official second-hand"));
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({
-        organic_results: [{ title: "Olx", link: "https://www.olx.in/" }],
-      }),
-    } as Response;
-  }
-  return modelSaysSearch();
-};
-const searched = await routeAgentRequest(searchPkg, {
-  settings: { model: "chatgpt", openaiApiKey: "sk-key" },
-  fetchFn: searchFetch,
-});
-assert.deepStrictEqual(searched, { type: "navigate", url: "https://www.olx.in/" });
-
-// No key → degrade to ask_human, model call still happened but no navigation.
-delete process.env.SERPAPI_KEY;
-const noKey = await routeAgentRequest(searchPkg, {
-  settings: { model: "chatgpt", openaiApiKey: "sk-key" },
-  fetchFn: async () => (await modelSaysSearch()) as Response,
-});
-assert.strictEqual(noKey.type, "ask_human");
-assert.ok((noKey as { reason: string }).reason.includes("SERPAPI_KEY"));
-
-// SERP returns nothing usable → ask_human, never a blind navigate.
-process.env.SERPAPI_KEY = "serp-test-key";
-const emptySerp = await routeAgentRequest(searchPkg, {
-  settings: { model: "chatgpt", openaiApiKey: "sk-key" },
-  fetchFn: async (input: any) => {
-    const u = typeof input === "string" ? input : String((input as any)?.url ?? "");
-    if (u.includes("serpapi.com")) {
-      return { ok: true, status: 200, json: async () => ({ organic_results: [] }) } as Response;
-    }
-    return (await modelSaysSearch()) as Response;
-  },
-});
-delete process.env.SERPAPI_KEY;
-assert.strictEqual(emptySerp.type, "ask_human");
-assert.ok((emptySerp as { reason: string }).reason.includes("no usable result"));
-console.log("  ✔ search resolves server-side to navigate; missing key/results degrade to ask_human");
 
 // --------------------------------------------------------------------------
 // 5. Router End-to-End Dispatching & Polymorphic Action Verification
@@ -843,7 +669,7 @@ console.log("  ✔ Router refuses model-hallucinated placeholder not present in 
 // --------------------------------------------------------------------------
 console.log("\n[6] Standalone Hono HTTP Server tests (decoupled remote brain)");
 
-import { createAgentApp } from "../remote-agent/server.js";
+import { createAgentApp } from "../../../remote-agent/server.js";
 
 const app = createAgentApp();
 
@@ -929,7 +755,7 @@ try {
 // --------------------------------------------------------------------------
 console.log("\n[7] Server client tests (keys stay on the server)");
 
-import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-server.js";
+import { queryServer, serverOptionsFromSettings } from "../../../remote-agent/client-server.js";
 
 // Successful round-trip: posts SanitizedPackage + model preference, returns validated AgentAction
 let recordedServerRequest: { url: string; body: any } | null = null;
@@ -1083,7 +909,7 @@ console.log("  ✔ queryServer refuses unsanitized packages before any network r
 // --------------------------------------------------------------------------
 console.log("\n[8] Executor bridge tests");
 
-import { agentActionToExecutorActions } from "../executor/agent-action.js";
+import { agentActionToExecutorActions } from "../../../executor/agent-action.js";
 
 const bridgeElements: ElementMeta[] = [
   { element_id: "pan-input", tag: "input", type: "text", role: "textbox", label: null, text: "PAN_1", bbox: [10, 20, 200, 30] },
@@ -1181,30 +1007,6 @@ assert.deepStrictEqual(
 );
 assert.strictEqual(typeGen[0].value, "user@x.com");
 console.log("  ✔ Bridge passes css targets through with real values");
-
-// Goal-substring literals: search boxes are not PII fields, but the DEVICE
-// (not the server) decides — the phrase must appear in the on-device goal.
-const literal = agentActionToExecutorActions(
-  { type: "type", target: { css: "#el-input-7" }, placeholder: "HC Verma" },
-  bridgeElements,
-  bridgeMap,
-  "find HC verma books on amazon"
-);
-assert.deepStrictEqual(
-  literal,
-  [{ type: "type", target: "#el-input-7", value: "HC Verma" }],
-  "goal phrase typed verbatim when it is a case-insensitive substring of the goal"
-);
-assert.deepStrictEqual(
-  agentActionToExecutorActions(
-    { type: "type", target: { css: "#el-input-7" }, placeholder: "password123" },
-    bridgeElements,
-    bridgeMap,
-    "find HC verma books on amazon"
-  ),
-  [],
-  "a server-sent phrase NOT in the device goal fails closed (server untrusted)"
-);
 
 // unresolvable target -> loud failure action (content script reports
 // "Target not found: __unresolved:<original target>"), not a silent no-op

@@ -59,10 +59,6 @@ assert.strictEqual(sysPrompt, promptMd, "SYSTEM_PROMPT must be loaded verbatim f
 assert.ok(sysPrompt.includes("PRIVIS Remote Browser Agent"));
 assert.ok(sysPrompt.includes("CRITICAL PRIVACY RULE"));
 assert.ok(sysPrompt.includes("PAN_1"));
-assert.ok(sysPrompt.includes("If the current page is unrelated"));
-assert.ok(sysPrompt.includes("Use an explicit URL or domain from the goal"));
-assert.ok(sysPrompt.includes('"type": "search"'));
-assert.ok(sysPrompt.includes("NEVER ask the human for a link"));
 console.log("  ✔ System prompt is loaded verbatim from prompt.md (no drift possible)");
 
 // 1.2 Placeholder Allowlist Extraction
@@ -247,38 +243,6 @@ if (validScroll.ok) {
   assert.strictEqual(validScroll.action.type, "scroll");
   assert.strictEqual((validScroll.action as any).dy, 300);
 }
-
-// 'search' — server-side tool; guard validates query hygiene, not execution.
-const validSearch = guardModelOutput(
-  '{"type": "search", "query": "official Amazon India website"}',
-  { sanitizedPackage: pkg }
-);
-assert.strictEqual(validSearch.ok, true, "clean search query passes the guard");
-if (validSearch.ok) {
-  assert.strictEqual(validSearch.action.type, "search");
-  assert.strictEqual(
-    (validSearch.action as { query: string }).query,
-    "official Amazon India website"
-  );
-}
-
-const emptySearch = guardModelOutput('{"type": "search", "query": "   "}', { sanitizedPackage: pkg });
-assert.strictEqual(emptySearch.ok, false, "empty query rejected");
-
-const piiSearch = guardModelOutput(
-  '{"type": "search", "query": "track order for phone 9876543210"}',
-  { sanitizedPackage: pkg }
-);
-assert.strictEqual(piiSearch.ok, false, "raw PII must never reach a third-party search");
-if (!piiSearch.ok) {
-  assert.match(piiSearch.error, /PHONE/);
-}
-
-const longSearch = guardModelOutput(
-  JSON.stringify({ type: "search", query: "a".repeat(201) }),
-  { sanitizedPackage: pkg }
-);
-assert.strictEqual(longSearch.ok, false, "query length cap enforced");
 
 const validDone = guardModelOutput('{"type": "done", "reason": "Completed successfully"}', {
   sanitizedPackage: pkg,

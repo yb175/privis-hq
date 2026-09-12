@@ -79,26 +79,13 @@ export function decide(params: {
     };
   }
 
-  // 2. Hard-block deny-listed hosts (banking / tax / payroll) — never leaves
-  //    the device, no human-approval path for these.
-  if (isDenyListedHost(browserState.url)) {
-    return {
-      decision: "block",
-      reason: `Blocked: deny-listed host (${browserState.url}) — page never sent to the remote agent`,
-    };
-  }
-
-  // 3. Human approval if a PASSWORD detection exists on external/non-demo
-  //    sites. The sanitizer never extracts or sends the password value (the
-  //    field crosses the wire with text ""), so a login page (e.g. Uber) is
-  //    workable once the human clears it — v0's hard block made any login flow
-  //    impossible to complete.
+  // 2. Block if a PASSWORD detection exists on external/non-demo sites
   const hasPassword = detections.some((d) => d.category === "PASSWORD");
   if (hasPassword) {
     return {
-      decision: "human_approval",
+      decision: "block",
       reason:
-        "Human approval required: PASSWORD field present. The password value is never sent to the agent — approve to let the agent see and act on this login page.",
+        "Blocked: PASSWORD category detection present (password pages blocked from remote in v0)",
     };
   }
 

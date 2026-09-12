@@ -64,10 +64,9 @@ export interface BrowserState {
 }
 
 export interface Action {
-  type: "click" | "type" | "scroll" | string;
+  type: "click" | "type" | string;
   target: string;
   value?: string;
-  dy?: number;
 }
 
 export interface ActionResult {

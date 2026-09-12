@@ -15,10 +15,9 @@ import type {
 // loop must end (done / ask_human / gate block / human reject).
 export type Outcome = StepResult & { stop?: boolean };
 
-// Max steps per session. A multi-page flow (login → search → select → confirm)
-// needs more than the old 8; hitting the cap without `done` still escalates
-// to ask_human, and a human follow-up grants a fresh budget (resumeSession).
-export const MAX_SESSION_STEPS = 25;
+// Issue CBA-6: max 8 steps per session; hitting the cap without `done`
+// escalates to ask_human instead of looping forever.
+export const MAX_SESSION_STEPS = 8;
 
 // In-memory session registry, keyed by tabId.
 const sessionsByTab = new Map<number, AgentSession>();
@@ -86,20 +85,6 @@ export function startSession(tabId: number, goal: string): AgentSession {
     session.status = "running";
   }
   return session;
-}
-
-/**
- * Resume a session parked in `waiting_human` (remote asked the human, or the
- * step cap escalated): the human's chat reply is appended to the goal, and a
- * fresh step budget is granted — each human continuation buys another
- * MAX_SESSION_STEPS, so the loop is bounded between human touches but never
- * abandons an unfinished task.
- */
-export function resumeSession(session: AgentSession, humanReply: string): void {
-  session.goal = `${session.goal}\n[Human follow-up]: ${humanReply}`;
-  session.status = "running";
-  session.error = undefined;
-  session.maxSteps = (session.step ?? 0) + MAX_SESSION_STEPS;
 }
 
 /** Broadcast session state (and optionally the latest gate result) to the chat popup. */
