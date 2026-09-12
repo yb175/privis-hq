@@ -25,6 +25,12 @@ privacy/
   engine/                    Local Privacy Vision Engine (ML-owned)
     detect-dom.ts              DOM-rule detection (source of truth for TS
                               detection patterns)
+    detect-lexical.ts          SIH26171 L1 port: checksum-validated lexical
+                              scan (PAN/Aadhaar/CARD/IFSC/GSTIN/UPI/...);
+                              consumed by detect-dom.ts
+    validators.ts              SIH26171 validators port: per-class checksums
+                              (Verhoeff, Luhn, mod-36 GSTIN) — the only thing
+                              that mints the identifier categories
     normalize.ts               canonical finding contract (Phase 01): stable
                               PrivacyError codes, closed category/source sets,
                               assertValidBBox, normalizeDetection(s) — the
@@ -36,6 +42,13 @@ privacy/
                               OUT in Phase 00; Phase 01: normalize-on-entry,
                               fail-closed stale finding rejection,
                               resetPlaceholderTokens session scoping)
+    placeholders.ts            SIH26171 placeholder allocator port (session-
+                              scoped, NO_VALUE for PASSWORD)
+    redaction-gate.ts          Phase 01: the one-way encoding gate (seal →
+                              encode); the ONLY path from raw screenshot
+                              bytes to sanitized PNG + receipt
+    vault.ts                   SIH26171 secret vault port (origin+class keyed;
+                              executor wiring deferred)
     visual-redact.ts           canvas pixel redaction (blur/black/mask;
                               Phase 01: malformed bbox throws, no silent skip)
   policy-gate/               Policy Gate (block / human_approval / allow)
@@ -44,17 +57,23 @@ remote-agent/               Remote Agent (operator server + clients)
                               router re-exports, provider clients enforce
   router.ts                   routes sanitized requests to chatgpt/gemini
   packager.ts, guard.ts       prompt compilation + placeholder allowlist
-  client-server.ts            the ONLY live remote transport (queryServer)
+  client-server.ts            the ONLY live remote transport (queryServer);
+                              Phase 01: verifies the redaction receipt
+                              pre-flight — mismatch means no fetch
+  receipt.ts                  SIH26171 receipt port: SHA-256 screenshot /
+                              manifest digests, verified at BOTH boundaries
   client-openai/gemini.ts     server-side model clients (keys never on device;
                               Phase 01: enforce assertSanitizedPackage at entry)
 executor/                   Local Executor (click/type/scroll/navigate)
+  format-value.ts            SIH26171 format port: reshape a typed value to
+                              the field's declared shape (DD-MM-YYYY etc.)
 shared/                     settings model (extension + server both import)
 utils/                      coords.ts (all coordinate conversions), DOM
                             extractor, screenshot, messaging, digest
 extension/src/              popup UI (chat, settings, HUD) + offscreen host
 types/index.ts              THE contract: shared shapes for every box
 ml/                         Python parity reference (fusion, PII classifier)
-tests/ + privacy/engine/vision/test-*.ts   suites (16, all in `npm test`;
+tests/ + privacy/engine/vision/test-*.ts   suites (27, all in `npm test`;
                             test-privacy-contract.ts = Phase 01 contract suite)
 fixtures/                   synthetic PII fixtures (never real data)
 demo-portal/                static demo site for manual E2E

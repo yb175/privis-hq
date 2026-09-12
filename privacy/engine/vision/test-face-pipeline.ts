@@ -385,7 +385,7 @@ async function main(): Promise<void> {
   // --- Scenario F: non-FACE PII unchanged ---
   console.log("\n[7] Scenario F: non-FACE PII (PASSWORD/EMAIL/PAN) unchanged");
   const passEl = el("e-pass", "input", [10, 430, 200, 20], { type: "password", label: "Password", text: "" });
-  const panEl = el("e-pan", "span", [10, 460, 200, 20], { label: "PAN", text: "ABCDE1234F" });
+  const panEl = el("e-pan", "span", [10, 460, 200, 20], { label: "PAN", text: "ABCPE1234F" });
   const f = await simulateStep({ dataUrl: F5, elements: [emailEl, passEl, panEl], browserState: VIEWPORT_640 });
   check("F: PASSWORD preserved (DOM detection, category PASSWORD)",
     f.detections.some((x) => x.element_id === "e-pass" && x.category === "PASSWORD" && x.source === "dom"));
@@ -395,7 +395,7 @@ async function main(): Promise<void> {
     f.sanitized.find((x) => x.element_id === "e-email")?.text === "EMAIL_1" &&
     f.sanitized.find((x) => x.element_id === "e-pan")?.text === "PAN_1");
   check("F: real values isolated in the local map",
-    f.map["e-email"] === "arjun.mehta@example.com" && f.map["e-pan"] === "ABCDE1234F" && !("e-pass" in f.map));
+    f.map["e-email"] === "arjun.mehta@example.com" && f.map["e-pan"] === "ABCPE1234F" && !("e-pass" in f.map));
   const fJson = JSON.stringify(f.sent ?? {});
   check("F: remote payload free of PII patterns", !PII_PATTERNS.some((re) => re.test(fJson)));
 
