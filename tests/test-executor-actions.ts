@@ -2,6 +2,7 @@ import assert from "node:assert";
 
 class FakeElement {
   id: string;
+  tagName = "DIV";
   type = "text";
   value = "old";
   checked = false;
@@ -47,12 +48,18 @@ select.options = [
 const checkbox = new FakeInput("remember");
 checkbox.type = "checkbox";
 const input = new FakeInput("search");
-for (const element of [select, checkbox, input]) elements.set(element.id, element);
+input.tagName = "INPUT";
+const button = new FakeElement("submit");
+button.tagName = "BUTTON";
+for (const element of [select, checkbox, input, button]) elements.set(element.id, element);
 
 (globalThis as any).chrome = { runtime: { onMessage: { addListener() {} } } };
 (globalThis as any).document = {
   getElementById: (id: string) => elements.get(id) ?? null,
-  querySelector: (selector: string) => selector.startsWith("#") ? elements.get(selector.slice(1)) ?? null : null,
+  querySelector: (selector: string) => {
+    if (selector === "[") throw new Error("invalid selector");
+    return selector.startsWith("#") ? elements.get(selector.slice(1)) ?? null : null;
+  },
   querySelectorAll: () => [],
   elementFromPoint: () => null,
   body: { innerText: "Added to cart", innerHTML: "stable" },
@@ -94,8 +101,11 @@ assert.deepStrictEqual(await executeAction({ type: "click", target: "#search" })
 (input as any).disabled = false;
 assert.deepStrictEqual(await executeAction({ type: "clear", target: "#search" }), { ok: true });
 assert.strictEqual(input.value, "");
-assert.deepStrictEqual(await executeAction({ type: "press_key", target: "#search", key: "Enter" }), { ok: true });
-assert.ok(input.events.includes("keydown"));
+assert.deepStrictEqual(await executeAction({ type: "press_key", target: "#search", key: "Enter" }), {
+  ok: false, code: "UNSUPPORTED_CONTROL", error: "Key Enter has no supported effect on target",
+});
+assert.deepStrictEqual(await executeAction({ type: "press_key", target: "#submit", key: "Enter" }), { ok: true });
+assert.ok(button.events.includes("click"));
 
 assert.deepStrictEqual(await executeAction({ type: "wait_for", target: "", condition: "text", value: "Added to cart", timeoutMs: 10 }), { ok: true });
 let delayedText = "Loading";
@@ -103,6 +113,11 @@ Object.defineProperty(document.body, "innerText", { configurable: true, get: () 
 setTimeout(() => { delayedText = "Autocomplete result"; }, 25);
 assert.deepStrictEqual(await executeAction({ type: "wait_for", target: "", condition: "text", value: "Autocomplete result", timeoutMs: 200 }), { ok: true });
 assert.deepStrictEqual(await executeAction({ type: "wait_for", target: "", condition: "stable", timeoutMs: 300 }), { ok: true });
+for (const condition of ["element", "gone"] as const) {
+  assert.deepStrictEqual(await executeAction({
+    type: "wait_for", target: "", targetLocator: { css: "[" }, condition, timeoutMs: 10,
+  }), { ok: false, code: "INVALID_ACTION", error: "Malformed CSS selector in wait target" });
+}
 assert.deepStrictEqual(await executeAction({ type: "click", target: "#missing" }), {
   ok: false,
   code: "TARGET_NOT_FOUND",

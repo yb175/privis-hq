@@ -169,8 +169,8 @@ async function waitForTabSettled(tabId: number, timeoutMs = 5000): Promise<void>
 function sanitizedStateFingerprint(pkg: CapturePackage, elements: ElementMeta[]): string {
   return JSON.stringify({
     url: pkg.browserState.url,
-    elements: elements.map(({ element_id, tag, type, role, text, bbox }) => ({
-      element_id, tag, type, role, text, bbox,
+    elements: elements.map(({ element_id, tag, type, role, label, text, bbox }) => ({
+      element_id, tag, type, role, label, text, bbox,
     })),
   });
 }

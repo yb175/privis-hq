@@ -339,11 +339,13 @@ for (const action of validNewActions) {
   const result = guardModelOutput(JSON.stringify(action), { sanitizedPackage: pkg });
   assert.strictEqual(result.ok, true, `new action should pass: ${action.type}`);
 }
-assert.strictEqual(
-  guardModelOutput(JSON.stringify({ type: "press_key", target: { css: "#search" }, key: "Paste" }), { sanitizedPackage: pkg }).ok,
-  false,
-  "unsupported keys are rejected"
-);
+for (const key of ["Paste", "Escape"]) {
+  assert.strictEqual(
+    guardModelOutput(JSON.stringify({ type: "press_key", target: { css: "#search" }, key }), { sanitizedPackage: pkg }).ok,
+    false,
+    `unsupported key is rejected: ${key}`
+  );
+}
 assert.strictEqual(
   guardModelOutput(JSON.stringify({ type: "wait_for", condition: "text", needle: "x", timeoutMs: 30001 }), { sanitizedPackage: pkg }).ok,
   false,

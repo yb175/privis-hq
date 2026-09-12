@@ -29,7 +29,6 @@ export const ALLOWED_KEYS = [
   "Enter",
   "Tab",
   "Shift+Tab",
-  "Escape",
   "ArrowUp",
   "ArrowDown",
   "ArrowLeft",
