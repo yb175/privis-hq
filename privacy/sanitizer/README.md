@@ -82,7 +82,7 @@ ML vision model ─► Detection[] {source:"vision"} ┘      + redactVisual(bbo
    leave `applyPlaceholders(elements, detections)` as-is.
 3. Point `redactVisual` at every bounding box the engine reports (dom + vision), not just
    the DOM ones, so pixel-only PII is masked too.
-4. Re-run the fixtures: category + placeholder tokens must match `fixtures/sanitized-context.json`
+4. Re-run the fixtures: category + placeholder tokens must match `test/fixtures/sanitized-context.json`
    shape; the face/password elements stay intact.
 
 No rule here depends on `source` — `dom` and `vision` detections are interchangeable

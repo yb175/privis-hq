@@ -73,9 +73,8 @@ utils/                      coords.ts (all coordinate conversions), DOM
 extension/src/              popup UI (chat, settings, HUD) + offscreen host
 types/index.ts              THE contract: shared shapes for every box
 ml/                         Python parity reference (fusion, PII classifier)
-tests/ + privacy/engine/vision/test-*.ts   suites (27, all in `npm test`;
-                            test-privacy-contract.ts = Phase 01 contract suite)
-fixtures/                   synthetic PII fixtures (never real data)
+test/                       Comprehensive automated test suites (unit, integration, browser, security)
+test/fixtures/              synthetic PII fixtures (never real data)
 demo-portal/                static demo site for manual E2E
 docs/                       Round 2 context + this document
 ```

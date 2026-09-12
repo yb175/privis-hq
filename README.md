@@ -134,7 +134,7 @@ Both must exit 0. `typecheck` catches type drift; `build` catches import/bundle 
    );
    ```
    The active tab must be the demo portal. **Pass** = a PNG `dataUrl` comes back and it is the portal page; the raw screenshot never touches disk or extension storage.
-4. **When the full `runStep` pipeline is implemented**, run one complete step (Capture → Sanitizer → Policy Gate → Remote Agent → Executor) and diff the output against `fixtures/`: `detections.json` (vision-engine output), `sanitized-context.json` (sanitizer output — every sensitive value must be a placeholder like `EMAIL_1`/`PAN_1`), and `action-click-submit.json` (the remote agent's action that the executor must apply to `#submit`). The demo portal's fake PII is the stable target for this check.
+4. **When the full `runStep` pipeline is implemented**, run one complete step (Capture → Sanitizer → Policy Gate → Remote Agent → Executor) and diff the output against `test/fixtures/`: `detections.json` (vision-engine output), `sanitized-context.json` (sanitizer output — every sensitive value must be a placeholder like `EMAIL_1`/`PAN_1`), and `action-click-submit.json` (the remote agent's action that the executor must apply to `#submit`). The demo portal's fake PII is the stable target for this check.
 
 ## Demo script for judges (CBA-2 model router: privacy-first remote brain)
 

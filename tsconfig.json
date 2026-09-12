@@ -10,7 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "rootDir": ".",
     "outDir": "./dist",
-    "types": ["chrome"]
+    "types": ["chrome", "node"]
   },
   "include": [
     "background/**/*",
@@ -22,7 +22,7 @@
     "shared/**/*",
     "types/**/*",
     "utils/**/*",
-    "tests/**/*"
+    "test/**/*"
   ],
   "exclude": ["node_modules", "dist"]
 }
