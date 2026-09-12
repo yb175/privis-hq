@@ -78,10 +78,25 @@ export interface SanitizedContext {
   browserState: BrowserState;
 }
 
+export interface PlannerStep {
+  action: AgentAction;
+  result?: ActionResult;
+}
+
+export interface PlannerContext {
+  step: number;
+  maxSteps: number;
+  phase: "initial" | "continuing" | "human_follow_up";
+  progress: string;
+  lastStep?: PlannerStep;
+  recentHistory: PlannerStep[];
+}
+
 export interface SanitizedPackage {
   goal: string;
   sanitizedScreenshot: string;
   sanitizedContext: SanitizedContext;
+  plannerContext?: PlannerContext;
   /**
    * Provenance stamp — REQUIRED. Only the on-device Sanitizer path sets it to
    * true after structural + visual redaction. Every outbound boundary (router,

@@ -90,6 +90,31 @@ assert.ok(userPrompt.includes('text="PAN_1"'));
 assert.ok(!userPrompt.includes("ABCDE1234F"), "Prompt must NEVER contain raw PAN");
 console.log("  ✔ User prompt accurately formats goal, state, placeholders, and elements");
 
+const plannerContextPkg = createValidPackage({
+  plannerContext: {
+    step: 2,
+    maxSteps: 25,
+    phase: "continuing",
+    progress: "1 completed action(s); 1 failed action(s); current page state was freshly captured",
+    lastStep: {
+      action: { type: "click", target: { css: "#submit" } },
+      result: { ok: false, error: "Element not found" },
+    },
+    recentHistory: [
+      {
+        action: { type: "navigate", url: "https://hr.internal.example/employee-portal" },
+        result: { ok: true },
+      },
+    ],
+  },
+});
+const plannerPrompt = buildUserPrompt(plannerContextPkg);
+assert.ok(plannerPrompt.includes("SESSION CONTEXT:"));
+assert.ok(plannerPrompt.includes("STEP: 2/25"));
+assert.ok(plannerPrompt.includes("PHASE: continuing"));
+assert.ok(plannerPrompt.includes("Element not found"));
+console.log("  ✔ Planner context includes bounded progress, last result, and recent history");
+
 // 1.3b Label metadata must NEVER leak into the prompt (labels can carry raw
 // page/user data the PII regexes cannot catch — names, passwords, etc.; the
 // sanitizer only swaps `text`). Regression guard: if a change reintroduces
@@ -131,6 +156,23 @@ assert.throws(
   { message: /package not marked as sanitized/i }
 );
 console.log("  ✔ buildUserPrompt refuses raw/unstamped packages (boundary enforced at format time)");
+
+assert.throws(
+  () =>
+    buildUserPrompt(
+      createValidPackage({
+        plannerContext: {
+          step: 1,
+          maxSteps: 25,
+          phase: "continuing",
+          progress: "failed with ABCDE1234F",
+          recentHistory: [],
+        },
+      })
+    ),
+  { message: /PAN pattern detected in sanitized package/i }
+);
+console.log("  ✔ Planner context cannot carry raw PII across the routing boundary");
 
 // 1.4 User Prompt with Last Step Result
 const promptWithLastStep = buildUserPrompt(pkg, {

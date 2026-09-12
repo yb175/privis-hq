@@ -59,6 +59,7 @@ export async function queryServer(
       goal: pkg.goal,
       sanitizedScreenshot: pkg.sanitizedScreenshot,
       sanitizedContext: pkg.sanitizedContext,
+      plannerContext: pkg.plannerContext,
       redacted: pkg.redacted,
       // Preference only — the server decides with its own keys.
       model: options?.model,

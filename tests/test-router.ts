@@ -945,7 +945,21 @@ const mockServerFetch: typeof fetch = async (input, init) => {
   } as Response;
 };
 
-const serverAction = await queryServer(pkg, {
+const plannerPkg = {
+  ...pkg,
+  plannerContext: {
+    step: 2,
+    maxSteps: 25,
+    phase: "continuing" as const,
+    progress: "1 completed action(s); 0 failed action(s); current page state was freshly captured",
+    lastStep: {
+      action: { type: "click" as const, target: { css: "#search" } },
+      result: { ok: true },
+    },
+    recentHistory: [],
+  },
+};
+const serverAction = await queryServer(plannerPkg, {
   serverUrl: "http://my-agent-server:9000",
   model: "gemini",
   fetchFn: mockServerFetch,
@@ -956,6 +970,8 @@ assert.ok(serverReq !== null);
 assert.strictEqual(serverReq.url, "http://my-agent-server:9000/plan");
 assert.strictEqual(serverReq.body.model, "gemini");
 assert.strictEqual(serverReq.body.redacted, true);
+assert.strictEqual(serverReq.body.plannerContext.step, 2);
+assert.strictEqual(serverReq.body.plannerContext.lastStep.result.ok, true);
 // The client must NEVER transmit LLM keys
 assert.ok(!("openaiApiKey" in serverReq.body));
 assert.ok(!("geminiApiKey" in serverReq.body));
