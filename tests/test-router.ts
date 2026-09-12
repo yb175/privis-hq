@@ -14,6 +14,12 @@ import {
 import { queryOpenAI, buildPrompt } from "../remote-agent/client-openai.js";
 import { queryGemini } from "../remote-agent/client-gemini.js";
 import { routeAgentRequest, assertSanitizedPackage } from "../remote-agent/router.js";
+import {
+  dataUrlToBytes,
+  digest,
+  manifestDigest,
+  POLICY_VERSION,
+} from "../privacy/sanitizer/redaction-gate.js";
 
 console.log("=== Running CBA-2 Model Router Test Suite (chatgpt vs Gemini) ===");
 
@@ -158,6 +164,25 @@ delete (globalThis as any).chrome;
 console.log("\n[2] OpenAI-compatible client tests");
 
 const pkg = createValidSanitizedPackage();
+// Phase 01: /plan and queryServer now verify the redaction receipt over the
+// actual screenshot bytes. Give the fixture the receipt the gate would have
+// stamped — same digests the real seal→encode path produces.
+const pkgManifest = pkg.redactionManifest ?? {
+  counts: {},
+  redactedFraction: 0,
+  overRedactedFraction: 0,
+  policyVersion: POLICY_VERSION,
+};
+pkg.redactionManifest = {
+  ...pkgManifest,
+  policyVersion: POLICY_VERSION,
+  receipt: {
+    algo: "SHA-256",
+    hash: await digest(dataUrlToBytes(pkg.sanitizedScreenshot)),
+    manifestHash: await manifestDigest(pkgManifest),
+    sealedAt: Date.now(),
+  },
+};
 
 // Prompt builder check
 const promptText = buildPrompt(pkg);

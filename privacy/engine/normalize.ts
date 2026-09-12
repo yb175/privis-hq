@@ -51,6 +51,15 @@ export const VALID_CATEGORIES: ReadonlySet<SensitiveCategory> = new Set([
   "NAME",
   "FACE",
   "PASSWORD",
+  // Phase 01 checksum-backed identifier classes (SIH26171 lexical layer).
+  "CARD",
+  "IFSC",
+  "GSTIN",
+  "UPI",
+  "ACCOUNT",
+  "DOB",
+  "PASSPORT",
+  "LICENCE",
 ]);
 
 /**

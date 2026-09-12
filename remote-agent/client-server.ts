@@ -3,10 +3,14 @@
 // sanitized package to the operator's Hono server (remote-agent/server.ts),
 // which owns the API keys and picks the actual model brain.
 
-import type { SanitizedPackage } from "../types/index.js";
+import type { RedactionManifest, SanitizedPackage } from "../types/index.js";
 import { type AgentAction, parseAgentAction } from "./types.js";
 import type { ModelChoice, ModelSettings } from "../shared/settings.js";
 import { assertSanitizedPackage } from "./router.js";
+import { verifyReceipt } from "./receipt.js";
+
+/** Transport budget: a hung operator server must not hang the session. */
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export interface ServerOptions {
   serverUrl?: string;
@@ -47,6 +51,18 @@ export async function queryServer(
   // leave the device.
   assertSanitizedPackage(pkg);
 
+  // Receipt check BEFORE the fetch (Phase 01, SIH26171 worker/receipt.ts port):
+  // recompute SHA-256 over the screenshot bytes and the manifest digest, and
+  // compare both against the gate's receipt. A mismatch — a tampered payload,
+  // a stale manifest, a package that never went through the gate — fails the
+  // step here; no bytes leave the device.
+  const receipt = await verifyReceipt(pkg.sanitizedScreenshot, pkg.redactionManifest);
+  if (!receipt.ok) {
+    throw new Error(
+      `Redaction receipt verification failed (${receipt.reason}): refusing to transmit`
+    );
+  }
+
   const response = await fetchClient(`${serverUrl}/plan`, {
     method: "POST",
     headers: {
@@ -59,10 +75,12 @@ export async function queryServer(
       goal: pkg.goal,
       sanitizedScreenshot: pkg.sanitizedScreenshot,
       sanitizedContext: pkg.sanitizedContext,
+      redactionManifest: pkg.redactionManifest,
       redacted: pkg.redacted,
       // Preference only — the server decides with its own keys.
       model: options?.model,
     }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!response.ok) {

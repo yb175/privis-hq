@@ -20,7 +20,9 @@
 // ./capture.ts, the HUD feed in ./hud.ts, and outbound-context/audit-log
 // construction in ./outbound.ts. The fail-closed pipeline order pinned by
 // tests/ stays here: capturePackage → runVisionPath → applyPlaceholders →
-// redactVisual → decide → queryServer.
+// sealAndRedact (the encoding gate) → decide → local-intent → queryServer.
+// Nothing crosses the wire before the gate allows AND the redaction receipt
+// verifies.
 
 import type {
   Action,
@@ -30,7 +32,7 @@ import type {
   StepResult,
 } from "../types/index.js";
 import { applyPlaceholders, resetPlaceholderTokens } from "../privacy/sanitizer/structural-redact.js";
-import { redactVisual } from "../privacy/sanitizer/visual-redact.js";
+import { sealAndRedact } from "../privacy/sanitizer/redaction-gate.js";
 import { decide } from "../privacy/policy-gate/policy-gate.js";
 import { loadModelSettings } from "../shared/settings.js";
 import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-server.js";
@@ -38,6 +40,8 @@ import { agentActionToExecutorActions } from "../executor/agent-action.js";
 import { applyActions } from "../executor/local-executor.js";
 import { navigateTab } from "../executor/navigate.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
+import { tokeniseGoal } from "./goal-tokenize.js";
+import { tryLocalIntent } from "./local-intent.js";
 import {
   notifySessionUpdate,
   runSessionLoop,
@@ -130,9 +134,12 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     detections: pkg.detections,
   });
 
-  // Sanitizer: structural placeholders + in-memory visual redaction.
+  // Sanitizer: structural placeholders + the one-way encoding gate. Phase 01:
+  // redaction and PNG encoding happen ONLY inside redaction-gate.ts
+  // (seal → encode), which also stamps the receipt every outbound boundary
+  // verifies. The raw screenshot buffer is closed before seal returns.
   const { sanitized, map } = applyPlaceholders(pkg.elements, pkg.detections);
-  const sanitizedScreenshot = await redactVisual(
+  const { sanitizedScreenshot, manifest } = await sealAndRedact(
     pkg.dataUrl,
     pkg.detections,
     pkg.browserState.viewport
@@ -163,18 +170,21 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     session.error = gate.reason;
     notifySessionUpdate(session, gate);
 
-    // CBA-11: Log blocked step to transparency audit store with response: null
+    // CBA-11: Log blocked step to transparency audit store with response: null.
+    // The goal is TOKENISED before it enters any log (Phase 01: the raw
+    // sentence — which may itself contain an Aadhaar number — is device-only).
     const settings = await loadModelSettings();
     const refusedPkg = buildOutboundPackage(
-      goal,
+      tokeniseGoal(goal).goal,
       stripLabels(sanitized),
       sanitizedScreenshot,
-      pkg.browserState
+      pkg.browserState,
+      manifest
     );
     await logStepExchange({
       sessionId: session.sessionId,
       tabIdHint: tabId,
-      goal,
+      goal: tokeniseGoal(goal).goal,
       step: session.history.length + 1,
       model: settings.model,
       request: refusedPkg,
@@ -199,15 +209,16 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       // CBA-11: Log rejected step to transparency audit store
       const settings = await loadModelSettings();
       const refusedPkg = buildOutboundPackage(
-        goal,
+        tokeniseGoal(goal).goal,
         stripLabels(sanitized),
         sanitizedScreenshot,
-        pkg.browserState
+        pkg.browserState,
+        manifest
       );
       await logStepExchange({
         sessionId: session.sessionId,
         tabIdHint: tabId,
-        goal,
+        goal: tokeniseGoal(goal).goal,
         step: session.history.length + 1,
         model: settings.model,
         request: refusedPkg,
@@ -222,12 +233,46 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     notifySessionUpdate(session, gate);
   }
 
+  // Tier 0 (Phase 01): a simple single-intent goal ("type leo in first",
+  // "click the submit button") is answered by the deterministic parser —
+  // zero network calls, so the sentence and the value never leave the device.
+  // First step only: a recapture loop must never re-fire a click, and a field
+  // that is already filled falls through. Anything uncertain falls through to
+  // the remote planner unchanged.
+  if (session.history.length === 0) {
+    const local = tryLocalIntent(goal, sanitized);
+    if (local.handled && local.actions.length > 0) {
+      const results = await applyActions(tabId, local.actions);
+      const first = local.actions[0];
+      const localAction: AgentAction =
+        first.type === "click"
+          ? { type: "click", target: { css: first.target } }
+          : { type: "type", target: { css: first.target }, placeholder: "LOCAL_1" };
+      session.history.push({
+        step: 1,
+        url: pkg.browserState.url,
+        action: localAction,
+        result: results[0] ?? { ok: true },
+        timestamp: Date.now(),
+      });
+      session.step = session.history.length;
+      broadcastHudStep(6, { actions: local.actions, results });
+      notifySessionUpdate(session, gate);
+      await waitForTabSettled(tabId);
+      return { decision: "allow", reason: "tier-0 local intent", actions: results };
+    }
+  }
+
   // Remote Agent: only the sanitized package crosses the wire — never the raw
   // dataUrl, never the element_id -> real value map. applyPlaceholders swaps
   // only `text`, so strip the user-controlled `label` (accessible label /
   // placeholder / title) to keep any raw value out of the remote context.
+  // Phase 01: the GOAL itself is tokenised (checksummed identifiers become
+  // placeholder tokens before the sentence leaves), and the package carries
+  // the redaction manifest + receipt that queryServer verifies pre-flight.
   // Privacy-first: NO LLM keys on this device — the package goes to the
   // operator's remote-agent server, which holds the keys and picks the brain.
+  const outboundGoal = tokeniseGoal(goal).goal;
   const remoteElements = stripLabels(sanitized);
   const settings = await loadModelSettings();
   session.outboundPayload = buildOutboundPayload(
@@ -239,10 +284,11 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   notifySessionUpdate(session, gate);
 
   const outboundPkg = buildOutboundPackage(
-    goal,
+    outboundGoal,
     remoteElements,
     sanitizedScreenshot,
-    pkg.browserState
+    pkg.browserState,
+    manifest
   );
 
   let agentAction: AgentAction;
@@ -261,7 +307,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     await logStepExchange({
       sessionId: session.sessionId,
       tabIdHint: tabId,
-      goal,
+      goal: outboundGoal,
       step: session.history.length + 1,
       model: settings.model,
       request: outboundPkg,
@@ -277,7 +323,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   await logStepExchange({
     sessionId: session.sessionId,
     tabIdHint: tabId,
-    goal,
+    goal: outboundGoal,
     step: session.history.length + 1,
     model: settings.model,
     request: outboundPkg,

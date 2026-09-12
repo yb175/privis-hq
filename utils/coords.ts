@@ -81,3 +81,120 @@ export function scaledClampedRect(
   if (w <= 0 || h <= 0) return null;
   return { x, y, w, h };
 }
+
+// ── Box geometry (Phase 01, SIH26171 shared/coords.ts port) ─────────────────
+// Object-form boxes for the redaction gate's merge/policy machinery. The
+// tuple BoundingBox stays the wire contract; these operate on it via box().
+
+/** Object-form box, CSS px. Gate/merge use this shape. */
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export type { Viewport } from "../types/index.js";
+
+/** Tuple BoundingBox -> object Box. */
+export function box(bbox: readonly number[]): Box {
+  return { x: bbox[0], y: bbox[1], w: bbox[2], h: bbox[3] };
+}
+
+/** IoU of two object boxes. Mirrors fuse.ts's tuple iou. */
+export function iouBoxes(a: Box, b: Box): number {
+  const x1 = Math.max(a.x, b.x);
+  const y1 = Math.max(a.y, b.y);
+  const x2 = Math.min(a.x + a.w, b.x + b.w);
+  const y2 = Math.min(a.y + a.h, b.y + b.h);
+  const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  const union = a.w * a.h + b.w * b.h - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+/** Total area of a union of boxes, overlapping regions counted once. */
+export function unionArea(boxes: readonly Box[]): number {
+  if (boxes.length === 0) return 0;
+  if (boxes.length === 1) return boxes[0].w * boxes[0].h;
+  // ponytail: O(n²) sweep; exact and fine at page scale (≤ hundreds of boxes).
+  const events: Array<{ x: number; type: 1 | -1; i: number }> = [];
+  boxes.forEach((b, i) => {
+    events.push({ x: b.x, type: 1, i }, { x: b.x + b.w, type: -1, i });
+  });
+  events.sort((a, b) => a.x - b.x || b.type - a.type);
+  let area = 0;
+  let prevX = 0;
+  const active = new Set<number>();
+  for (let k = 0; k < events.length; k++) {
+    const e = events[k]!;
+    if (active.size > 0 && e.x > prevX) {
+      // Merge active y-intervals.
+      const spans = [...active]
+        .map((i) => {
+          const b = boxes[i]!;
+          return [b.y, b.y + b.h] as [number, number];
+        })
+        .sort((p, q) => p[0] - q[0]);
+      let covered = 0;
+      let curY = -Infinity;
+      for (const [y0, y1] of spans) {
+        if (y0 > curY) {
+          covered += y1 - y0;
+          curY = y1;
+        } else if (y1 > curY) {
+          covered += y1 - curY;
+          curY = y1;
+        }
+      }
+      area += covered * (e.x - prevX);
+    }
+    if (e.type === 1) active.add(e.i);
+    else active.delete(e.i);
+    prevX = e.x;
+  }
+  return area;
+}
+
+/** Area of `boxes` not covered by `cover`. */
+export function areaOutside(boxes: readonly Box[], cover: readonly Box[]): number {
+  // ponytail: pairwise clipping; O(n·m), exact, fine at page scale.
+  let area = 0;
+  for (const boxA of boxes) {
+    let pieces: Box[] = [boxA];
+    for (const boxB of cover) {
+      const next: Box[] = [];
+      for (const p of pieces) {
+        const x1 = Math.max(p.x, boxB.x);
+        const y1 = Math.max(p.y, boxB.y);
+        const x2 = Math.min(p.x + p.w, boxB.x + boxB.w);
+        const y2 = Math.min(p.y + p.h, boxB.y + boxB.h);
+        if (x1 < x2 && y1 < y2) {
+          // Split p into the covered rect plus up to 4 uncovered remainders.
+          if (p.y < y1) next.push({ x: p.x, y: p.y, w: p.w, h: y1 - p.y });
+          if (y2 < p.y + p.h) next.push({ x: p.x, y: y2, w: p.w, h: p.y + p.h - y2 });
+          if (p.x < x1) next.push({ x: p.x, y: y1, w: x1 - p.x, h: y2 - y1 });
+          if (x2 < p.x + p.w) next.push({ x: x2, y: y1, w: p.x + p.w - x2, h: y2 - y1 });
+        } else {
+          next.push(p);
+        }
+      }
+      pieces = next;
+    }
+    for (const p of pieces) area += p.w * p.h;
+  }
+  return area;
+}
+
+/** Grow a box by fixed padding on every side. */
+export function padBox(b: Box, px: number): Box {
+  return { x: b.x - px, y: b.y - px, w: b.w + px * 2, h: b.h + px * 2 };
+}
+
+/** Clamp a box into the viewport; returns null when nothing remains. */
+export function clampToViewport(b: Box, viewport: { w: number; h: number }): Box | null {
+  const x = Math.max(0, b.x);
+  const y = Math.max(0, b.y);
+  const w = Math.min(b.x + b.w, viewport.w) - x;
+  const h = Math.min(b.y + b.h, viewport.h) - y;
+  return w > 0 && h > 0 ? { x, y, w, h } : null;
+}

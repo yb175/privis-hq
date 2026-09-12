@@ -21,6 +21,7 @@ import {
   extractElements,
   resolveGeneratedElement,
 } from "../utils/dom-extractor.js";
+import { formatValue } from "../executor/format-value.js";
 import { isPrivisMessage } from "../utils/messaging.js";
 
 /**
@@ -59,8 +60,12 @@ export function resolveTarget(target: string): HTMLElement | null {
   return null;
 }
 
-// Stable per-category placeholder tokens produced by the Sanitizer (EMAIL_1, PAN_1, ...).
-const PLACEHOLDER_RE = /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME)_\d+$/;
+// Stable per-category placeholder tokens produced by the Sanitizer (EMAIL_1,
+// PAN_1, ...). Phase 01: extended to the new identifier classes (CARD, IFSC,
+// GSTIN, UPI, ACCOUNT, DOB, PASSPORT, LICENCE) — kept in sync with
+// SensitiveCategory in types/index.ts.
+const PLACEHOLDER_RE =
+  /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME|CARD|IFSC|GSTIN|UPI|ACCOUNT|DOB|PASSPORT|LICENCE)_\d+$/;
 
 /**
  * Executes an action on the page DOM, substituting placeholders with real local values.
@@ -93,7 +98,19 @@ export async function executeAction(action: Action): Promise<ActionResult> {
         return { ok: false, error: `Cannot type into non-form element: ${action.target}` };
       }
       const field = el as HTMLInputElement;
-      field.value = value;
+      // Phase 01 (SIH26171 content/format.ts port): shape the value to what
+      // the FIELD will accept — e.g. DD-MM-YYYY from "24th jan 2000" — read
+      // from the element's own placeholder/title/pattern/maxlength hints.
+      // Without this, a page whose validator rejects the shape throws the
+      // value away and the step silently no-ops.
+      const shaped = formatValue(value, {
+        inputType: field.type,
+        placeholder: field.placeholder || undefined,
+        title: field.title || undefined,
+        pattern: field.getAttribute("pattern") || undefined,
+        maxLength: field.maxLength > 0 ? field.maxLength : undefined,
+      });
+      field.value = shaped.text;
       field.dispatchEvent(new Event("input", { bubbles: true }));
       field.dispatchEvent(new Event("change", { bubbles: true }));
       return { ok: true };

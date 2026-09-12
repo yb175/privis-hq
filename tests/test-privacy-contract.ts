@@ -31,7 +31,7 @@ import {
   applyPlaceholders,
   resetPlaceholderTokens,
 } from "../privacy/sanitizer/structural-redact.js";
-import { redactVisual } from "../privacy/sanitizer/visual-redact.js";
+import { redactVisual } from "../privacy/sanitizer/redaction-gate.js";
 import { scaledClampedRect } from "../utils/coords.js";
 import { assertSanitizedPackage } from "../remote-agent/assert.js";
 import { queryOpenAI } from "../remote-agent/client-openai.js";
