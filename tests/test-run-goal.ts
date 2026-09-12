@@ -70,7 +70,7 @@ const pages: Record<string, FakePage> = {
     elements: [
       el("name", "input", "Asha Rao", { label: "Full Name", role: "textbox" }),
       el("email", "input", "asha.rao@example.in", { type: "email", role: "textbox" }),
-      el("pan", "input", "ABCDE1234F", { role: "textbox" }),
+      el("pan", "input", "ABCPE1234F", { role: "textbox" }),
       el("phone", "input", "+91 98765 43210", { type: "tel", role: "textbox" }),
       el("salary", "input", "\u20B912,00,000", { label: "Salary", role: "textbox" }),
       el("password", "input", "demo-pass-123", { type: "password", role: "textbox" }),

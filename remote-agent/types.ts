@@ -193,8 +193,25 @@ export function validateAgentAction(
     return { ok: false, error: "Missing or invalid 'type' property in action" };
   }
 
+  // Phase 01 (SIH26171 validators port): strict-field rejection. An action
+  // carrying a key outside its schema is rejected even when the known keys
+  // are valid — an unexpected `notes`/`rawValue`/`metadata` field is how an
+  // exfiltrated value rides a valid-looking plan back into the device.
+  const strictKeys = (allowed: string[]): { ok: false; error: string } | undefined => {
+    const extra = Object.keys(obj).filter((k) => !allowed.includes(k));
+    if (extra.length > 0) {
+      return {
+        ok: false,
+        error: `Unknown field(s) on '${obj.type}' action: ${extra.join(", ")}. Allowed: ${allowed.join(", ")}`,
+      };
+    }
+    return undefined;
+  };
+
   switch (obj.type) {
     case "navigate": {
+      const bad = strictKeys(["type", "url"]);
+      if (bad) return bad;
       if (typeof obj.url !== "string" || obj.url.trim().length === 0) {
         return { ok: false, error: "'navigate' action requires a non-empty 'url' string" };
       }
@@ -208,6 +225,8 @@ export function validateAgentAction(
     }
 
     case "click": {
+      const bad = strictKeys(["type", "target"]);
+      if (bad) return bad;
       if (!isTarget(obj.target)) {
         return {
           ok: false,
@@ -218,6 +237,8 @@ export function validateAgentAction(
     }
 
     case "type": {
+      // Raw-field check first: its message names the exfil vector and is
+      // pinned by tests; strictKeys catches any other unknown field after.
       for (const rawKey of ["value", "text", "input", "val", "content"]) {
         if (rawKey in obj) {
           return {
@@ -226,6 +247,8 @@ export function validateAgentAction(
           };
         }
       }
+      const bad = strictKeys(["type", "target", "placeholder"]);
+      if (bad) return bad;
       if (!isTarget(obj.target)) {
         return {
           ok: false,
@@ -267,6 +290,8 @@ export function validateAgentAction(
     }
 
     case "scroll": {
+      const bad = strictKeys(["type", "dy"]);
+      if (bad) return bad;
       if (typeof obj.dy !== "number" || !Number.isFinite(obj.dy)) {
         return { ok: false, error: "'scroll' action requires a finite number 'dy'" };
       }
@@ -274,6 +299,8 @@ export function validateAgentAction(
     }
 
     case "done": {
+      const bad = strictKeys(["type", "reason"]);
+      if (bad) return bad;
       if (typeof obj.reason !== "string" || obj.reason.trim().length === 0) {
         return { ok: false, error: "'done' action requires a non-empty 'reason' string" };
       }
@@ -281,6 +308,8 @@ export function validateAgentAction(
     }
 
     case "ask_human": {
+      const bad = strictKeys(["type", "reason"]);
+      if (bad) return bad;
       if (typeof obj.reason !== "string" || obj.reason.trim().length === 0) {
         return { ok: false, error: "'ask_human' action requires a non-empty 'reason' string" };
       }

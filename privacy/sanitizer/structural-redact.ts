@@ -29,34 +29,16 @@
 
 import type { Detection, ElementMeta } from "../../types/index.js";
 import { normalizeDetections, PrivacyError } from "../engine/normalize.js";
+import {
+  placeholderAllocator,
+  resetPlaceholderTokens,
+} from "./placeholders.js";
 
 // Session-stable tokens: the same real value always maps to the same placeholder
-// (user@x.com is EMAIL_1 every step), and counters start per category.
-// Reset per session via resetPlaceholderTokens(); values stay in memory only.
-const tokenByValue = new Map<string, string>();
-const nextIndex: Record<string, number> = {};
-
-function tokenFor(category: Detection["category"], value: string): string {
-  const key = `${category}\u0000${value}`;
-  let token = tokenByValue.get(key);
-  if (!token) {
-    const n = (nextIndex[category] = (nextIndex[category] ?? 0) + 1);
-    token = `${category}_${n}`;
-    tokenByValue.set(key, token);
-  }
-  return token;
-}
-
-/**
- * Clears the placeholder→value mapping and category counters. Called at
- * session start so real values are retained only for the minimum lifetime
- * the multi-step session semantics require — never for the service-worker
- * lifetime.
- */
-export function resetPlaceholderTokens(): void {
-  tokenByValue.clear();
-  for (const k of Object.keys(nextIndex)) delete nextIndex[k];
-}
+// (user@x.com is EMAIL_1 every step), and counters start per category. Allocation
+// lives in placeholders.ts (PlaceholderAllocator — Phase 01, SIH26171 port); this
+// module re-exports resetPlaceholderTokens() for its existing callers.
+export { resetPlaceholderTokens };
 
 /**
  * Replaces sensitive values with stable placeholders and builds local mapping.
@@ -90,13 +72,14 @@ export function applyPlaceholders(
     if (d && text) {
       if (d.category === "PASSWORD") {
         // Password value is never extracted; redacted by input type, no placeholder.
+        // The allocator would refuse it anyway (placeholders.ts NO_VALUE).
         out = { ...el, text: "" };
       } else if (d.category === "FACE") {
         // Face is redacted as pixels only; never placeholder-swapped or text-blanked.
         out = el;
       } else {
         map[el.element_id] = el.text; // real value stays local, never sent to remote
-        out = { ...el, text: tokenFor(d.category, el.text) };
+        out = { ...el, text: placeholderAllocator().allocate(d.category, el.text) };
       }
     }
     sanitized.push(out);

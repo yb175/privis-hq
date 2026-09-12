@@ -21,6 +21,7 @@ import type {
   BrowserState,
   ElementMeta,
   GateRecord,
+  RedactionManifest,
   SanitizedPackage,
   TransparencyEntry,
 } from "../types/index.js";
@@ -46,12 +47,16 @@ export function buildOutboundPackage(
   goal: string,
   elements: ElementMeta[],
   sanitizedScreenshot: string,
-  browserState: BrowserState
+  browserState: BrowserState,
+  redactionManifest?: RedactionManifest
 ): SanitizedPackage {
   return {
     goal,
     sanitizedScreenshot,
     sanitizedContext: { elements, browserState },
+    // Phase 01: the gate's receipt travels with the package; every outbound
+    // boundary (queryServer, operator server) recomputes both digests.
+    ...(redactionManifest ? { redactionManifest } : {}),
     redacted: true, // sanitizer provenance: structural + visual redaction applied upstream
   };
 }

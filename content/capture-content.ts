@@ -21,6 +21,7 @@ import {
   extractElements,
   resolveGeneratedElement,
 } from "../utils/dom-extractor.js";
+import { formatValue } from "../executor/format-value.js";
 import { isPrivisMessage } from "../utils/messaging.js";
 
 /**
@@ -59,21 +60,67 @@ export function resolveTarget(target: string): HTMLElement | null {
   return null;
 }
 
-// Stable per-category placeholder tokens produced by the Sanitizer (EMAIL_1, PAN_1, ...).
-const PLACEHOLDER_RE = /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME)_\d+$/;
+// Stable per-category placeholder tokens produced by the Sanitizer (EMAIL_1,
+// PAN_1, ...). Phase 01: extended to the new identifier classes (CARD, IFSC,
+// GSTIN, UPI, ACCOUNT, DOB, PASSPORT, LICENCE) — kept in sync with
+// SensitiveCategory in types/index.ts.
+const PLACEHOLDER_RE =
+  /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME|CARD|IFSC|GSTIN|UPI|ACCOUNT|DOB|PASSPORT|LICENCE)_\d+$/;
 
 /**
  * Executes an action on the page DOM, substituting placeholders with real local values.
  * @param action The requested action (click, type, etc.)
  */
 export async function executeAction(action: Action): Promise<ActionResult> {
+  // Global scroll without target
+  if (action.type === "scroll" && !action.target) {
+    if (typeof window !== "undefined") {
+      window.scrollBy({ top: (action as any).dy ?? 300, behavior: "smooth" });
+      return { ok: true };
+    }
+  }
+
   const el = resolveTarget(action.target);
   if (!el) return { ok: false, error: `Target not found: ${action.target}` };
 
   switch (action.type) {
     case "click":
+      // Scroll element into view before click if possible
+      if (typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ block: "center", inline: "nearest" });
+      }
       el.click();
       return { ok: true };
+
+    case "scroll":
+      if (typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ block: "center", inline: "nearest" });
+        return { ok: true };
+      }
+      return { ok: false, error: "scrollIntoView unavailable on target" };
+
+    case "select": {
+      const val = action.value ?? "";
+      if (el.tagName.toLowerCase() === "select") {
+        const selectEl = el as HTMLSelectElement;
+        let matched = false;
+        for (let i = 0; i < selectEl.options.length; i++) {
+          const opt = selectEl.options[i]!;
+          if (opt.value === val || opt.text.trim().toLowerCase() === val.trim().toLowerCase()) {
+            selectEl.selectedIndex = i;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched && selectEl.options.length > 0) {
+          selectEl.value = val;
+        }
+        selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+        selectEl.dispatchEvent(new Event("input", { bubbles: true }));
+        return { ok: true };
+      }
+      return { ok: false, error: `Cannot select on non-select element: ${action.target}` };
+    }
 
     case "type": {
       let value = action.value ?? "";
@@ -89,11 +136,39 @@ export async function executeAction(action: Action): Promise<ActionResult> {
           return { ok: false, error: `Missing local value for placeholder: ${value}` };
         }
       }
+
+      // Checkbox / Radio toggle
+      if (el.tagName.toLowerCase() === "input") {
+        const inputEl = el as HTMLInputElement;
+        if (inputEl.type === "checkbox" || inputEl.type === "radio") {
+          inputEl.checked = value !== "false" && value !== "0";
+          inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+          inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+          return { ok: true };
+        }
+      }
+
+      // Contenteditable elements
+      if (el.hasAttribute("contenteditable") && el.getAttribute("contenteditable") !== "false") {
+        el.textContent = value;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        return { ok: true };
+      }
+
       if (!("value" in el)) {
         return { ok: false, error: `Cannot type into non-form element: ${action.target}` };
       }
-      const field = el as HTMLInputElement;
-      field.value = value;
+      const field = el as HTMLInputElement | HTMLTextAreaElement;
+      // Shape the value to what the FIELD will accept
+      const shaped = formatValue(value, {
+        inputType: (field as any).type,
+        placeholder: (field as any).placeholder || undefined,
+        title: field.title || undefined,
+        pattern: field.getAttribute("pattern") || undefined,
+        maxLength: (field as any).maxLength > 0 ? (field as any).maxLength : undefined,
+      });
+      field.value = shaped.text;
       field.dispatchEvent(new Event("input", { bubbles: true }));
       field.dispatchEvent(new Event("change", { bubbles: true }));
       return { ok: true };

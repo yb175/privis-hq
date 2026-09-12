@@ -55,8 +55,10 @@ Remote Agent → Local Executor
 ```
 npm run typecheck
 npm run build
-npm test        # 16 suites incl. vision, face, face-pipeline, privacy
-                # boundary, privacy contract
+npm test        # 27 suites incl. vision, face, face-pipeline, privacy
+                # boundary, privacy contract, validators, lexical,
+                # placeholders, gate, vault, geometry, ocr-regions,
+                # text-chunks, format-value, goal-tokenize, local-intent
 ```
 
 Python parity gate (separate toolchain, separate venv — these are assert-based
@@ -85,8 +87,11 @@ redactVisual → decide → queryServer`.
 
 Round 2 planning reviewed an external parallel implementation of the same
 problem statement (tiered local-first redaction ladder, offscreen ONNX host,
-placeholder allocator, synthetic eval corpus). It carries **no license**, so
-only design ideas were considered — **no code, assets, or text was copied**,
-and none may be. Findings that influenced Round 2 planning only: keep the
-offscreen inference host pattern we already use; treat a labeled synthetic
-eval corpus as the acceptance bar for the document pipeline phases.
+placeholder allocator, synthetic eval corpus). The repository author (PravAl2028/SIH26171) has since granted explicit
+permission to reuse the code. Phase 01 ports the approved modules with a
+`PROVENANCE:` header on every file (validators, lexical detector, placeholder
+allocator, gate, receipt, vault, format, OCR-region and chunk seams); logic
+is preserved, PRIVIS adaptations are noted in each header. Design ideas that
+predate the grant are recorded below for history: keep the offscreen
+inference host pattern we already use; treat a labeled synthetic eval corpus
+as the acceptance bar for the document pipeline phases.
