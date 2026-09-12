@@ -10,6 +10,7 @@ import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import type { SanitizedPackage } from "../types/index.js";
 import { routeAgentRequest } from "./router.js";
+import { assertSanitizedPackage } from "./assert.js";
 import { redactPii } from "./guard.js";
 import { verifyReceipt } from "./receipt.js";
 import { loadModelSettings } from "../shared/settings.js";
@@ -114,6 +115,9 @@ export function createAgentApp() {
           `redacted=${pkg.redacted} elements=${pkg.sanitizedContext?.elements?.length ?? 0} ` +
           `screenshotChars=${pkg.sanitizedScreenshot?.length ?? 0}`
       );
+
+      // Strict boundary check: refuse raw fields, unstamped packages, or PII leakage
+      assertSanitizedPackage(pkg);
 
       // Phase 01: server-side receipt verification (SIH26171 worker-side
       // check, ported). The client verifies before transmitting; this is the

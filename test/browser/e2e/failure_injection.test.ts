@@ -45,12 +45,12 @@ for (const entry of matrix) {
     // Set environment variable so the system can detect the injection point
     const env = { ...process.env, FAIL_INJECTION_ID: entry.id };
     // Execute the standard session E2E test suite
-    execSync('npm run test:session-e2e', { stdio: 'inherit', env, cwd: process.cwd() });
+    execSync('npm run test:session-e2e', { stdio: ['ignore', 'pipe', 'pipe'], env, cwd: process.cwd() });
     // If we reach here, test passed – likely no failure observed
     logResult(entry, 'PASS (no failure triggered)', true, true, 'Not needed');
   } catch (err) {
     // Capture error output
-    const output = (err as any).stdout?.toString() || (err as any).message;
+    const output = (err as any).stdout?.toString() || (err as any).stderr?.toString() || (err as any).message;
     // Determine if UI or session recovered by simple heuristics (placeholder)
     const recoveredUI = output.includes('UI recovered') || output.includes('error handled');
     const recoveredSession = output.includes('session resumed') || output.includes('session recovered');

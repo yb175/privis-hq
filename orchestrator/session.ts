@@ -102,13 +102,14 @@ export function sanitizeHumanReply(
 
   const nonSecretWords = /^(?:entered|submitted|done|typed|provided|ready|ok|continue|confirmed|filled|here|now)$/i;
 
-  // Check if reply contains a password, OTP, PIN, or secret credential
+  // Check if reply contains a password, OTP, PIN, token, API key, or secret credential
   const passwordMatch = trimmed.match(/(?:password|passwd|pwd|passphrase)\s*(?:is|was|[:=])\s*([^\s,;]+)/i) ??
     trimmed.match(/(?:password|passwd|pwd|passphrase)\s+([^\s,;]+)/i);
   const otpMatch = trimmed.match(
     /(?:otp|one[- ]?time[- ]?(?:password|code|pin)|2fa|mfa|verification code|security code)\s*(?:is|was|[:=])?\s*([0-9a-zA-Z]{4,10})/i
   );
   const pinMatch = trimmed.match(/(?:pin|cvv|cvc|secret)\s*(?:is|was|[:=])\s*([^\s,;]+)/i);
+  const tokenMatch = trimmed.match(/(?:api[_-]?key|token|bearer|access[_-]?token|auth[_-]?token|secret[_-]?key)\s*(?:is|was|[:=])\s*([^\s,;]+)/i);
   const bareOtpMatch = /^[0-9]{4,8}$/.test(trimmed) ? trimmed : null;
 
   let secretValue: string | undefined = undefined;
@@ -116,19 +117,22 @@ export function sanitizeHumanReply(
 
   if (passwordMatch && passwordMatch[1] && !nonSecretWords.test(passwordMatch[1])) {
     secretValue = passwordMatch[1];
-    sanitized = sanitized.replace(passwordMatch[1], "[SECRET_CREDENTIAL]");
+    sanitized = sanitized.replaceAll(passwordMatch[1], "[SECRET_CREDENTIAL]");
   } else if (otpMatch && otpMatch[1] && !nonSecretWords.test(otpMatch[1])) {
     secretValue = otpMatch[1];
-    sanitized = sanitized.replace(otpMatch[1], "[OTP_CREDENTIAL]");
+    sanitized = sanitized.replaceAll(otpMatch[1], "[OTP_CREDENTIAL]");
   } else if (pinMatch && pinMatch[1] && !nonSecretWords.test(pinMatch[1])) {
     secretValue = pinMatch[1];
-    sanitized = sanitized.replace(pinMatch[1], "[SECRET_PIN]");
+    sanitized = sanitized.replaceAll(pinMatch[1], "[SECRET_PIN]");
+  } else if (tokenMatch && tokenMatch[1] && !nonSecretWords.test(tokenMatch[1])) {
+    secretValue = tokenMatch[1];
+    sanitized = sanitized.replaceAll(tokenMatch[1], "[SECRET_CREDENTIAL]");
   } else if (bareOtpMatch) {
     secretValue = bareOtpMatch;
     sanitized = "[OTP_CREDENTIAL]";
   } else if (
     session?.lastAction?.type === "ask_human" &&
-    /password|otp|pin|credential|secret|login/i.test((session.lastAction as any).reason ?? "") &&
+    /password|otp|pin|credential|secret|login|token/i.test((session.lastAction as any).reason ?? "") &&
     !nonSecretWords.test(trimmed)
   ) {
     secretValue = trimmed;

@@ -31,10 +31,14 @@ const realSanitizedContext = JSON.parse(
 ) as SanitizedContext;
 
 function createValidPackage(overrides?: Partial<SanitizedPackage>): SanitizedPackage {
+  const ctx = JSON.parse(JSON.stringify(realSanitizedContext));
+  if (ctx.elements) {
+    ctx.elements = ctx.elements.map((el: any) => ({ ...el, label: null }));
+  }
   return {
     goal: "Verify employee PAN and reimbursement details",
     sanitizedScreenshot: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-    sanitizedContext: JSON.parse(JSON.stringify(realSanitizedContext)),
+    sanitizedContext: ctx,
     redactionManifest: {
       counts: { PAN: 1 },
       redactedFraction: 0.05,
@@ -102,21 +106,16 @@ assert.ok(userPrompt.includes('text="PAN_1"'));
 assert.ok(!userPrompt.includes("ABCDE1234F"), "Prompt must NEVER contain raw PAN");
 console.log("  ✔ User prompt accurately formats goal, state, placeholders, and elements");
 
-// 1.3b Label metadata must NEVER leak into the prompt (labels can carry raw
-// page/user data the PII regexes cannot catch — names, passwords, etc.; the
-// sanitizer only swaps `text`). Regression guard: if a change reintroduces
-// labels into the element summary, this fails. (Regex-detectable values like
-// raw PANs in labels are separately refused by the boundary assert.)
+// 1.3b Label metadata must NEVER reach the remote agent — labels must be stripped
+// before outbound transmission. buildUserPrompt asserts the boundary and rejects them.
 const labelLeakPkg = createValidPackage();
 labelLeakPkg.sanitizedContext.elements[1].label = "Squadron Leader Priya Sharma";
 labelLeakPkg.sanitizedContext.elements[0].label = "default_password_is_Hunter2Secret";
-const labelLeakPrompt = buildUserPrompt(labelLeakPkg);
-assert.ok(
-  !labelLeakPrompt.includes("Priya Sharma"),
-  "Element label values must never reach the model prompt"
+assert.throws(
+  () => buildUserPrompt(labelLeakPkg),
+  { message: /labels must be stripped before outbound transmission/i }
 );
-assert.ok(!labelLeakPrompt.includes("Hunter2Secret"), "Label-carried secrets must never reach the model prompt");
-console.log("  ✔ Raw data injected into element labels never leaks into the prompt");
+console.log("  ✔ Raw data injected into element labels is rejected before reaching the prompt");
 
 // 1.3c Last-step result errors are PII-redacted before entering the prompt
 const leakyLastStepPrompt = buildUserPrompt(pkg, {

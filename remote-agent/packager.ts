@@ -33,11 +33,20 @@ export function buildSystemPrompt(): string {
   return SYSTEM_PROMPT;
 }
 
+import { PLACEHOLDER_TOKEN_REGEX } from "./types.js";
+
 /**
- * Extracts all valid placeholder tokens present in the sanitized context.
+ * Extracts all valid placeholder tokens present in the sanitized context and goal.
  */
-export function extractPlaceholderAllowlist(context: SanitizedContext): Set<string> {
-  return getPlaceholderAllowlistFromContext(context);
+export function extractPlaceholderAllowlist(context: SanitizedContext, goal?: string): Set<string> {
+  const allowlist = getPlaceholderAllowlistFromContext(context);
+  if (goal) {
+    const goalTokens = goal.match(new RegExp(PLACEHOLDER_TOKEN_REGEX.source, "g"));
+    if (goalTokens) {
+      for (const t of goalTokens) allowlist.add(t);
+    }
+  }
+  return allowlist;
 }
 
 /**
@@ -94,7 +103,7 @@ export function buildUserPrompt(
     })
     .join("\n");
 
-  const allowlist = extractPlaceholderAllowlist(pkg.sanitizedContext);
+  const allowlist = extractPlaceholderAllowlist(pkg.sanitizedContext, pkg.goal);
   const allowlistSummary =
     allowlist.size > 0 ? Array.from(allowlist).join(", ") : "(none)";
 
@@ -128,7 +137,7 @@ export function packagePrompt(
   pkg: SanitizedPackage,
   options?: { lastStepResult?: LastStepResult }
 ): PackagedPrompt {
-  const allowlist = extractPlaceholderAllowlist(pkg.sanitizedContext);
+  const allowlist = extractPlaceholderAllowlist(pkg.sanitizedContext, pkg.goal);
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(pkg, options?.lastStepResult); // also re-asserts the boundary
 

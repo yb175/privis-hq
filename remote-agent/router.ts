@@ -117,7 +117,7 @@ async function resolveSearchToNavigate(
   if (piiMatch || /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_\d+$/.test(query.trim()) || /\b(?:my\s+account|my\s+password|user\s+name|ssn|dob|card|address|phone|email|pan|aadhaar|secret|otp|pin|credentials)\b/i.test(query)) {
     return {
       type: "ask_human",
-      reason: `Refusing to search for "${query}": query contains sensitive personal data or placeholder reference`,
+      reason: "Refusing to search: query contains sensitive personal data or placeholder reference",
     };
   }
 
@@ -125,7 +125,7 @@ async function resolveSearchToNavigate(
   if (!apiKey) {
     return {
       type: "ask_human",
-      reason: `Could not search for "${query}": SERPAPI_KEY not configured on the agent server`,
+      reason: "Could not execute search: SERPAPI_KEY not configured on the agent server",
     };
   }
   const endpoint = new URL("https://serpapi.com/search.json");

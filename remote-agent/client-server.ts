@@ -21,6 +21,8 @@ export interface ServerOptions {
   fetchFn?: typeof fetch;
 }
 
+import { securePostJson } from "./transport.js";
+
 /**
  * Sends the sanitized package to the remote agent server and returns a
  * validated AgentAction. No API keys required on the client.
@@ -29,10 +31,6 @@ export async function queryServer(
   pkg: SanitizedPackage,
   options?: ServerOptions
 ): Promise<AgentAction> {
-  // An explicitly empty URL means the user cleared Settings without one — fail
-  // with a fix-it hint rather than silently calling localhost. Undefined still
-  // falls back to the local default (serverOptionsFromSettings always supplies
-  // a value, so this only triggers when Settings has a blank Server URL).
   const configured = options?.serverUrl;
   if (typeof configured === "string" && configured.trim() === "") {
     throw new Error(
@@ -40,60 +38,31 @@ export async function queryServer(
     );
   }
   const serverUrl = (configured || "http://localhost:3201").replace(/\/+$/, "");
-  const fetchClient = options?.fetchFn || (typeof fetch !== "undefined" ? fetch : null);
 
-  if (!fetchClient) {
-    throw new Error("No fetch implementation available for server client");
-  }
-
-  // Privacy check BEFORE anything crosses to the operator server. The server
-  // re-checks (defense in depth), but a malformed/leaked package must never
-  // leave the device.
-  assertSanitizedPackage(pkg);
-
-  // Receipt check BEFORE the fetch (Phase 01, SIH26171 worker/receipt.ts port):
-  // recompute SHA-256 over the screenshot bytes and the manifest digest, and
-  // compare both against the gate's receipt. A mismatch — a tampered payload,
-  // a stale manifest, a package that never went through the gate — fails the
-  // step here; no bytes leave the device.
-  const receipt = await verifyReceipt(pkg.sanitizedScreenshot, pkg.redactionManifest);
-  if (!receipt.ok) {
-    throw new Error(
-      `Redaction receipt verification failed (${receipt.reason}): refusing to transmit`
-    );
-  }
-
-  const response = await fetchClient(`${serverUrl}/plan`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.authToken
-        ? { Authorization: `Bearer ${options.authToken}` }
-        : {}),
-    },
-    body: JSON.stringify({
-      goal: pkg.goal,
-      sanitizedScreenshot: pkg.sanitizedScreenshot,
-      sanitizedContext: pkg.sanitizedContext,
-      redactionManifest: pkg.redactionManifest,
-      redacted: pkg.redacted,
-      // Preference only — the server decides with its own keys.
-      model: options?.model,
-    }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text().catch(() => "");
-    throw new Error(`Remote agent server error (${response.status}): ${errBody || response.statusText}`);
-  }
-
-  const data = (await response.json()) as {
-    ok?: boolean;
-    action?: unknown;
-    error?: string;
+  const headers: Record<string, string> = {
+    ...(options?.authToken ? { Authorization: `Bearer ${options.authToken}` } : {}),
   };
 
+  const outboundPkg: SanitizedPackage = {
+    ...pkg,
+    ...(options?.model ? { model: options.model } as any : {}),
+  };
+
+  const resp = await securePostJson<{ ok?: boolean; action?: unknown; error?: string }>(
+    `${serverUrl}/plan`,
+    outboundPkg,
+    headers,
+    {
+      timeoutMs: REQUEST_TIMEOUT_MS,
+      fetchFn: options?.fetchFn,
+    }
+  );
+
+  if (!resp.ok || !resp.data) {
+    throw new Error(resp.error || `Remote agent server error (${resp.status})`);
+  }
+
+  const data = resp.data;
   if (!data.ok || data.action === undefined) {
     throw new Error(data.error || "Remote agent server returned no action");
   }

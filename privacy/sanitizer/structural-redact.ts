@@ -58,11 +58,16 @@ export { resetPlaceholderTokens };
  */
 export function applyPlaceholders(
   elements: ElementMeta[],
-  detections: Detection[]
+  detections: Detection[],
+  sessionId?: string
 ): { sanitized: ElementMeta[]; map: Record<string, string> } {
   const valid = normalizeDetections(detections);
   const byId = new Map<string, Detection>();
-  for (const d of valid) byId.set(d.element_id, d);
+  for (const d of valid) {
+    if (d.category !== "FACE" || !byId.has(d.element_id)) {
+      byId.set(d.element_id, d);
+    }
+  }
 
   const elementIds = new Set(elements.map((el) => el.element_id));
 
@@ -83,7 +88,7 @@ export function applyPlaceholders(
         out = el;
       } else {
         map[el.element_id] = el.text; // real value stays local, never sent to remote
-        out = { ...el, text: placeholderAllocator().allocate(d.category, el.text) };
+        out = { ...el, text: placeholderAllocator(sessionId).allocate(d.category, el.text) };
       }
     }
     sanitized.push(out);
@@ -93,7 +98,10 @@ export function applyPlaceholders(
   // must have a backing element whose value was considered above. FACE is the
   // documented exception (vision synthetic ids — pixel-only redaction).
   for (const d of valid) {
-    if (d.category !== "FACE" && !elementIds.has(d.element_id)) {
+    if (
+      !(d.category === "FACE" && d.source === "vision" && d.element_id.startsWith("vision-")) &&
+      !elementIds.has(d.element_id)
+    ) {
       throw new PrivacyError(
         "INVALID_DETECTION",
         `detection "${d.element_id}" (${d.category}, ${d.source}) has no backing element — stale capture or detector contract violation`

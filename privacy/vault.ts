@@ -108,7 +108,7 @@ export async function readSecret(
   if (!entry) return { ok: false, reason: "not-stored" };
 
   const now = (deps.now ?? Date.now)();
-  if (entry.expiresAt && now > entry.expiresAt) {
+  if (entry.expiresAt !== undefined && now >= entry.expiresAt) {
     // Automatically purge expired secret
     await deps.store.remove(vaultKeyOf(key));
     return { ok: false, reason: "expired" };

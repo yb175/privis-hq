@@ -100,23 +100,23 @@ export function paintRedactions(
     assertValidBBox(detection.bbox, `visual redaction (${detection.category})`);
   }
 
-  // Masks first: overlapping/adjacent same-class masks were merged by the
+  // FACE pixelation per box first (geometry pinned by the privacy-boundary tests).
+  for (const detection of detections) {
+    if (detection.category !== "FACE") continue;
+    const rect = scaledClampedRect(detection.bbox, scaleX, scaleY, canvas.width, canvas.height);
+    if (!rect) continue;
+    pixelate(ctx, canvas, rect.x, rect.y, rect.w, rect.h);
+  }
+
+  // Masks second: overlapping/adjacent same-class masks were merged by the
   // gate into single ops; paint them as one fillRect each.
+  // Painting masks AFTER face pixelation guarantees that blackout regions
+  // overlapping a face are completely black and never partially rewritten.
   for (const op of mergedMaskOps(detections)) {
     const rect = scaledClampedRect([op.box.x, op.box.y, op.box.w, op.box.h], scaleX, scaleY, canvas.width, canvas.height);
     if (!rect) continue;
     ctx.fillStyle = "#000";
     ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-  }
-
-  // FACE pixelation per box (geometry pinned by the privacy-boundary tests).
-  for (const detection of detections) {
-    if (detection.category !== "FACE") continue;
-    const rect = scaledClampedRect(detection.bbox, scaleX, scaleY, canvas.width, canvas.height);
-    if (!rect) continue;
-    // Pixelate from the already-redacted canvas, not the raw image, so any
-    // blackout drawn underneath (overlapping PII) isn't repainted raw.
-    pixelate(ctx, canvas, rect.x, rect.y, rect.w, rect.h);
   }
 }
 

@@ -65,7 +65,7 @@ export function buildOutboundPackage(
   return {
     goal,
     sanitizedScreenshot,
-    sanitizedContext: { elements, browserState },
+    sanitizedContext: { elements: stripLabels(elements), browserState },
     redactionManifest: manifest,
     redacted: true,
   };

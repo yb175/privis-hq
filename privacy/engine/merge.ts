@@ -32,7 +32,7 @@ export function deduplicateDetections(detections: readonly Detection[]): Detecti
   const byKey = new Map<string, Detection>();
 
   for (const det of normalized) {
-    const key = `${det.element_id}\u0000${det.category}\u0000${det.bbox.join(",")}`;
+    const key = `${det.element_id}\u0000${det.category}`;
     const existing = byKey.get(key);
 
     if (!existing) {
@@ -77,27 +77,31 @@ export function mergeOverlappingDetections(
   detections: readonly Detection[],
   iouThreshold = 0.5
 ): Detection[] {
-  const deduped = deduplicateDetections(detections);
-  if (deduped.length <= 1) return deduped;
+  const normalized = normalizeDetections(detections);
+  if (normalized.length <= 1) return [...normalized];
 
   const result: Detection[] = [];
   const mergedIndices = new Set<number>();
 
-  for (let i = 0; i < deduped.length; i++) {
+  for (let i = 0; i < normalized.length; i++) {
     if (mergedIndices.has(i)) continue;
-    let current = { ...deduped[i]! };
+    let current = { ...normalized[i]! };
 
-    for (let j = i + 1; j < deduped.length; j++) {
+    for (let j = i + 1; j < normalized.length; j++) {
       if (mergedIndices.has(j)) continue;
-      const other = deduped[j]!;
+      const other = normalized[j]!;
 
       // Distinct categories NEVER merge
       if (current.category !== other.category) continue;
 
-      // Only merge if on the same element or both are synthetic vision elements
+      // Only merge if on the same element or both are synthetic vision elements (source === "vision")
       // Detections on distinct DOM elements must NEVER drop one element's ID (structural sanitization relies on element IDs)
       const isSameElement = current.element_id === other.element_id;
-      const isBothVision = current.element_id.startsWith("vision-") && other.element_id.startsWith("vision-");
+      const isBothVision =
+        current.source === "vision" &&
+        other.source === "vision" &&
+        current.element_id.startsWith("vision-") &&
+        other.element_id.startsWith("vision-");
       if (!isSameElement && !isBothVision) continue;
 
       const overlap = iou(current.bbox, other.bbox);
@@ -126,7 +130,7 @@ export function mergeOverlappingDetections(
     result.push(current);
   }
 
-  return sortDetections(result);
+  return deduplicateDetections(result);
 }
 
 function isContained(inner: readonly number[], outer: readonly number[]): boolean {

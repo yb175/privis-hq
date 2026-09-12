@@ -147,6 +147,26 @@ export function agentActionToExecutorActions(
       }
       return [];
     }
+    case "select": {
+      const t = action.target;
+      const css =
+        typeof t?.css === "string" && t.css.trim()
+          ? t.css.trim()
+          : (() => {
+              const el = resolveTarget(t, sanitized);
+              return el ? selectorFor(el) : undefined;
+            })();
+      if (!css) {
+        return [
+          {
+            type: "select",
+            target: `__unresolved:${JSON.stringify(t ?? null)}`,
+            value: action.value,
+          },
+        ];
+      }
+      return [{ type: "select", target: css, value: action.value }];
+    }
     default:
       return [];
   }

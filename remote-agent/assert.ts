@@ -44,22 +44,35 @@ export function assertSanitizedPackage(pkg: SanitizedPackage): void {
     throw new Error("Refusing to route: missing browserState in sanitizedContext");
   }
 
-  // Provenance gate: only the on-device Sanitizer path stamps redacted: true
-  // after structural + visual redaction. A textual PII regex scan cannot verify
-  // that PIXELS were redacted, so an unmarked package is never dispatched.
-  // ponytail: flag set by trusted in-device code; a fully compromised extension
-  // process could forge it — real mitigation is the sanitizer being the only
-  // package builder, per CONTRACT.md data flow.
   if (pkg.redacted !== true) {
     throw new Error(
       "Refusing to route: package not marked as sanitized (redacted flag missing) — run the Sanitizer first"
     );
   }
 
+  // Boundary: labels must be stripped because only text is structurally redacted
+  for (const el of pkg.sanitizedContext.elements) {
+    if (el.label !== null && el.label !== undefined) {
+      throw new Error(
+        "Refusing to route: element contains non-null label field — labels must be stripped before outbound transmission"
+      );
+    }
+  }
+
+  // Check cryptographic receipt on redaction manifest if present
+  if (pkg.redactionManifest) {
+    if (!pkg.redactionManifest.receipt || typeof pkg.redactionManifest.receipt.hash !== "string" || pkg.redactionManifest.receipt.hash.trim().length === 0) {
+      throw new Error(
+        "Refusing to route: redactionManifest is missing valid cryptographic receipt hash"
+      );
+    }
+  }
+
   // Scan full serialized payload to ensure no raw PII leaks across the wire
   const serialized = JSON.stringify({
     goal: pkg.goal,
     sanitizedContext: pkg.sanitizedContext,
+    redactionManifest: pkg.redactionManifest,
   });
 
   for (const { name, re } of PII_PATTERNS) {

@@ -32,7 +32,7 @@ export interface VerificationReport {
   actions: Action[];
 }
 
-const ALLOWED_ACTION_TYPES = new Set(["click", "type", "select", "navigate", "submit", "wait", "finish", "ask_human"]);
+const ALLOWED_ACTION_TYPES = new Set(["click", "type", "select", "scroll", "navigate", "submit", "wait", "finish", "ask_human"]);
 const PLACEHOLDER_RE =
   /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME|CARD|IFSC|GSTIN|UPI|ACCOUNT|DOB|PASSPORT|LICENCE)_\d+$/;
 
@@ -132,8 +132,11 @@ export function verifyPlan(
           elementMap.has(action.target) ||
           (action.target.startsWith("#") && elementMap.has(action.target.slice(1))) ||
           Array.from(elementMap.values()).some((e) =>
-            action.target.includes(e.element_id) ||
-            (action.target.startsWith("__privis_generated:") && action.target.slice("__privis_generated:".length) === e.element_id)
+            action.target === e.element_id ||
+            action.target === `#${e.element_id}` ||
+            (action.target.startsWith("__privis_generated:") && action.target.slice("__privis_generated:".length) === e.element_id) ||
+            action.target.startsWith(`[data-privis-id="${e.element_id}"]`) ||
+            action.target.startsWith(`[data-agent-id="${e.element_id}"]`)
           );
         if (!targetMatches) {
           violations.push({
@@ -191,7 +194,12 @@ export function verifyPlan(
       }
 
       // Check for label echo (typing label text into the field)
-      const targetEl = elementMap.get(action.target) || Array.from(elementMap.values()).find(e => e.label && action.target.includes(e.element_id));
+      const targetEl =
+        elementMap.get(action.target) ||
+        (action.target.startsWith("#") ? elementMap.get(action.target.slice(1)) : undefined) ||
+        Array.from(elementMap.values()).find(
+          (e) => action.target === e.element_id || action.target === `#${e.element_id}`
+        );
       if (targetEl && targetEl.label) {
         const normLabel = targetEl.label.trim().toLowerCase();
         const normVal = val.trim().toLowerCase();

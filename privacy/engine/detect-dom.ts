@@ -83,6 +83,14 @@ function detectElement(
       const best = matches.reduce((a, b) => (b.confidence > a.confidence ? b : a));
       return { category: best.cls, confidence: best.confidence };
     }
+    if (label) {
+      const combined = `${label}: ${text}`;
+      const contextMatches = scanText(combined);
+      if (contextMatches.length > 0) {
+        const best = contextMatches.reduce((a, b) => (b.confidence > a.confidence ? b : a));
+        return { category: best.cls, confidence: best.confidence };
+      }
+    }
   }
 
   if (AMOUNT_TEXT_RE.test(text)) return { category: "AMOUNT", confidence: CONFIDENCE_HIT };

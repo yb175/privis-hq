@@ -103,7 +103,7 @@ export function isLuhnValid(digits: string): boolean {
 /** Issuer prefixes worth recognising, RuPay included -- this is an Indian deployment. */
 const CARD_PREFIXES: ReadonlyArray<{ issuer: string; re: RegExp; lengths: number[] }> = [
   { issuer: 'visa', re: /^4/, lengths: [13, 16, 19] },
-  { issuer: 'mastercard', re: /^(5[1-5]|2(2[2-9]|[3-6]\d|7[01]|720))/, lengths: [16] },
+  { issuer: 'mastercard', re: /^(5[1-5]|2(2(2[1-9]|[3-9]\d)|[3-6]\d{2}|7(?:[01]\d|20)))/, lengths: [16] },
   { issuer: 'amex', re: /^3[47]/, lengths: [15] },
   { issuer: 'rupay', re: /^(60|65|81|82|508)/, lengths: [16] },
   { issuer: 'discover', re: /^(6011|64[4-9]|65)/, lengths: [16, 19] },
@@ -132,7 +132,7 @@ export function isCardValid(value: string): boolean {
 // ── PAN ─────────────────────────────────────────────────────────────────────────
 
 /** Fourth character encodes the holder: P individual, C company, H HUF, F firm, ... */
-const PAN_ENTITY_TYPES = 'ABCFGHLJPTKE';
+const PAN_ENTITY_TYPES = 'ABCFGHLJPT';
 
 export function isPanValid(value: string): boolean {
   const v = value.toUpperCase();
@@ -329,7 +329,7 @@ export function isPincodeValid(value: string): boolean {
 
 /** Indian passport: a letter (not Q, X or Z), then seven digits, first non-zero. */
 export function isPassportValid(value: string): boolean {
-  return /^[A-PR-WY][1-9]\d\s?\d{4}[1-9]$/.test(value.toUpperCase().replace(/\s/g, ''));
+  return /^[A-PR-WY][1-9]\d\s?\d{4}\d$/.test(value.toUpperCase().replace(/\s/g, ''));
 }
 
 /** State code, RTO code, issue year, then a serial. */

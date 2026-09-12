@@ -69,6 +69,28 @@ const PLACEHOLDER_RE =
   /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME|CARD|IFSC|GSTIN|UPI|ACCOUNT|DOB|PASSPORT|LICENCE)_\d+$/;
 
 /**
+ * Verifies that an element is connected, visible, non-inert, and non-disabled.
+ */
+function checkInteractivity(el: HTMLElement): { ok: true } | { ok: false; error: string } {
+  if (!el.isConnected) {
+    return { ok: false, error: "Target element is disconnected from DOM" };
+  }
+  if (el.hasAttribute("disabled") || (el as any).disabled === true) {
+    return { ok: false, error: "Target element is disabled" };
+  }
+  if (el.hasAttribute("inert") || el.closest("[inert]")) {
+    return { ok: false, error: "Target element or ancestor is inert" };
+  }
+  if (typeof window !== "undefined" && typeof window.getComputedStyle === "function") {
+    const style = window.getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") {
+      return { ok: false, error: "Target element is hidden (display:none or visibility:hidden)" };
+    }
+  }
+  return { ok: true };
+}
+
+/**
  * Executes an action on the page DOM, substituting placeholders with real local values.
  * @param action The requested action (click, type, etc.)
  */
@@ -85,6 +107,9 @@ export function executeAction(action: Action): ActionResult {
 
   const el = resolveTarget(action.target ?? "");
   if (!el) return { ok: false, error: `Target not found: ${action.target ?? ""}` };
+
+  const interactivity = checkInteractivity(el);
+  if (!interactivity.ok) return interactivity;
 
   switch (action.type) {
     case "click":
@@ -115,8 +140,8 @@ export function executeAction(action: Action): ActionResult {
             break;
           }
         }
-        if (!matched && selectEl.options.length > 0) {
-          selectEl.value = val;
+        if (!matched) {
+          return { ok: false, error: `Option not found: ${val}` };
         }
         selectEl.dispatchEvent(new Event("change", { bubbles: true }));
         selectEl.dispatchEvent(new Event("input", { bubbles: true }));

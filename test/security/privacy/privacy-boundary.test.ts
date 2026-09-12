@@ -223,8 +223,8 @@ async function simulateStep(scenario: {
       policyVersion: "1.0",
       receipt: {
         algo: "SHA-256",
-        hash: "",
-        manifestHash: "",
+        hash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        manifestHash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         sealedAt: Date.now(),
       },
     },
@@ -521,7 +521,7 @@ async function main(): Promise<void> {
         ["applyPlaceholders", sw.indexOf("applyPlaceholders(pkg")],
         ["sealAndRedact (encoding gate)", sw.indexOf("await sealAndRedact(")],
         ["decide", sw.indexOf("decide({")],
-        ["tokeniseGoal", sw.indexOf("tokeniseGoal(goal).goal")],
+        ["tokeniseGoal", sw.indexOf("tokeniseGoal(")],
         ["queryServer (remote agent)", sw.indexOf("queryServer(")],
       ] as const;
       check("Order: capture -> vision -> placeholders -> gate -> policy -> tokenise -> remote",

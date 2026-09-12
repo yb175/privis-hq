@@ -39,6 +39,7 @@ export interface TierSelection {
   tier: ExecutionTier;
   reason: string;
   localIntent?: LocalIntentResult;
+  actions?: Action[];
 }
 
 export interface LocalModelOptions {
@@ -64,6 +65,7 @@ export function selectExecutionTier(
       tier: 0,
       reason: "tier-0-deterministic-match",
       localIntent: t0Result,
+      actions: t0Result.actions,
     };
   }
 
@@ -74,6 +76,7 @@ export function selectExecutionTier(
       return {
         tier: 1,
         reason: "tier-1-local-reasoning-planned",
+        actions: plan,
       };
     }
   }

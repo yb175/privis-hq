@@ -42,7 +42,7 @@ import { verifyPlan } from "../executor/verify-plan.js";
 import { navigateTab } from "../executor/navigate.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
 import { tokeniseGoal } from "./goal-tokenize.js";
-import { tryLocalIntent } from "./local-intent.js";
+import { selectExecutionTier } from "./local-model.js";
 import {
   notifySessionUpdate,
   runSessionLoop,
@@ -139,7 +139,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   // redaction and PNG encoding happen ONLY inside redaction-gate.ts
   // (seal → encode), which also stamps the receipt every outbound boundary
   // verifies. The raw screenshot buffer is closed before seal returns.
-  const { sanitized, map } = applyPlaceholders(pkg.elements, pkg.detections);
+  const { sanitized, map } = applyPlaceholders(pkg.elements, pkg.detections, session.sessionId);
   const { sanitizedScreenshot, manifest } = await sealAndRedact(
     pkg.dataUrl,
     pkg.detections,
@@ -176,7 +176,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     // sentence — which may itself contain an Aadhaar number — is device-only).
     const settings = await loadModelSettings();
     const refusedPkg = buildOutboundPackage(
-      tokeniseGoal(goal).goal,
+      tokeniseGoal(goal, session.sessionId).goal,
       stripLabels(sanitized),
       sanitizedScreenshot,
       pkg.browserState,
@@ -185,7 +185,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     await logStepExchange({
       sessionId: session.sessionId,
       tabIdHint: tabId,
-      goal: tokeniseGoal(goal).goal,
+      goal: tokeniseGoal(goal, session.sessionId).goal,
       step: session.history.length + 1,
       model: settings.model,
       request: refusedPkg,
@@ -210,7 +210,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       // CBA-11: Log rejected step to transparency audit store
       const settings = await loadModelSettings();
       const refusedPkg = buildOutboundPackage(
-        tokeniseGoal(goal).goal,
+        tokeniseGoal(goal, session.sessionId).goal,
         stripLabels(sanitized),
         sanitizedScreenshot,
         pkg.browserState,
@@ -219,7 +219,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       await logStepExchange({
         sessionId: session.sessionId,
         tabIdHint: tabId,
-        goal: tokeniseGoal(goal).goal,
+        goal: tokeniseGoal(goal, session.sessionId).goal,
         step: session.history.length + 1,
         model: settings.model,
         request: refusedPkg,
@@ -241,10 +241,10 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   // that is already filled falls through. Anything uncertain falls through to
   // the remote planner unchanged.
   if (session.history.length === 0) {
-    const local = tryLocalIntent(goal, sanitized);
-    if (local.handled && local.actions.length > 0) {
-      const results = await applyActions(tabId, local.actions);
-      const first = local.actions[0];
+    const tierSel = selectExecutionTier(goal, sanitized);
+    if (tierSel.tier === 0 && tierSel.actions && tierSel.actions.length > 0) {
+      const results = await applyActions(tabId, tierSel.actions);
+      const first = tierSel.actions[0];
       const localAction: AgentAction =
         first.type === "click"
           ? { type: "click", target: { css: first.target } }
@@ -257,7 +257,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
         timestamp: Date.now(),
       });
       session.step = session.history.length;
-      broadcastHudStep(6, { actions: local.actions, results });
+      broadcastHudStep(6, { actions: tierSel.actions, results });
       notifySessionUpdate(session, gate);
       await waitForTabSettled(tabId);
       return { decision: "allow", reason: "tier-0 local intent", actions: results };
@@ -273,7 +273,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   // the redaction manifest + receipt that queryServer verifies pre-flight.
   // Privacy-first: NO LLM keys on this device — the package goes to the
   // operator's remote-agent server, which holds the keys and picks the brain.
-  const tokenised = tokeniseGoal(goal);
+  const tokenised = tokeniseGoal(goal, session.sessionId);
   const outboundGoal = tokenised.goal;
   Object.assign(map, tokenised.tokenMap);
   const remoteElements = stripLabels(sanitized);

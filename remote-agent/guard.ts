@@ -134,13 +134,22 @@ function resolveAllowlist(options?: GuardOptions): Set<string> | null {
       ? options.allowlist
       : new Set(options.allowlist);
   }
+  const allowlist = new Set<string>();
   if (options.sanitizedPackage?.sanitizedContext) {
-    return getPlaceholderAllowlistFromContext(options.sanitizedPackage.sanitizedContext);
+    const ctxList = getPlaceholderAllowlistFromContext(options.sanitizedPackage.sanitizedContext);
+    for (const t of ctxList) allowlist.add(t);
+  }
+  if (options.sanitizedPackage?.goal) {
+    const goalTokens = options.sanitizedPackage.goal.match(new RegExp(PLACEHOLDER_TOKEN_REGEX.source, "g"));
+    if (goalTokens) {
+      for (const t of goalTokens) allowlist.add(t);
+    }
   }
   if (options.sanitizedContext) {
-    return getPlaceholderAllowlistFromContext(options.sanitizedContext);
+    const ctxList = getPlaceholderAllowlistFromContext(options.sanitizedContext);
+    for (const t of ctxList) allowlist.add(t);
   }
-  return null;
+  return allowlist.size > 0 ? allowlist : null;
 }
 
 /**
@@ -181,9 +190,9 @@ function validateActionWithGuard(
     return { ok: false, error: "Missing or invalid 'type' property in action" };
   }
 
-  // Check for raw values accidentally included in top-level action object
+  // Check for raw values accidentally included in top-level action object (except select.value)
   for (const rawKey of FORBIDDEN_RAW_KEYS) {
-    if (rawKey in obj) {
+    if (rawKey in obj && !(obj.type === "select" && rawKey === "value")) {
       return {
         ok: false,
         error: `Forbidden raw field '${rawKey}' present in action — must never send raw data`,
@@ -288,9 +297,16 @@ function validateActionWithGuard(
         }
 
         // Secret field check: goal phrases may NOT be typed into password/OTP/secret fields
+        const targetObj = obj.target as Target;
+        const targetStr = `${targetObj.css ?? ""} ${targetObj.name ?? ""}`.toLowerCase();
+        if (/password|otp|pin|cvv|secret|token/.test(targetStr)) {
+          return {
+            ok: false,
+            error: `Typing goal phrase into secret/password field is forbidden. Escalate to ask_human.`,
+          };
+        }
         if (pkg?.sanitizedContext?.elements) {
           const elements = pkg.sanitizedContext.elements;
-          const targetObj = obj.target as Target;
           const matchedEl = elements.find((e) => {
             if (targetObj.css) {
               if (targetObj.css === e.element_id || targetObj.css === `#${e.element_id}` || targetObj.css.includes(e.element_id)) return true;
@@ -329,6 +345,26 @@ function validateActionWithGuard(
           placeholder: trimmedPlaceholder,
         },
       };
+    }
+
+    case "select": {
+      if (!isTarget(obj.target)) {
+        return {
+          ok: false,
+          error: "'select' action requires a valid 'target' with css, role, name, or bbox",
+        };
+      }
+      if (typeof obj.value !== "string" || obj.value.trim().length === 0) {
+        return { ok: false, error: "'select' action requires a non-empty 'value' string" };
+      }
+      const piiMatch = findPiiInValue(obj.value);
+      if (piiMatch) {
+        return {
+          ok: false,
+          error: `Raw ${piiMatch} detected in select value`,
+        };
+      }
+      return { ok: true, action: { type: "select", target: obj.target as Target, value: obj.value.trim() } };
     }
 
     case "scroll": {

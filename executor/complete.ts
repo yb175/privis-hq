@@ -82,7 +82,7 @@ export function verifyActionCompletion(
       };
     }
 
-    if (norm(actual) === norm(expected) || (expected !== "" && (actual.includes(expected) || expected.includes(actual)))) {
+    if (norm(actual) === norm(expected)) {
       return { verdict: "VERIFIED_FILLED", ok: true };
     }
 
@@ -95,5 +95,20 @@ export function verifyActionCompletion(
     };
   }
 
-  return { verdict: "UNVERIFIABLE", ok: true };
+  if (action.type === "select") {
+    const expected = norm(action.value ?? "");
+    const actual = norm(postEl.text ?? "");
+    if (actual === expected || (expected && actual.includes(expected))) {
+      return { verdict: "VERIFIED_FILLED", ok: true };
+    }
+    return {
+      verdict: "VALUE_MISMATCH",
+      ok: false,
+      expectedValue: "[REDACTED]",
+      actualValue: "[REDACTED]",
+      detail: "Select element content does not match expected value",
+    };
+  }
+
+  return { verdict: "UNVERIFIABLE", ok: false, detail: `Action type '${action.type}' cannot be verified` };
 }

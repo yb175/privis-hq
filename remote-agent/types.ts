@@ -39,6 +39,12 @@ export interface SearchAction {
   query: string;
 }
 
+export interface SelectAction {
+  type: "select";
+  target: Target;
+  value: string;
+}
+
 export interface DoneAction {
   type: "done";
   reason: string;
@@ -55,6 +61,7 @@ export type AgentAction =
   | TypeAction
   | ScrollAction
   | SearchAction
+  | SelectAction
   | DoneAction
   | AskHumanAction;
 

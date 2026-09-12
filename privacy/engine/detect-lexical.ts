@@ -166,7 +166,7 @@ const PATTERNS: readonly Pattern[] = [
   {
     cls: "PASSPORT",
     labelCanDisqualify: true,
-    re: /\b[A-PR-WY][1-9]\d\s?\d{4}[1-9]\b/g,
+    re: /\b[A-PR-WY][1-9]\d\s?\d{4}\d\b/g,
     check: (text) =>
       isPassportValid(text) ? { reason: "passport-shape", confidence: 0.88 } : null,
   },

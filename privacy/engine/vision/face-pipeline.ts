@@ -121,10 +121,10 @@ async function runVisionPathViaOffscreen(opts: VisionPathOptions): Promise<Detec
     throw new Error("runVisionPath: invalid response from offscreen worker");
   }
   const result = response as { ok?: boolean; detections?: Detection[]; error?: string };
-  if (!result.ok) {
-    throw new Error(result.error || "runVisionPath: offscreen inference failed");
+  if (!result.ok || !Array.isArray(result.detections)) {
+    throw new Error(result.error || "runVisionPath: offscreen inference failed or returned invalid detections");
   }
-  return result.detections ?? [];
+  return result.detections;
 }
 
 async function runVisionPathLocal(opts: VisionPathOptions): Promise<Detection[]> {
@@ -136,12 +136,13 @@ async function runVisionPathLocal(opts: VisionPathOptions): Promise<Detection[]>
 
   // Inference. Throws on internal failure (fail-closed); [] = no faces.
   const visionDetections = await detector.detect(input);
+  const normalizedVision = normalizeDetections(visionDetections);
 
   // M4 fusion: screenshot-pixel bboxes -> CSS viewport coordinates.
   return fuseDetections(
     opts.elements,
     opts.domDetections,
-    visionDetections,
+    normalizedVision,
     { w: input.width, h: input.height },
     opts.viewport
   );

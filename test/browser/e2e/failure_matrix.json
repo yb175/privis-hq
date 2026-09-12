@@ -28,7 +28,7 @@
     "severity": "P0"
   },
   {
-    "id": "F005",
+    "id": "F030",
     "layer": "privacy_gate",
     "injection": "forge receipt",
     "expected": "Receipt verification fails and action is blocked",

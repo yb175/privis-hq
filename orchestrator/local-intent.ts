@@ -195,6 +195,17 @@ export function tryLocalIntent(goal: string, elements: ElementMeta[]): LocalInte
   if ("ambiguous" in outcome) return { handled: false, actions: [], reason: "target-ambiguous" };
   const el = outcome.resolved.el;
 
+  // Reject disabled, readonly, hidden, or zero-dimension controls
+  if (
+    (el as any).disabled ||
+    (el as any).readonly ||
+    (el as any).readOnly ||
+    el.type === "hidden" ||
+    (el.bbox && el.bbox[2] === 0 && el.bbox[3] === 0)
+  ) {
+    return { handled: false, actions: [], reason: "target-disabled-or-non-actionable" };
+  }
+
   if (intent.verb === "click") {
     const role = effectiveRole(el);
     const clickable =

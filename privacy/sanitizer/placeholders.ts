@@ -153,7 +153,7 @@ let defaultSessionId = "session";
 
 /** Clears placeholder state for a session, or all if omitted. */
 export function resetPlaceholderTokens(sessionId?: string): void {
-  if (sessionId) {
+  if (sessionId !== undefined) {
     allocatorsBySession.get(sessionId)?.clear();
     allocatorsBySession.delete(sessionId);
   } else {

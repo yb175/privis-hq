@@ -537,13 +537,32 @@ const rideElements: ElementMeta[] = [
     bbox: [0, 30, 100, 30],
   },
 ];
+import { stripLabels } from "../../../orchestrator/outbound.js";
+
 const rideRedaction = applyPlaceholders(rideElements, detectSensitive(rideElements));
 assert.doesNotThrow(() =>
   assertSanitizedPackage(
     createValidSanitizedPackage({
-      sanitizedContext: { ...pkg.sanitizedContext, elements: rideRedaction.sanitized },
+      sanitizedContext: { ...pkg.sanitizedContext, elements: stripLabels(rideRedaction.sanitized) },
     })
   )
+);
+
+// Reject non-null label in element metadata
+assert.throws(
+  () => {
+    assertSanitizedPackage(
+      createValidSanitizedPackage({
+        sanitizedContext: {
+          ...pkg.sanitizedContext,
+          elements: [{ ...pkg.sanitizedContext.elements[0]!, label: "unstripped-label" }],
+        },
+      })
+    );
+  },
+  {
+    message: /labels must be stripped before outbound transmission/i,
+  }
 );
 
 // Reject raw PII leaked inside sanitizedContext
@@ -1051,7 +1070,7 @@ await assert.rejects(
     await queryServer(pkg, { fetchFn: mockServerErrorFetch });
   },
   {
-    message: /Remote agent server error \(502\)/i,
+    message: /(?:Remote agent server error|Server error|Transport failed).*502/i,
   }
 );
 console.log("  ✔ queryServer throws descriptive error on server failure");

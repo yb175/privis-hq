@@ -170,9 +170,9 @@ export async function sealAndRedact(
 ): Promise<{ sanitizedScreenshot: string; manifest: RedactionManifest }> {
   const img = await decodeImage(dataUrl);
   const raw: SourceBitmap =
-    "close" in img && typeof img.close === "function"
+    "close" in img && typeof (img as any).close === "function"
       ? (img as ImageBitmap)
-      : { width: img.width, height: img.height, close: () => {} };
+      : Object.assign(img, { close: () => {} });
   const sealed = await seal(raw, detections, viewport, now);
   const encoded = await encode(sealed);
   return { sanitizedScreenshot: encoded.dataUrl, manifest: encoded.manifest };
