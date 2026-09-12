@@ -21,7 +21,7 @@ const cssEscape: (s: string) => string =
     : (s) =>
         s.replace(/^[0-9]|[^a-zA-Z0-9_-]/g, (ch) => `\\${ch.charCodeAt(0).toString(16).toUpperCase()} `);
 
-function selectorFor(el: ElementMeta): string {
+export function selectorFor(el: ElementMeta): string {
   return el.generated ? `__privis_generated:${el.element_id}` : `#${cssEscape(el.element_id)}`;
 }
 
@@ -35,7 +35,7 @@ function norm(s: string): string {
  * role the model actually sees in a11y trees (a bare <button> has no role
  * ATTRIBUTE, so a `role: "button"` target must still match it).
  */
-function effectiveRole(el: ElementMeta): string | null {
+export function effectiveRole(el: ElementMeta): string | null {
   if (el.role) return el.role;
   const t = el.tag.toLowerCase();
   if (t === "button" || (t === "input" && /^(submit|button|image)$/.test(el.type ?? "")))
@@ -52,7 +52,7 @@ function effectiveRole(el: ElementMeta): string | null {
  * otherwise match by role, then by name (button/link visible text), then by
  * bbox overlap.
  */
-function resolveTarget(
+export function resolveTarget(
   target: Target | undefined,
   sanitized: ElementMeta[]
 ): ElementMeta | undefined {
@@ -132,7 +132,7 @@ export function agentActionToExecutorActions(
             const el = resolveTarget(t, sanitized);
             return el ? selectorFor(el) : undefined;
           })();
-      const real = valueEl ? map[valueEl.element_id] : undefined;
+      const real = (valueEl ? map[valueEl.element_id] : undefined) ?? map[action.placeholder];
       if (css && real !== undefined) return [{ type: "type", target: css, value: real }];
       // Non-token placeholder: a literal phrase (e.g. a search query). The
       // SERVER's guard only allows goal substrings, but the server is not
@@ -140,11 +140,32 @@ export function agentActionToExecutorActions(
       // typing. Anything else stays a no-op so runStep escalates.
       if (css && goal) {
         const needle = action.placeholder.trim().toLowerCase();
-        if (needle && goal.toLowerCase().replace(/\s+/g, " ").includes(needle)) {
+        const isPlaceholderToken = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_\d+$/.test(action.placeholder.trim());
+        if (needle && !isPlaceholderToken && goal.toLowerCase().replace(/\s+/g, " ").includes(needle)) {
           return [{ type: "type", target: css, value: action.placeholder.trim() }];
         }
       }
       return [];
+    }
+    case "select": {
+      const t = action.target;
+      const css =
+        typeof t?.css === "string" && t.css.trim()
+          ? t.css.trim()
+          : (() => {
+              const el = resolveTarget(t, sanitized);
+              return el ? selectorFor(el) : undefined;
+            })();
+      if (!css) {
+        return [
+          {
+            type: "select",
+            target: `__unresolved:${JSON.stringify(t ?? null)}`,
+            value: action.value,
+          },
+        ];
+      }
+      return [{ type: "select", target: css, value: action.value }];
     }
     default:
       return [];

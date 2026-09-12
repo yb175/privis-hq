@@ -1,0 +1,402 @@
+[
+  {
+    "index": 1,
+    "id": "PRRT_kwDOUKdSVs6hx_Gb",
+    "path": "remote-agent/guard.ts",
+    "line": 294,
+    "severity": "P1",
+    "summary": "P1: When a literal goal phrase targets a password field through `bbox`, `role`, or CSS that does not contain its element ID, this check fails to identify the secret field and allows typing. Resolve every accepted target form against `elements`, or reject targets that cannot be resolved before allowing goal phrases.",
+    "fullComment": "P1: When a literal goal phrase targets a password field through `bbox`, `role`, or CSS that does not contain its element ID, this check fails to identify the secret field and allows typing. Resolve every accepted target form against `elements`, or reject targets that cannot be resolved before allowing goal phrases.",
+    "suggestion": null
+  },
+  {
+    "index": 2,
+    "id": "PRRT_kwDOUKdSVs6hx_Gc",
+    "path": "orchestrator/session.ts",
+    "line": 119,
+    "severity": "P1",
+    "summary": "P1: When a reply repeats a detected secret, `replace` redacts only its first occurrence, leaving the repeated credential in `safeText` and `session.goal`. Replace every occurrence for each credential branch before tokenization.",
+    "fullComment": "P1: When a reply repeats a detected secret, `replace` redacts only its first occurrence, leaving the repeated credential in `safeText` and `session.goal`. Replace every occurrence for each credential branch before tokenization.",
+    "suggestion": null
+  },
+  {
+    "index": 3,
+    "id": "PRRT_kwDOUKdSVs6hx_Ge",
+    "path": "privacy/engine/merge.ts",
+    "line": 100,
+    "severity": "P1",
+    "summary": "P1: When two DOM elements have IDs beginning with `vision-`, this condition treats them as synthetic vision boxes and drops one `element_id`. Require `source === \"vision\"` or an explicit synthetic marker before cross-element merging; otherwise `applyPlaceholders` can leave the dropped element's value unplaceholdered.",
+    "fullComment": "P1: When two DOM elements have IDs beginning with `vision-`, this condition treats them as synthetic vision boxes and drops one `element_id`. Require `source === \"vision\"` or an explicit synthetic marker before cross-element merging; otherwise `applyPlaceholders` can leave the dropped element's value unplaceholdered.",
+    "suggestion": null
+  },
+  {
+    "index": 4,
+    "id": "PRRT_kwDOUKdSVs6hx_Gi",
+    "path": "orchestrator/session.ts",
+    "line": 131,
+    "severity": "P1",
+    "summary": "P1: When a human reply contains an API key or access token, the credential patterns and fallback miss it, so the raw value enters `session.goal`. Cover these credential forms and their request contexts before appending the reply.",
+    "fullComment": "P1: When a human reply contains an API key or access token, the credential patterns and fallback miss it, so the raw value enters `session.goal`. Cover these credential forms and their request contexts before appending the reply.",
+    "suggestion": null
+  },
+  {
+    "index": 5,
+    "id": "PRRT_kwDOUKdSVs6hx_Gk",
+    "path": "remote-agent/router.ts",
+    "line": 120,
+    "severity": "P1",
+    "summary": "P1: When a search query contains a secret-like keyword but the value does not match a registered PII pattern, this fallback sends the entire sensitive query back in `ask_human.reason`. Return a fixed reason or redact the query before interpolating it.",
+    "fullComment": "P1: When a search query contains a secret-like keyword but the value does not match a registered PII pattern, this fallback sends the entire sensitive query back in `ask_human.reason`. Return a fixed reason or redact the query before interpolating it.\n\n\n\n```suggestion\n      reason: \"Refusing to search: query contains sensitive personal data or placeholder reference\",\n```",
+    "suggestion": "      reason: \"Refusing to search: query contains sensitive personal data or placeholder reference\","
+  },
+  {
+    "index": 6,
+    "id": "PRRT_kwDOUKdSVs6hx_Gx",
+    "path": "privacy/sanitizer/structural-redact.ts",
+    "line": 65,
+    "severity": "P1",
+    "summary": "P1: When a DOM finding and a vision FACE finding share an element ID, this assignment lets the later FACE overwrite the non-FACE finding. The FACE branch preserves text, so raw PII can remain in sanitized context; retain a non-FACE finding for each ID.",
+    "fullComment": "P1: When a DOM finding and a vision FACE finding share an element ID, this assignment lets the later FACE overwrite the non-FACE finding. The FACE branch preserves text, so raw PII can remain in sanitized context; retain a non-FACE finding for each ID.\n\n\n\n```suggestion\n  for (const d of valid) {\n    if (d.category !== \"FACE\" || !byId.has(d.element_id)) {\n      byId.set(d.element_id, d);\n    }\n  }\n```",
+    "suggestion": "  for (const d of valid) {\n    if (d.category !== \"FACE\" || !byId.has(d.element_id)) {\n      byId.set(d.element_id, d);\n    }\n  }"
+  },
+  {
+    "index": 7,
+    "id": "PRRT_kwDOUKdSVs6hx_G3",
+    "path": "privacy/sanitizer/redaction-gate.ts",
+    "line": 175,
+    "severity": "P1",
+    "summary": "P1: When `createImageBitmap` is unavailable, `sealAndRedact` passes a plain dimension-only wrapper to `drawImage`, so the fallback redaction path throws instead of producing an image. Keep the decoded `HTMLImageElement` as the draw source while adding the no-op `close` method.",
+    "fullComment": "P1: When `createImageBitmap` is unavailable, `sealAndRedact` passes a plain dimension-only wrapper to `drawImage`, so the fallback redaction path throws instead of producing an image. Keep the decoded `HTMLImageElement` as the draw source while adding the no-op `close` method.\n\n\n\n```suggestion\n: Object.assign(img, { close: () => {} });\n```",
+    "suggestion": ": Object.assign(img, { close: () => {} });"
+  },
+  {
+    "index": 8,
+    "id": "PRRT_kwDOUKdSVs6hx_G-",
+    "path": "content/interactivity.ts",
+    "line": 1,
+    "severity": "P1",
+    "summary": "P1: The extension never runs this validation: the production build does not bundle `content/interactivity.ts`, so disabled or hidden targets still reach `executeAction` without these checks. Wire `checkInteractivity` into the content executor path before actions are applied.",
+    "fullComment": "P1: The extension never runs this validation: the production build does not bundle `content/interactivity.ts`, so disabled or hidden targets still reach `executeAction` without these checks. Wire `checkInteractivity` into the content executor path before actions are applied.",
+    "suggestion": null
+  },
+  {
+    "index": 9,
+    "id": "PRRT_kwDOUKdSVs6hx_G_",
+    "path": "remote-agent/server.ts",
+    "line": 124,
+    "severity": "P1",
+    "summary": "P1: When `AGENT_AUTH_TOKEN` is unset, this check does not establish that the Sanitizer created the receipt because the caller controls both hashed inputs. A caller can therefore submit a raw-Pii screenshot with a forged matching receipt, and `routeAgentRequest` will forward it to the model; use a server-verifiable signature/attestation for the gate receipt or add a trusted screenshot-redaction check.",
+    "fullComment": "P1: When `AGENT_AUTH_TOKEN` is unset, this check does not establish that the Sanitizer created the receipt because the caller controls both hashed inputs. A caller can therefore submit a raw-Pii screenshot with a forged matching receipt, and `routeAgentRequest` will forward it to the model; use a server-verifiable signature/attestation for the gate receipt or add a trusted screenshot-redaction check.",
+    "suggestion": null
+  },
+  {
+    "index": 10,
+    "id": "PRRT_kwDOUKdSVs6hx_HA",
+    "path": "remote-agent/assert.ts",
+    "line": 53,
+    "severity": "P1",
+    "summary": "P1: When either provider client is called directly, `redacted: true` is accepted without a completed redaction receipt, so an unredacted or tampered screenshot can reach the provider. Verify `redactionManifest` with `verifyReceipt` on every provider dispatch, or route all provider calls through the receipt-checked path.",
+    "fullComment": "P1: When either provider client is called directly, `redacted: true` is accepted without a completed redaction receipt, so an unredacted or tampered screenshot can reach the provider. Verify `redactionManifest` with `verifyReceipt` on every provider dispatch, or route all provider calls through the receipt-checked path.",
+    "suggestion": null
+  },
+  {
+    "index": 11,
+    "id": "PRRT_kwDOUKdSVs6hx_HB",
+    "path": "privacy/engine/vision/face-pipeline.ts",
+    "line": 164,
+    "severity": "P1",
+    "summary": "P1: An unknown-category detector finding can be dropped before this validation, allowing a partial result to succeed instead of failing closed. Normalize detector output before fusion and reject missing/null offscreen `detections` rather than converting them to `[]`.",
+    "fullComment": "P1: An unknown-category detector finding can be dropped before this validation, allowing a partial result to succeed instead of failing closed. Normalize detector output before fusion and reject missing/null offscreen `detections` rather than converting them to `[]`.",
+    "suggestion": null
+  },
+  {
+    "index": 12,
+    "id": "PRRT_kwDOUKdSVs6hx_HD",
+    "path": "orchestrator/goal-tokenize.ts",
+    "line": 56,
+    "severity": "P1",
+    "summary": "P1: When the goal contains a sensitive value that is not already present on the page, the remote guard rejects the generated token because its allowlist contains only page-element placeholders. Include goal-generated tokens in the authorized placeholder contract while retaining their real-value mapping only on-device.",
+    "fullComment": "P1: When the goal contains a sensitive value that is not already present on the page, the remote guard rejects the generated token because its allowlist contains only page-element placeholders. Include goal-generated tokens in the authorized placeholder contract while retaining their real-value mapping only on-device.",
+    "suggestion": null
+  },
+  {
+    "index": 13,
+    "id": "PRRT_kwDOUKdSVs6hx_HF",
+    "path": "privacy/sanitizer/placeholders.ts",
+    "line": 169,
+    "severity": "P1",
+    "summary": "P1: When two tabs run concurrently or a session resumes, the fallback shares and globally resets placeholder state across sessions. This can renumber a token between steps, causing the planner’s type action to target a different current value or be rejected; thread the real session ID through every allocation and reset instead of relying on this shared fallback.",
+    "fullComment": "P1: When two tabs run concurrently or a session resumes, the fallback shares and globally resets placeholder state across sessions. This can renumber a token between steps, causing the planner’s type action to target a different current value or be rejected; thread the real session ID through every allocation and reset instead of relying on this shared fallback.",
+    "suggestion": null
+  },
+  {
+    "index": 14,
+    "id": "PRRT_kwDOUKdSVs6hx_HG",
+    "path": "executor/verify-plan.ts",
+    "line": 135,
+    "severity": "P1",
+    "summary": "P1: A selector is considered contextual when it merely contains an element ID as a substring, allowing targets such as `#not-email` for `email`. Match IDs exactly or resolve the selector against the sanitized element instead of using substring authorization.",
+    "fullComment": "P1: A selector is considered contextual when it merely contains an element ID as a substring, allowing targets such as `#not-email` for `email`. Match IDs exactly or resolve the selector against the sanitized element instead of using substring authorization.\n\n\n\n```suggestion\n            action.target === e.element_id ||\n```",
+    "suggestion": "            action.target === e.element_id ||"
+  },
+  {
+    "index": 15,
+    "id": "PRRT_kwDOUKdSVs6hx_HH",
+    "path": "privacy/sanitizer/visual-redact.ts",
+    "line": 119,
+    "severity": "P1",
+    "summary": "P1: When a FACE box overlaps a non-FACE box, this masks-first order lets FACE pixelation rewrite the blackout. Pixelate the face before applying masks, or reapply the masks after every face so blackout regions remain completely black.",
+    "fullComment": "P1: When a FACE box overlaps a non-FACE box, this masks-first order lets FACE pixelation rewrite the blackout. Pixelate the face before applying masks, or reapply the masks after every face so blackout regions remain completely black.",
+    "suggestion": null
+  },
+  {
+    "index": 16,
+    "id": "PRRT_kwDOUKdSVs6hx_HI",
+    "path": "privacy/sanitizer/structural-redact.ts",
+    "line": 86,
+    "severity": "P1",
+    "summary": "P1: When two tabs run concurrently, this call always uses the default allocator instead of the active session's allocator. One tab can reset another tab's state and change tokens during an active session; pass the session ID through `applyPlaceholders` and use `placeholderAllocator(sessionId)`.",
+    "fullComment": "P1: When two tabs run concurrently, this call always uses the default allocator instead of the active session's allocator. One tab can reset another tab's state and change tokens during an active session; pass the session ID through `applyPlaceholders` and use `placeholderAllocator(sessionId)`.",
+    "suggestion": null
+  },
+  {
+    "index": 17,
+    "id": "PRRT_kwDOUKdSVs6hx_HJ",
+    "path": "privacy/engine/detect-dom.ts",
+    "line": 81,
+    "severity": "P1",
+    "summary": "P1: When an account number or date of birth is in a normally labelled form control, `scanText(text)` cannot see the required context because the capture layer keeps the label in `el.label`. These values then receive no detection and remain unredacted; scan the label together with the value as context while still using only the value for the detected entity.",
+    "fullComment": "P1: When an account number or date of birth is in a normally labelled form control, `scanText(text)` cannot see the required context because the capture layer keeps the label in `el.label`. These values then receive no detection and remain unredacted; scan the label together with the value as context while still using only the value for the detected entity.",
+    "suggestion": null
+  },
+  {
+    "index": 18,
+    "id": "PRRT_kwDOUKdSVs6hx_HK",
+    "path": "remote-agent/assert.ts",
+    "line": 39,
+    "severity": "P1",
+    "summary": "P1: A package can pass this boundary with a non-null raw element label, allowing names and other unrecognized PII to reach the server. Require every sanitized element to have `label === null` before accepting the package.",
+    "fullComment": "P1: A package can pass this boundary with a non-null raw element label, allowing names and other unrecognized PII to reach the server. Require every sanitized element to have `label === null` before accepting the package.",
+    "suggestion": null
+  },
+  {
+    "index": 19,
+    "id": "PRRT_kwDOUKdSVs6hx_HL",
+    "path": "remote-agent/assert.ts",
+    "line": 63,
+    "severity": "P1",
+    "summary": "P1: The PII scan omits `redactionManifest`, even though the server client transmits it. Include every textual outbound field in the scan (at minimum `redactionManifest`) so malformed packages cannot bypass this boundary.",
+    "fullComment": "P1: The PII scan omits `redactionManifest`, even though the server client transmits it. Include every textual outbound field in the scan (at minimum `redactionManifest`) so malformed packages cannot bypass this boundary.\n\n\n\n```suggestion\nconst serialized = JSON.stringify({\n    goal: pkg.goal,\n    sanitizedContext: pkg.sanitizedContext,\n    redactionManifest: pkg.redactionManifest,\n  });\n```",
+    "suggestion": "const serialized = JSON.stringify({\n    goal: pkg.goal,\n    sanitizedContext: pkg.sanitizedContext,\n    redactionManifest: pkg.redactionManifest,\n  });"
+  },
+  {
+    "index": 20,
+    "id": "PRRT_kwDOUKdSVs6hx_HO",
+    "path": "orchestrator/outbound.ts",
+    "line": 68,
+    "severity": "P1",
+    "summary": "P1: When a caller passes elements with labels, `buildOutboundPackage` forwards those labels to the remote package. Strip labels inside this package builder so the wire boundary cannot be bypassed by callers that omit `stripLabels`.",
+    "fullComment": "P1: When a caller passes elements with labels, `buildOutboundPackage` forwards those labels to the remote package. Strip labels inside this package builder so the wire boundary cannot be bypassed by callers that omit `stripLabels`.",
+    "suggestion": null
+  },
+  {
+    "index": 21,
+    "id": "PRRT_kwDOUKdSVs6hx_HP",
+    "path": "privacy/engine/validators.ts",
+    "line": 332,
+    "severity": "P1",
+    "summary": "P1: Passport serials are seven digits and may end in `0`, but the final `[1-9]` rejects them; the lexical pattern repeats this restriction. Allow zero in the final digit.",
+    "fullComment": "P1: Passport serials are seven digits and may end in `0`, but the final `[1-9]` rejects them; the lexical pattern repeats this restriction. Allow zero in the final digit.\n\n\n\n```suggestion\n  return /^[A-PR-WY][1-9]\\d\\s?\\d{4}\\d$/.test(value.toUpperCase().replace(/\\s/g, ''));\n```",
+    "suggestion": "  return /^[A-PR-WY][1-9]\\d\\s?\\d{4}\\d$/.test(value.toUpperCase().replace(/\\s/g, ''));"
+  },
+  {
+    "index": 22,
+    "id": "PRRT_kwDOUKdSVs6hx_HS",
+    "path": "orchestrator/local-model.ts",
+    "line": 72,
+    "severity": "P2",
+    "summary": "P2: When `localPlanner` returns actions, `selectExecutionTier` discards them before returning. Add the planned actions to `TierSelection` and return them here so Tier 1 can execute the plan instead of losing it.",
+    "fullComment": "P2: When `localPlanner` returns actions, `selectExecutionTier` discards them before returning. Add the planned actions to `TierSelection` and return them here so Tier 1 can execute the plan instead of losing it.",
+    "suggestion": null
+  },
+  {
+    "index": 23,
+    "id": "PRRT_kwDOUKdSVs6hx_HT",
+    "path": "orchestrator/local-model.ts",
+    "line": 55,
+    "severity": "P2",
+    "summary": "P2: The production orchestrator never calls `selectExecutionTier`, so every non-Tier-0 goal still goes straight to the remote planner. Wire this selector into `runStep` so the Tier-1 local path and failure policy are actually used.",
+    "fullComment": "P2: The production orchestrator never calls `selectExecutionTier`, so every non-Tier-0 goal still goes straight to the remote planner. Wire this selector into `runStep` so the Tier-1 local path and failure policy are actually used.",
+    "suggestion": null
+  },
+  {
+    "index": 24,
+    "id": "PRRT_kwDOUKdSVs6hx_HV",
+    "path": "orchestrator/goal-tokenize.ts",
+    "line": 43,
+    "severity": "P2",
+    "summary": "P2: When a resumed human reply contains lexical PII, `tokeniseGoal` stores its mapping in the session allocator, but `runStep` clears that allocator before execution. The goal still contains the placeholder, so the agent cannot resolve the real value and escalates instead of filling the field. Keep one session allocator alive across reply sanitization and the resumed step, and use it for both page and goal tokenization.",
+    "fullComment": "P2: When a resumed human reply contains lexical PII, `tokeniseGoal` stores its mapping in the session allocator, but `runStep` clears that allocator before execution. The goal still contains the placeholder, so the agent cannot resolve the real value and escalates instead of filling the field. Keep one session allocator alive across reply sanitization and the resumed step, and use it for both page and goal tokenization.",
+    "suggestion": null
+  },
+  {
+    "index": 25,
+    "id": "PRRT_kwDOUKdSVs6hx_HX",
+    "path": "executor/verify-plan.ts",
+    "line": 35,
+    "severity": "P2",
+    "summary": "P2: Every planned `scroll` action is rejected before execution because `ALLOWED_ACTION_TYPES` omits `scroll`. Add `scroll` to the allowlist so the executor can perform the supported scroll action.",
+    "fullComment": "P2: Every planned `scroll` action is rejected before execution because `ALLOWED_ACTION_TYPES` omits `scroll`. Add `scroll` to the allowlist so the executor can perform the supported scroll action.\n\n\n\n```suggestion\nconst ALLOWED_ACTION_TYPES = new Set([\"click\", \"type\", \"scroll\", \"select\", \"navigate\", \"submit\", \"wait\", \"finish\", \"ask_human\"]);\n```",
+    "suggestion": "const ALLOWED_ACTION_TYPES = new Set([\"click\", \"type\", \"scroll\", \"select\", \"navigate\", \"submit\", \"wait\", \"finish\", \"ask_human\"]);"
+  },
+  {
+    "index": 26,
+    "id": "PRRT_kwDOUKdSVs6hx_HY",
+    "path": "content/capture-content.ts",
+    "line": 120,
+    "severity": "P2",
+    "summary": "P2: When `action.value` matches no option, this handler reports success without changing the select. Return an error for an unmatched value instead of dispatching events for an unchanged control.",
+    "fullComment": "P2: When `action.value` matches no option, this handler reports success without changing the select. Return an error for an unmatched value instead of dispatching events for an unchanged control.\n\n\n\n```suggestion\n        if (!matched) {\n          return { ok: false, error: `Option not found: ${val}` };\n        }\n```",
+    "suggestion": "        if (!matched) {\n          return { ok: false, error: `Option not found: ${val}` };\n        }"
+  },
+  {
+    "index": 27,
+    "id": "PRRT_kwDOUKdSVs6hx_Ha",
+    "path": "privacy/engine/merge.ts",
+    "line": 35,
+    "severity": "P2",
+    "summary": "P2: When the same element/category has different bounding boxes, `deduplicateDetections` keeps both entries instead of applying its documented highest-confidence collapse. Key deduplication by `(element_id, category)`, or explicitly union before keying if overlap merging is the intended policy.",
+    "fullComment": "P2: When the same element/category has different bounding boxes, `deduplicateDetections` keeps both entries instead of applying its documented highest-confidence collapse. Key deduplication by `(element_id, category)`, or explicitly union before keying if overlap merging is the intended policy.",
+    "suggestion": null
+  },
+  {
+    "index": 28,
+    "id": "PRRT_kwDOUKdSVs6hx_Hb",
+    "path": "test/browser/e2e/failure_matrix.json",
+    "line": 31,
+    "severity": "P2",
+    "summary": "P2: F005 has no matching case in test/utils/failure_injector.ts, so its FAIL_INJECTION_ID falls through to the `default` branch and runs the session normally. failure_injection.test.ts then logs it as \"PASS (no failure triggered)\" / \"Not needed\", so the forged-receipt gate is never actually tested. The privacy/gate scenario is F030 in the injector; change the id to F030 (forge receipt).",
+    "fullComment": "P2: F005 has no matching case in test/utils/failure_injector.ts, so its FAIL_INJECTION_ID falls through to the `default` branch and runs the session normally. failure_injection.test.ts then logs it as \"PASS (no failure triggered)\" / \"Not needed\", so the forged-receipt gate is never actually tested. The privacy/gate scenario is F030 in the injector; change the id to F030 (forge receipt).",
+    "suggestion": null
+  },
+  {
+    "index": 29,
+    "id": "PRRT_kwDOUKdSVs6hx_He",
+    "path": "executor/complete.ts",
+    "line": 98,
+    "severity": "P2",
+    "summary": "P2: When a `select` action leaves the old option selected, this fallback still reports completion as successful. Implement selected-value verification or make unverified action outcomes fail closed.",
+    "fullComment": "P2: When a `select` action leaves the old option selected, this fallback still reports completion as successful. Implement selected-value verification or make unverified action outcomes fail closed.\n\n\n\n```suggestion\n  return { verdict: \"UNVERIFIABLE\", ok: false, detail: \"Action outcome could not be verified\" };\n```",
+    "suggestion": "  return { verdict: \"UNVERIFIABLE\", ok: false, detail: \"Action outcome could not be verified\" };"
+  },
+  {
+    "index": 30,
+    "id": "PRRT_kwDOUKdSVs6hx_Hh",
+    "path": "executor/complete.ts",
+    "line": 61,
+    "severity": "P2",
+    "summary": "P2: When a clicked element remains in the DOM, this branch reports success even if its handler is a no-op and page state is unchanged. Require an observable click postcondition, or return `UNVERIFIABLE` instead of treating target presence as verification.",
+    "fullComment": "P2: When a clicked element remains in the DOM, this branch reports success even if its handler is a no-op and page state is unchanged. Require an observable click postcondition, or return `UNVERIFIABLE` instead of treating target presence as verification.",
+    "suggestion": null
+  },
+  {
+    "index": 31,
+    "id": "PRRT_kwDOUKdSVs6hx_Hj",
+    "path": "privacy/engine/validators.ts",
+    "line": 135,
+    "severity": "P2",
+    "summary": "P2: The entity set admits `K` and `E`, so arbitrary PAN-shaped values with those fourth characters become PII detections. Restrict `PAN_ENTITY_TYPES` to the official holder-type codes.",
+    "fullComment": "P2: The entity set admits `K` and `E`, so arbitrary PAN-shaped values with those fourth characters become PII detections. Restrict `PAN_ENTITY_TYPES` to the official holder-type codes.\n\n\n\n```suggestion\nconst PAN_ENTITY_TYPES = 'ABCFGHLJPT';\n```",
+    "suggestion": "const PAN_ENTITY_TYPES = 'ABCFGHLJPT';"
+  },
+  {
+    "index": 32,
+    "id": "PRRT_kwDOUKdSVs6hx_Hl",
+    "path": "orchestrator/local-intent.ts",
+    "line": 200,
+    "severity": "P2",
+    "summary": "P2: When a matched control is disabled, `aria-disabled`, readonly, or inside a disabled/inert state, this first-step path still reports it as handled and executes it; disabled clicks can be no-ops while disabled fields can be mutated without the page accepting the change. Carry actionable state into the captured metadata or check it before returning local actions, so these cases fall through instead of being recorded as successful local steps.",
+    "fullComment": "P2: When a matched control is disabled, `aria-disabled`, readonly, or inside a disabled/inert state, this first-step path still reports it as handled and executes it; disabled clicks can be no-ops while disabled fields can be mutated without the page accepting the change. Carry actionable state into the captured metadata or check it before returning local actions, so these cases fall through instead of being recorded as successful local steps.",
+    "suggestion": null
+  },
+  {
+    "index": 33,
+    "id": "PRRT_kwDOUKdSVs6hx_Hn",
+    "path": "test/browser/e2e/failure_injection.test.ts",
+    "line": 48,
+    "severity": "P2",
+    "summary": "P2: With `stdio: 'inherit'`, `execSync` never captures child output, so `err.stdout`/`err.stderr` are `null` in the catch block and `output` falls back to just `err.message` (\"Command failed: npm run test:session-e2e\"). The `recoveredUI`/`recoveredSession` heuristics therefore always evaluate false on an error, and the catalog always records `No | No` even when recovery actually happened. Capture the child's stdout (e.g. drop `stdio: 'inherit'` or set it to `pipe`) so `err.stdout` is populated, then run the heuristics on it.",
+    "fullComment": "P2: With `stdio: 'inherit'`, `execSync` never captures child output, so `err.stdout`/`err.stderr` are `null` in the catch block and `output` falls back to just `err.message` (\"Command failed: npm run test:session-e2e\"). The `recoveredUI`/`recoveredSession` heuristics therefore always evaluate false on an error, and the catalog always records `No | No` even when recovery actually happened. Capture the child's stdout (e.g. drop `stdio: 'inherit'` or set it to `pipe`) so `err.stdout` is populated, then run the heuristics on it.\n\n\n\n```suggestion\nexecSync('npm run test:session-e2e', { stdio: ['ignore', 'pipe', 'pipe'], env, cwd: process.cwd() });\n```",
+    "suggestion": "execSync('npm run test:session-e2e', { stdio: ['ignore', 'pipe', 'pipe'], env, cwd: process.cwd() });"
+  },
+  {
+    "index": 34,
+    "id": "PRRT_kwDOUKdSVs6hx_Hs",
+    "path": "remote-agent/transport.ts",
+    "line": 37,
+    "severity": "P2",
+    "summary": "P2: `securePostJson` is not used by any production path, so its receipt verification, timeout, and retry protections are currently dead code. Route `queryServer` through this transport or remove the helper so the intended transport guarantees apply to real requests.",
+    "fullComment": "P2: `securePostJson` is not used by any production path, so its receipt verification, timeout, and retry protections are currently dead code. Route `queryServer` through this transport or remove the helper so the intended transport guarantees apply to real requests.",
+    "suggestion": null
+  },
+  {
+    "index": 35,
+    "id": "PRRT_kwDOUKdSVs6hx_Hu",
+    "path": "executor/complete.ts",
+    "line": 85,
+    "severity": "P2",
+    "summary": "P2: When the actual value contains the expected value, this condition can verify the wrong field content, such as `\"10\"` for expected `\"1\"`. Compare normalized full values, or use an explicit field-specific formatting rule instead of generic substring matching.",
+    "fullComment": "P2: When the actual value contains the expected value, this condition can verify the wrong field content, such as `\"10\"` for expected `\"1\"`. Compare normalized full values, or use an explicit field-specific formatting rule instead of generic substring matching.\n\n\n\n```suggestion\n    if (norm(actual) === norm(expected)) {\n```",
+    "suggestion": "    if (norm(actual) === norm(expected)) {"
+  },
+  {
+    "index": 36,
+    "id": "PRRT_kwDOUKdSVs6hx_Hw",
+    "path": "privacy/sanitizer/placeholders.ts",
+    "line": 156,
+    "severity": "P2",
+    "summary": "P2: When a caller uses an empty session ID, `resetPlaceholderTokens(\"\")` clears all sessions instead of only that session. Check `sessionId !== undefined` so the per-session reset cannot erase unrelated state.",
+    "fullComment": "P2: When a caller uses an empty session ID, `resetPlaceholderTokens(\"\")` clears all sessions instead of only that session. Check `sessionId !== undefined` so the per-session reset cannot erase unrelated state.\n\n\n\n```suggestion\nif (sessionId !== undefined) {\n```",
+    "suggestion": "if (sessionId !== undefined) {"
+  },
+  {
+    "index": 37,
+    "id": "PRRT_kwDOUKdSVs6hx_Hx",
+    "path": "privacy/vault.ts",
+    "line": 111,
+    "severity": "P2",
+    "summary": "P2: At the exact `expiresAt` millisecond, `readSecret` still confirms and returns the credential because it tests `now > entry.expiresAt`. Treat the boundary as expired with `entry.expiresAt !== undefined && now >= entry.expiresAt`.",
+    "fullComment": "P2: At the exact `expiresAt` millisecond, `readSecret` still confirms and returns the credential because it tests `now > entry.expiresAt`. Treat the boundary as expired with `entry.expiresAt !== undefined && now >= entry.expiresAt`.\n\n\n\n```suggestion\n  if (entry.expiresAt !== undefined && now >= entry.expiresAt) {\n```",
+    "suggestion": "  if (entry.expiresAt !== undefined && now >= entry.expiresAt) {"
+  },
+  {
+    "index": 38,
+    "id": "PRRT_kwDOUKdSVs6hx_Hy",
+    "path": "content/capture-content.ts",
+    "line": 105,
+    "severity": "P2",
+    "summary": "P2: No current planner-to-executor path can invoke this new `select` branch. Wire `select` through the action schema, guard, and bridge, or remove this branch; otherwise dropdown actions remain unsupported.",
+    "fullComment": "P2: No current planner-to-executor path can invoke this new `select` branch. Wire `select` through the action schema, guard, and bridge, or remove this branch; otherwise dropdown actions remain unsupported.",
+    "suggestion": null
+  },
+  {
+    "index": 39,
+    "id": "PRRT_kwDOUKdSVs6hx_H1",
+    "path": "privacy/engine/validators.ts",
+    "line": 106,
+    "severity": "P2",
+    "summary": "P2: The Mastercard branch accepts the out-of-range `2220` prefix, so Luhn-valid non-Mastercard values such as `2220123456789015` pass `isCardValid`. Match the exact `2221–2720` range.",
+    "fullComment": "P2: The Mastercard branch accepts the out-of-range `2220` prefix, so Luhn-valid non-Mastercard values such as `2220123456789015` pass `isCardValid`. Match the exact `2221–2720` range.\n\n\n\n```suggestion\n  { issuer: 'mastercard', re: /^(5[1-5]|2(2(2[1-9]|[3-9]\\d)|[3-6]\\d{2}|7(?:[01]\\d|20)))/, lengths: [16] },\n```",
+    "suggestion": "  { issuer: 'mastercard', re: /^(5[1-5]|2(2(2[1-9]|[3-9]\\d)|[3-6]\\d{2}|7(?:[01]\\d|20)))/, lengths: [16] },"
+  },
+  {
+    "index": 40,
+    "id": "PRRT_kwDOUKdSVs6hx_H3",
+    "path": "privacy/sanitizer/structural-redact.ts",
+    "line": 96,
+    "severity": "P2",
+    "summary": "P2: When a stale `dom` or `ocr` FACE finding has no backing element, this condition accepts it even though the contract allows only vision-source synthetic FACE IDs. Require the source and synthetic ID in the FACE exception so malformed findings still fail closed.",
+    "fullComment": "P2: When a stale `dom` or `ocr` FACE finding has no backing element, this condition accepts it even though the contract allows only vision-source synthetic FACE IDs. Require the source and synthetic ID in the FACE exception so malformed findings still fail closed.\n\n\n\n```suggestion\n    if (\n      !(d.category === \"FACE\" && d.source === \"vision\" && d.element_id.startsWith(\"vision-\")) &&\n      !elementIds.has(d.element_id)\n    ) {\n```",
+    "suggestion": "    if (\n      !(d.category === \"FACE\" && d.source === \"vision\" && d.element_id.startsWith(\"vision-\")) &&\n      !elementIds.has(d.element_id)\n    ) {"
+  }
+]

@@ -4,7 +4,8 @@
 import type { SanitizedPackage } from "../types/index.js";
 import { type AgentAction, parseAgentAction } from "./types.js";
 import { SYSTEM_PROMPT, buildPrompt } from "./client-openai.js";
-import { DEFAULT_MODEL_SETTINGS } from "../extension/src/settings/models.js";
+import { DEFAULT_MODEL_SETTINGS } from "../shared/settings.js";
+import { assertSanitizedPackage } from "./assert.js";
 
 export interface GeminiOptions {
   apiKey?: string;
@@ -32,6 +33,10 @@ export async function queryGemini(
   pkg: SanitizedPackage,
   options?: GeminiOptions
 ): Promise<AgentAction> {
+  // Outbound boundary: no provider client may dispatch an unproven package,
+  // even when called directly instead of through the router.
+  assertSanitizedPackage(pkg);
+
   const apiKey = options?.apiKey?.trim();
   if (!apiKey) {
     return {

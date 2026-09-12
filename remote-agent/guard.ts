@@ -43,7 +43,8 @@ const FORBIDDEN_RAW_KEYS = ["value", "text", "input", "val", "content", "passwor
 export function redactPii(text: string): string {
   let out = text;
   for (const { name, re } of PII_PATTERNS) {
-    out = out.replace(re, `[REDACTED_${name}]`);
+    const globalRe = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+    out = out.replace(globalRe, `[REDACTED_${name}]`);
   }
   return out;
 }
@@ -133,13 +134,22 @@ function resolveAllowlist(options?: GuardOptions): Set<string> | null {
       ? options.allowlist
       : new Set(options.allowlist);
   }
+  const allowlist = new Set<string>();
   if (options.sanitizedPackage?.sanitizedContext) {
-    return getPlaceholderAllowlistFromContext(options.sanitizedPackage.sanitizedContext);
+    const ctxList = getPlaceholderAllowlistFromContext(options.sanitizedPackage.sanitizedContext);
+    for (const t of ctxList) allowlist.add(t);
+  }
+  if (options.sanitizedPackage?.goal) {
+    const goalTokens = options.sanitizedPackage.goal.match(new RegExp(PLACEHOLDER_TOKEN_REGEX.source, "g"));
+    if (goalTokens) {
+      for (const t of goalTokens) allowlist.add(t);
+    }
   }
   if (options.sanitizedContext) {
-    return getPlaceholderAllowlistFromContext(options.sanitizedContext);
+    const ctxList = getPlaceholderAllowlistFromContext(options.sanitizedContext);
+    for (const t of ctxList) allowlist.add(t);
   }
-  return null;
+  return allowlist.size > 0 ? allowlist : null;
 }
 
 /**
@@ -167,7 +177,8 @@ export function findPiiInValue(val: unknown): string | null {
 function validateActionWithGuard(
   candidate: unknown,
   allowlist: Set<string> | null,
-  goalText = ""
+  goalText = "",
+  pkg?: SanitizedPackage
 ): { ok: true; action: AgentAction } | { ok: false; error: string } {
   if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
     return { ok: false, error: "Action must be a non-null JSON object" };
@@ -179,9 +190,9 @@ function validateActionWithGuard(
     return { ok: false, error: "Missing or invalid 'type' property in action" };
   }
 
-  // Check for raw values accidentally included in top-level action object
+  // Check for raw values accidentally included in top-level action object (except select.value)
   for (const rawKey of FORBIDDEN_RAW_KEYS) {
-    if (rawKey in obj) {
+    if (rawKey in obj && !(obj.type === "select" && rawKey === "value")) {
       return {
         ok: false,
         error: `Forbidden raw field '${rawKey}' present in action — must never send raw data`,
@@ -284,6 +295,35 @@ function validateActionWithGuard(
             error: `Invalid placeholder format: "${obj.placeholder}". Must be a CATEGORY_N token from the allowlist or an exact phrase from the USER GOAL.`,
           };
         }
+
+        // Secret field check: goal phrases may NOT be typed into password/OTP/secret fields
+        const targetObj = obj.target as Target;
+        const targetStr = `${targetObj.css ?? ""} ${targetObj.name ?? ""}`.toLowerCase();
+        if (/password|otp|pin|cvv|secret|token/.test(targetStr)) {
+          return {
+            ok: false,
+            error: `Typing goal phrase into secret/password field is forbidden. Escalate to ask_human.`,
+          };
+        }
+        if (pkg?.sanitizedContext?.elements) {
+          const elements = pkg.sanitizedContext.elements;
+          const matchedEl = elements.find((e) => {
+            if (targetObj.css) {
+              if (targetObj.css === e.element_id || targetObj.css === `#${e.element_id}` || targetObj.css.includes(e.element_id)) return true;
+            }
+            if (targetObj.name && e.label && e.label.toLowerCase().includes(targetObj.name.toLowerCase())) return true;
+            return false;
+          });
+          if (matchedEl) {
+            const isSecret = matchedEl.type === "password" || (matchedEl.label && /password|otp|pin|cvv|secret|token/i.test(matchedEl.label));
+            if (isSecret) {
+              return {
+                ok: false,
+                error: `Typing goal phrase into secret/password field is forbidden. Escalate to ask_human.`,
+              };
+            }
+          }
+        }
       }
 
       // 4. Enforce placeholder allowlist if available (tokens only — literal
@@ -305,6 +345,26 @@ function validateActionWithGuard(
           placeholder: trimmedPlaceholder,
         },
       };
+    }
+
+    case "select": {
+      if (!isTarget(obj.target)) {
+        return {
+          ok: false,
+          error: "'select' action requires a valid 'target' with css, role, name, or bbox",
+        };
+      }
+      if (typeof obj.value !== "string" || obj.value.trim().length === 0) {
+        return { ok: false, error: "'select' action requires a non-empty 'value' string" };
+      }
+      const piiMatch = findPiiInValue(obj.value);
+      if (piiMatch) {
+        return {
+          ok: false,
+          error: `Raw ${piiMatch} detected in select value`,
+        };
+      }
+      return { ok: true, action: { type: "select", target: obj.target as Target, value: obj.value.trim() } };
     }
 
     case "scroll": {
@@ -334,6 +394,13 @@ function validateActionWithGuard(
           error: `Raw ${piiMatch} detected in search query — search terms must be PII-free`,
         };
       }
+      // Prohibit personal identity/account queries
+      if (/\b(?:my\s+account|my\s+password|user\s+name|ssn|dob|card|address|phone|email|pan|aadhaar)\b/i.test(trimmedQuery)) {
+        return {
+          ok: false,
+          error: "Search query contains sensitive personal keywords — search queries must be destination-only or generic",
+        };
+      }
       return { ok: true, action: { type: "search", query: trimmedQuery } };
     }
 
@@ -353,7 +420,10 @@ function validateActionWithGuard(
 
     case "ask_human": {
       if (typeof obj.reason !== "string" || obj.reason.trim().length === 0) {
-        return { ok: false, error: "'ask_human' action requires a non-empty 'reason' string" };
+        return {
+          ok: false,
+          error: "'ask_human' action requires a non-empty 'reason' string",
+        };
       }
       const piiMatch = findPiiInValue(obj.reason);
       if (piiMatch) {
@@ -385,7 +455,8 @@ export function guardModelOutput(
     const result = validateActionWithGuard(
       normalized,
       allowlist,
-      options?.sanitizedPackage?.goal ?? ""
+      options?.sanitizedPackage?.goal ?? "",
+      options?.sanitizedPackage
     );
     if (!result.ok) {
       return {
@@ -424,7 +495,8 @@ export function guardAction(
   const result = validateActionWithGuard(
     action,
     allowlist,
-    options?.sanitizedPackage?.goal ?? ""
+    options?.sanitizedPackage?.goal ?? "",
+    options?.sanitizedPackage
   );
   if (!result.ok) {
     return {

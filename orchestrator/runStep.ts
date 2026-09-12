@@ -15,30 +15,34 @@
 // in background/service-worker.ts: a single click/type ended the session.
 // Now every executed action recaptures, so form filling (type → type → click
 // → next page) runs as one continuous session.
+//
+// Phase-00 split: this file is the sequencing core only. Capture lives in
+// ./capture.ts, the HUD feed in ./hud.ts, and outbound-context/audit-log
+// construction in ./outbound.ts. The fail-closed pipeline order pinned by
+// tests/ stays here: capturePackage → runVisionPath → applyPlaceholders →
+// sealAndRedact (the encoding gate) → decide → local-intent → queryServer.
+// Nothing crosses the wire before the gate allows AND the redaction receipt
+// verifies.
 
 import type {
   Action,
   AgentAction,
   AgentSession,
   CapturePackage,
-  CaptureResponseMessage,
-  ElementMeta,
   StepResult,
 } from "../types/index.js";
-import { takeScreenshot } from "../utils/screenshot.js";
-import { sendToContent } from "../utils/messaging.js";
-import {
-  detectSensitive,
-  applyPlaceholders,
-} from "../privacy/sanitizer/structural-redact.js";
-import { redactVisual } from "../privacy/sanitizer/visual-redact.js";
+import { applyPlaceholders, resetPlaceholderTokens } from "../privacy/sanitizer/structural-redact.js";
+import { sealAndRedact } from "../privacy/sanitizer/redaction-gate.js";
 import { decide } from "../privacy/policy-gate/policy-gate.js";
-import { loadModelSettings } from "../extension/src/settings/models.js";
+import { loadModelSettings } from "../shared/settings.js";
 import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-server.js";
-import { agentActionToExecutorActions } from "../executor/agent-action.js";
+import { agentActionToExecutorActions, selectorFor, resolveTarget } from "../executor/agent-action.js";
 import { applyActions } from "../executor/local-executor.js";
+import { verifyPlan } from "../executor/verify-plan.js";
 import { navigateTab } from "../executor/navigate.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
+import { tokeniseGoal } from "./goal-tokenize.js";
+import { selectExecutionTier } from "./local-model.js";
 import {
   notifySessionUpdate,
   runSessionLoop,
@@ -48,92 +52,14 @@ import {
   endLoop,
   type Outcome,
 } from "./session.js";
+import { capturePackage, waitForTabSettled } from "./capture.js";
+import { broadcastHudStep } from "./hud.js";
 import {
-  computeRequestDigest,
-  logTransparencyEntry,
-} from "./transparency-log.js";
-
-/**
- * Snapshot the content-script DOM package for a tab, then run DOM-path
- * detections (detectSensitive) on the elements.
- * @param tabId Target tab ID
- */
-// Snapshot the content-script DOM package for a tab.
-function domPackage(tabId: number): Promise<CaptureResponseMessage> {
-  return sendToContent<CaptureResponseMessage>(tabId, { type: "capture.request" });
-}
-
-// Cheap, deterministic fingerprint of the DOM package. Element ids are stable
-// across extractions (the content script keys them by DOM node), so equality
-// here means the page did not change between snapshots.
-function packageFingerprint(dom: CaptureResponseMessage): string {
-  return JSON.stringify(dom.payload);
-}
-
-export async function capturePackage(tabId: number): Promise<CapturePackage> {
-  const MAX_TRIES = 3;
-  for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
-    // Snapshot the DOM first, capture the screenshot of that same state, then
-    // re-snapshot the DOM and require it to be unchanged. This guarantees the
-    // detections always describe the pixels we redact — never detections from
-    // one page state applied to another state's screenshot.
-    const before = await domPackage(tabId);
-    const { dataUrl } = await takeScreenshot(tabId);
-    const after = await domPackage(tabId);
-    if (packageFingerprint(before) === packageFingerprint(after)) {
-      const { elements, browserState } = before.payload;
-      return {
-        tabId,
-        dataUrl,
-        elements,
-        detections: detectSensitive(elements),
-        browserState,
-      };
-    }
-  }
-  throw new Error(
-    "capturePackage: page state kept changing between DOM snapshot and screenshot"
-  );
-}
-
-// In-memory step cache for the HUD
-const lastLiveSteps: Array<Record<string, unknown>> = [];
-
-export function getLiveSteps(): Array<Record<string, unknown>> {
-  return lastLiveSteps;
-}
-
-// Helper to broadcast step updates with rich data to the popup HUD
-function broadcastHudStep(step: number, data: Record<string, unknown>) {
-  const payload = { type: "hud.liveStep", step, ...data };
-  if (step === 1) lastLiveSteps.length = 0;
-  lastLiveSteps.push(payload);
-  try {
-    // HUD popup might be closed; safe to ignore.
-    void chrome.runtime.sendMessage(payload).catch(() => {});
-  } catch {
-    // Ignore if no receiver
-  }
-}
-
-/**
- * Let a just-executed action land before the recapture: poll until the tab
- * reports status "complete" (a click on Submit navigates to page B). Bounded
- * and non-fatal — capturePackage's before/after fingerprint check is the real
- * guard against a mid-transition snapshot.
- */
-async function waitForTabSettled(tabId: number, timeoutMs = 5000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const tab = await chrome.tabs.get(tabId);
-      if (tab.status === "complete") return;
-    } catch {
-      return; // tab closed — capturePackage will surface the real error
-    }
-    await new Promise((r) => setTimeout(r, 200));
-  }
-}
+  stripLabels,
+  buildOutboundPackage,
+  buildOutboundPayload,
+  logStepExchange,
+} from "./outbound.js";
 
 /**
  * Execute a full step of the privacy-preserving agent loop.
@@ -148,6 +74,9 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
   }
   try {
     const session = startSession(tabId, goal);
+    // Session-scoped placeholder state: the previous session's real values
+    // must not outlive it (minimum-lifetime rule for sensitive data).
+    resetPlaceholderTokens();
     notifySessionUpdate(session);
     // CBA-6 loop: keep recapturing after each action until the agent says done,
     // the gate stops us, or the step cap is hit. Infra errors (capture, vision,
@@ -206,9 +135,12 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     detections: pkg.detections,
   });
 
-  // Sanitizer: structural placeholders + in-memory visual redaction.
-  const { sanitized, map } = applyPlaceholders(pkg.elements, pkg.detections);
-  const sanitizedScreenshot = await redactVisual(
+  // Sanitizer: structural placeholders + the one-way encoding gate. Phase 01:
+  // redaction and PNG encoding happen ONLY inside redaction-gate.ts
+  // (seal → encode), which also stamps the receipt every outbound boundary
+  // verifies. The raw screenshot buffer is closed before seal returns.
+  const { sanitized, map } = applyPlaceholders(pkg.elements, pkg.detections, session.sessionId);
+  const { sanitizedScreenshot, manifest } = await sealAndRedact(
     pkg.dataUrl,
     pkg.detections,
     pkg.browserState.viewport
@@ -239,25 +171,24 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     session.error = gate.reason;
     notifySessionUpdate(session, gate);
 
-    // CBA-11: Log blocked step to transparency audit store with response: null
-    const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
+    // CBA-11: Log blocked step to transparency audit store with response: null.
+    // The goal is TOKENISED before it enters any log (Phase 01: the raw
+    // sentence — which may itself contain an Aadhaar number — is device-only).
     const settings = await loadModelSettings();
-    const refusedPkg = {
-      goal,
+    const refusedPkg = buildOutboundPackage(
+      tokeniseGoal(goal, session.sessionId).goal,
+      stripLabels(sanitized),
       sanitizedScreenshot,
-      sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
-      redacted: true as const,
-    };
-    const requestDigest = await computeRequestDigest(refusedPkg);
-    await logTransparencyEntry({
+      pkg.browserState,
+      manifest
+    );
+    await logStepExchange({
       sessionId: session.sessionId,
       tabIdHint: tabId,
-      goal,
+      goal: tokeniseGoal(goal, session.sessionId).goal,
       step: session.history.length + 1,
-      timestamp: Date.now(),
       model: settings.model,
       request: refusedPkg,
-      requestDigest,
       response: null,
       gate: { decision: gate.decision, reason: gate.reason },
       error: gate.reason,
@@ -277,24 +208,21 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       notifySessionUpdate(session, gate);
 
       // CBA-11: Log rejected step to transparency audit store
-      const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
       const settings = await loadModelSettings();
-      const refusedPkg = {
-        goal,
+      const refusedPkg = buildOutboundPackage(
+        tokeniseGoal(goal, session.sessionId).goal,
+        stripLabels(sanitized),
         sanitizedScreenshot,
-        sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
-        redacted: true as const,
-      };
-      const requestDigest = await computeRequestDigest(refusedPkg);
-      await logTransparencyEntry({
+        pkg.browserState,
+        manifest
+      );
+      await logStepExchange({
         sessionId: session.sessionId,
         tabIdHint: tabId,
-        goal,
+        goal: tokeniseGoal(goal, session.sessionId).goal,
         step: session.history.length + 1,
-        timestamp: Date.now(),
         model: settings.model,
         request: refusedPkg,
-        requestDigest,
         response: null,
         gate: { decision: gate.decision, reason: "Human rejected action" },
         error: "Human rejected action",
@@ -306,32 +234,65 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     notifySessionUpdate(session, gate);
   }
 
+  // Tier 0 (Phase 01): a simple single-intent goal ("type leo in first",
+  // "click the submit button") is answered by the deterministic parser —
+  // zero network calls, so the sentence and the value never leave the device.
+  // First step only: a recapture loop must never re-fire a click, and a field
+  // that is already filled falls through. Anything uncertain falls through to
+  // the remote planner unchanged.
+  if (session.history.length === 0) {
+    const tierSel = selectExecutionTier(goal, sanitized);
+    if (tierSel.tier === 0 && tierSel.actions && tierSel.actions.length > 0) {
+      const results = await applyActions(tabId, tierSel.actions);
+      const first = tierSel.actions[0];
+      const localAction: AgentAction =
+        first.type === "click"
+          ? { type: "click", target: { css: first.target } }
+          : { type: "type", target: { css: first.target }, placeholder: "LOCAL_1" };
+      session.history.push({
+        step: 1,
+        url: pkg.browserState.url,
+        action: localAction,
+        result: results[0] ?? { ok: true },
+        timestamp: Date.now(),
+      });
+      session.step = session.history.length;
+      broadcastHudStep(6, { actions: tierSel.actions, results });
+      notifySessionUpdate(session, gate);
+      await waitForTabSettled(tabId);
+      return { decision: "allow", reason: "tier-0 local intent", actions: results };
+    }
+  }
+
   // Remote Agent: only the sanitized package crosses the wire — never the raw
   // dataUrl, never the element_id -> real value map. applyPlaceholders swaps
   // only `text`, so strip the user-controlled `label` (accessible label /
   // placeholder / title) to keep any raw value out of the remote context.
+  // Phase 01: the GOAL itself is tokenised (checksummed identifiers become
+  // placeholder tokens before the sentence leaves), and the package carries
+  // the redaction manifest + receipt that queryServer verifies pre-flight.
   // Privacy-first: NO LLM keys on this device — the package goes to the
   // operator's remote-agent server, which holds the keys and picks the brain.
-  const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
+  const tokenised = tokeniseGoal(goal, session.sessionId);
+  const outboundGoal = tokenised.goal;
+  Object.assign(map, tokenised.tokenMap);
+  const remoteElements = stripLabels(sanitized);
   const settings = await loadModelSettings();
-  session.outboundPayload = {
+  session.outboundPayload = buildOutboundPayload(
     sanitizedScreenshot,
-    elements: remoteElements.map(({ tag, type, role, text }) => ({ tag, type, role, text })),
-    placeholders: remoteElements
-      .map((element) => element.text)
-      .filter((text) => /^[A-Z]+_\d+$/.test(text)),
-    url: pkg.browserState.url,
-    model: settings.model,
-  };
+    remoteElements,
+    pkg.browserState.url,
+    settings.model
+  );
   notifySessionUpdate(session, gate);
 
-  const outboundPkg = {
-    goal,
+  const outboundPkg = buildOutboundPackage(
+    outboundGoal,
+    remoteElements,
     sanitizedScreenshot,
-    sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
-    redacted: true as const, // sanitizer provenance: structural + visual redaction applied above
-  };
-  const requestDigest = await computeRequestDigest(outboundPkg);
+    pkg.browserState,
+    manifest
+  );
 
   let agentAction: AgentAction;
   try {
@@ -346,15 +307,13 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     notifySessionUpdate(session, gate);
 
     // CBA-11: Log failed request to transparency audit store
-    await logTransparencyEntry({
+    await logStepExchange({
       sessionId: session.sessionId,
       tabIdHint: tabId,
-      goal,
+      goal: outboundGoal,
       step: session.history.length + 1,
-      timestamp: Date.now(),
       model: settings.model,
       request: outboundPkg,
-      requestDigest,
       response: null,
       gate: { decision: gate.decision, reason: gate.reason },
       error: errorMsg,
@@ -364,15 +323,13 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   }
 
   // CBA-11: Record completed outbound wire exchange in transparency log
-  await logTransparencyEntry({
+  await logStepExchange({
     sessionId: session.sessionId,
     tabIdHint: tabId,
-    goal,
+    goal: outboundGoal,
     step: session.history.length + 1,
-    timestamp: Date.now(),
     model: settings.model,
     request: outboundPkg,
-    requestDigest,
     response: agentAction,
     gate: { decision: gate.decision, reason: gate.reason },
   });
@@ -440,6 +397,56 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     // Loop continues: next iteration recaptures the navigated page.
     notifySessionUpdate(session, gate);
     return { decision: gate.decision, reason: gate.reason };
+  }
+
+  // Schema & semantic verification on the proposed plan (before secret substitution)
+  const plannedActions: Action[] = (() => {
+    if (agentAction.type === "click") {
+      const explicitCss = typeof agentAction.target?.css === "string" && agentAction.target.css.trim() ? agentAction.target.css.trim() : undefined;
+      const el = resolveTarget(agentAction.target, sanitized);
+      const target = explicitCss ?? (el ? selectorFor(el) : "");
+      return [{ type: "click", target }];
+    }
+    if (agentAction.type === "type") {
+      const explicitCss = typeof agentAction.target?.css === "string" && agentAction.target.css.trim() ? agentAction.target.css.trim() : undefined;
+      const valueEl = sanitized.find((e) => e.text === agentAction.placeholder);
+      const el = valueEl ?? resolveTarget(agentAction.target, sanitized);
+      const target = explicitCss ?? (el ? selectorFor(el) : "");
+      return [{ type: "type", target, value: agentAction.placeholder }];
+    }
+    if (agentAction.type === "scroll") {
+      return [{ type: "scroll", target: "", dy: agentAction.dy }];
+    }
+    return [];
+  })();
+
+  if (plannedActions.length > 0) {
+    const planReport = verifyPlan(plannedActions, { elements: sanitized, sanitizedPackage: outboundPkg });
+    if (!planReport.ok) {
+      const reason = `Plan verification failed: ${planReport.violations.map((v) => v.message).join("; ")}`;
+      const escalation = {
+        type: "ask_human" as const,
+        reason,
+      };
+      session.lastAction = escalation;
+      session.history.push({
+        step: session.history.length + 1,
+        url: pkg.browserState.url,
+        action: escalation,
+        result: { ok: false, error: reason },
+        timestamp: Date.now(),
+      });
+      session.step = session.history.length;
+      session.status = "waiting_human";
+      broadcastHudStep(6, {
+        actions: [],
+        results: [{ ok: false, error: reason }],
+        outcome: "ask_human",
+        reason,
+      });
+      notifySessionUpdate(session, gate);
+      return { decision: gate.decision, reason, actions: [{ ok: false, error: reason }], stop: true };
+    }
   }
 
   // Convert the AgentAction contract into executor Actions (name/role/bbox

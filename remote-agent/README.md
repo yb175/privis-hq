@@ -9,7 +9,8 @@ on-device Sanitizer.
 | File | Role |
 |------|------|
 | `types.ts` | CBA-1 `AgentAction` contract, session types, PII pattern registry, `parseAgentAction` validator |
-| `router.ts` | CBA-2 model router: privacy boundary checks, provider dispatch, hallucinated-placeholder guard |
+| `assert.ts` | Outbound privacy boundary (leaf module): `assertSanitizedPackage` — refuses raw capture fields, requires the `redacted: true` provenance stamp, PII-scans the serialized package. Enforced by `router.ts` **and** both provider clients at entry (Phase 01), so no path can dispatch an unsanitized package |
+| `router.ts` | CBA-2 model router: routes to the configured provider, hallucinated-placeholder guard; re-exports `assertSanitizedPackage` |
 | `packager.ts` | CBA-3 prompt packager: prompt formatting from sanitized context, last-step history, placeholder allowlist extraction. Loads the system prompt verbatim from `prompt.md` (single source of truth) |
 | `guard.ts` | CBA-3 action guard: schema checks, one-action enforcement, placeholder allowlist validation, PII / URL scheme rejection, `ask_human` fallback |
 | `prompt.md` | CBA-3 system prompt specification — **the runtime prompt itself**: loaded verbatim by `packager.ts` at build time (`--loader:.md=text`); editing it changes model behavior |
@@ -169,7 +170,7 @@ CI never calls paid APIs — all provider interactions are mocked `fetch`.
   (Gemini `generateContent`, inline base64 image, `responseMimeType:
   application/json`). Both share the system prompt and element-summary prompt
   builder.
-- **Settings module** (`extension/src/settings/models.ts`): `ModelChoice =
+- **Settings module** (`shared/settings.ts`): `ModelChoice =
   "chatgpt" | "gemini"`, persisted in `chrome.storage.local`
   (`privis_model_settings`), env fallbacks for Node/server, type-safe
   normalization (malformed stored values fall back to defaults instead of

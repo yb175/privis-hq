@@ -18,7 +18,20 @@ Overlapping boxes from both sources are merged (union), keeping the highest conf
 
 ## DOM path (now)
 
-Implemented in `privacy/sanitizer/structural-redact.js` (`detectSensitive`): regex matchers for PAN / Aadhaar / email / phone / amount patterns, `input[type=password]` fields, and name-labelled fields to assign categories. This folder stays code-free until the vision path lands.
+Implemented in `privacy/engine/detect-dom.js` (`detectSensitive`): regex matchers for PAN / Aadhaar / email / phone / amount patterns, `input[type=password]` fields, and name-labelled fields to assign categories. Detection lives in the engine; placeholder replacement stays in the Sanitizer (`privacy/sanitizer/structural-redact.js`).
+
+## Canonical finding contract (Phase 01)
+
+`privacy/engine/normalize.ts` is the validation layer every finding crosses
+before any consumer uses it — DOM, vision, fused, or a future OCR path:
+
+- `normalizeDetection(s)` validates and **rebuilds** a clean 5-field
+  `Detection` (drops any smuggled extra fields).
+- `assertValidBBox` rejects non-finite coordinates and zero/negative width or
+  height. Negative x/y is allowed (legitimate off-viewport elements).
+- Violations throw `PrivacyError` with a stable code (`PRIVIS_INVALID_GEOMETRY`,
+  `PRIVIS_INVALID_DETECTION`, ...) — messages never contain raw values — and
+  abort the step (fail closed). Findings are never silently dropped.
 
 ## Vision path (M6-A: runtime foundation landed)
 

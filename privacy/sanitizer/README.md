@@ -5,7 +5,7 @@
 ## Responsibility
 
 - Visual redaction: blur FACE boxes, black-out PASSWORD fields, mask PII text boxes on a canvas copy of the in-memory screenshot (`visual-redact.js`, background).
-- Structural redaction + DOM-rule detection (`structural-redact.js`): regex PAN/Aadhaar/email/phone/amount + `input[type=password]` + name-labelled fields; replaces values with stable placeholders (`EMAIL_1`, `PAN_1`, `AADHAAR_1`, `AMOUNT_1`, `PHONE_1`, `NAME_1`).
+- Structural redaction (`structural-redact.js`): replaces values with stable placeholders (`EMAIL_1`, `PAN_1`, `AADHAAR_1`, `AMOUNT_1`, `PHONE_1`, `NAME_1`); keeps the placeholder→real-value mapping on-device. Detection itself lives in the engine (`privacy/engine/detect-dom.js`).
 - Preserve layout, button labels, form structure, and all non-sensitive text.
 - Keep the placeholder→real-value mapping table on-device only.
 
@@ -22,6 +22,24 @@
 - Writing the canvas or mapping table to disk/storage.
 - Sending the mapping table off-device.
 - Redacting button labels or form structure — the Remote Agent must still be able to navigate.
+
+## Phase 01 hardening (detection/redaction contract)
+
+Both sanitizer halves fail closed instead of skipping:
+
+- `applyPlaceholders` (structural) normalizes all findings on entry
+  (`privacy/engine/normalize.ts`) and throws `PrivacyError` on a malformed
+  finding — a skipped finding means its raw value could cross the boundary.
+  A non-FACE finding whose `element_id` has no backing element also throws
+  (stale capture). Vision-source FACE findings with synthetic `vision-*` ids
+  are the documented exception — they are redacted as pixels only.
+  `resetPlaceholderTokens()` is called at session start by the orchestrator,
+  so real values are retained in the local map only for the session's
+  lifetime, not the service worker's.
+- `redactVisual` (visual) validates every bbox with `assertValidBBox` before
+  painting: NaN/Infinity/zero/negative dimensions throw and abort the step —
+  never a silently un-redacted region. Valid boxes that fall fully outside
+  the canvas clamp to a no-op.
 
 ## Swapping the DOM heuristics for a real ML pipeline
 
@@ -64,7 +82,7 @@ ML vision model ─► Detection[] {source:"vision"} ┘      + redactVisual(bbo
    leave `applyPlaceholders(elements, detections)` as-is.
 3. Point `redactVisual` at every bounding box the engine reports (dom + vision), not just
    the DOM ones, so pixel-only PII is masked too.
-4. Re-run the fixtures: category + placeholder tokens must match `fixtures/sanitized-context.json`
+4. Re-run the fixtures: category + placeholder tokens must match `test/fixtures/sanitized-context.json`
    shape; the face/password elements stay intact.
 
 No rule here depends on `source` — `dom` and `vision` detections are interchangeable

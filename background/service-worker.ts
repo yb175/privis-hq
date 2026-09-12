@@ -7,7 +7,9 @@
 // chrome: toolbar click, popup/HUD message handlers, and the debug global.
 
 import { takeScreenshot } from "../utils/screenshot.js";
-import { runStep, capturePackage, getLiveSteps } from "../orchestrator/runStep.js";
+import { runStep } from "../orchestrator/runStep.js";
+import { capturePackage } from "../orchestrator/capture.js";
+import { getLiveSteps } from "../orchestrator/hud.js";
 import { runGoal } from "../orchestrator/runGoal.js";
 import {
   sessionsByTab,

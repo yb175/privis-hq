@@ -1,0 +1,21 @@
+{
+  "ground_truth": [
+    { "element_id": "el-email",   "category": "EMAIL",   "bbox": [10, 10, 100, 20],  "confidence": 0.95, "source": "dom" },
+    { "element_id": "vision-0",   "category": "FACE",    "bbox": [500, 20, 64, 64],  "confidence": 0.88, "source": "vision" },
+    { "element_id": "vision-1",   "category": "PHONE",   "bbox": [10, 50, 120, 20],  "confidence": 0.71, "source": "vision" },
+    { "element_id": "vision-2",   "category": "PAN",     "bbox": [10, 80, 120, 20],  "confidence": 0.90, "source": "vision" },
+    { "element_id": "vision-3",   "category": "AADHAAR", "bbox": [10, 110, 150, 20], "confidence": 0.85, "source": "vision" },
+    { "element_id": "el-amount-a", "category": "AMOUNT", "bbox": [10, 140, 90, 20],  "confidence": 0.95, "source": "dom" },
+    { "element_id": "el-amount-b", "category": "AMOUNT", "bbox": [10, 170, 90, 20],  "confidence": 0.95, "source": "dom" }
+  ],
+  "predictions": [
+    { "element_id": "el-email",    "category": "EMAIL",   "bbox": [10, 10, 100, 20],  "confidence": 0.95, "source": "dom" },
+    { "element_id": "vision-0",    "category": "FACE",    "bbox": [500, 20, 64, 64],  "confidence": 0.88, "source": "vision" },
+    { "element_id": "el-amount-a", "category": "AMOUNT",  "bbox": [10, 140, 90, 20],  "confidence": 0.95, "source": "dom" },
+    { "element_id": "el-amount-b", "category": "AMOUNT",  "bbox": [10, 170, 90, 20],  "confidence": 0.95, "source": "dom" },
+    { "element_id": "vision-4",    "category": "AADHAAR", "bbox": [10, 80, 120, 20],  "confidence": 0.75, "source": "vision" },
+    { "element_id": "vision-5",    "category": "AADHAAR", "bbox": [100, 110, 150, 20], "confidence": 0.60, "source": "vision" },
+    { "element_id": "vision-6",    "category": "AMOUNT",  "bbox": [300, 140, 90, 20], "confidence": 0.70, "source": "vision" },
+    { "element_id": "el-pan-x",    "category": "PAN",     "bbox": [400, 10, 120, 20], "confidence": 0.95, "source": "dom" }
+  ]
+}

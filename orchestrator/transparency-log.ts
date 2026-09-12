@@ -210,6 +210,18 @@ export function logTransparencyEntry(entry: TransparencyEntry): Promise<void> {
             viewport: { w: 0, h: 0 },
           },
         },
+        redactionManifest: {
+          counts: {},
+          redactedFraction: 0,
+          overRedactedFraction: 0,
+          policyVersion: "1.0",
+          receipt: {
+            algo: "SHA-256",
+            hash: "",
+            manifestHash: "",
+            sealedAt: Date.now(),
+          },
+        },
         redacted: true,
       };
       entry.error = `FAIL_CLOSED: ${validation.error}`;

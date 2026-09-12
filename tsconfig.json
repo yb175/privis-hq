@@ -10,19 +10,19 @@
     "forceConsistentCasingInFileNames": true,
     "rootDir": ".",
     "outDir": "./dist",
-    "types": ["chrome"]
+    "types": ["chrome", "node"]
   },
   "include": [
     "background/**/*",
     "content/**/*",
     "executor/**/*",
     "privacy/**/*",
-    "remote/**/*",
     "remote-agent/**/*",
     "extension/**/*",
+    "shared/**/*",
     "types/**/*",
     "utils/**/*",
-    "tests/**/*"
+    "test/**/*"
   ],
   "exclude": ["node_modules", "dist"]
 }

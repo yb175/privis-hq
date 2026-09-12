@@ -21,7 +21,9 @@ import {
   extractElements,
   resolveGeneratedElement,
 } from "../utils/dom-extractor.js";
+import { formatValue } from "../executor/format-value.js";
 import { isPrivisMessage } from "../utils/messaging.js";
+import { waitForPageSettle } from "./settle-watch.js";
 
 /**
  * Capture Layer content-script half: visible elements + browser state.
@@ -59,29 +61,94 @@ export function resolveTarget(target: string): HTMLElement | null {
   return null;
 }
 
-// Stable per-category placeholder tokens produced by the Sanitizer (EMAIL_1, PAN_1, ...).
-const PLACEHOLDER_RE = /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME)_\d+$/;
+// Stable per-category placeholder tokens produced by the Sanitizer (EMAIL_1,
+// PAN_1, ...). Phase 01: extended to the new identifier classes (CARD, IFSC,
+// GSTIN, UPI, ACCOUNT, DOB, PASSPORT, LICENCE) — kept in sync with
+// SensitiveCategory in types/index.ts.
+const PLACEHOLDER_RE =
+  /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME|CARD|IFSC|GSTIN|UPI|ACCOUNT|DOB|PASSPORT|LICENCE)_\d+$/;
+
+/**
+ * Verifies that an element is connected, visible, non-inert, and non-disabled.
+ */
+function checkInteractivity(el: HTMLElement): { ok: true } | { ok: false; error: string } {
+  if (!el.isConnected) {
+    return { ok: false, error: "Target element is disconnected from DOM" };
+  }
+  if (el.hasAttribute("disabled") || (el as any).disabled === true) {
+    return { ok: false, error: "Target element is disabled" };
+  }
+  if (el.hasAttribute("inert") || el.closest("[inert]")) {
+    return { ok: false, error: "Target element or ancestor is inert" };
+  }
+  if (typeof window !== "undefined" && typeof window.getComputedStyle === "function") {
+    const style = window.getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") {
+      return { ok: false, error: "Target element is hidden (display:none or visibility:hidden)" };
+    }
+  }
+  return { ok: true };
+}
 
 /**
  * Executes an action on the page DOM, substituting placeholders with real local values.
  * @param action The requested action (click, type, etc.)
  */
-export async function executeAction(action: Action): Promise<ActionResult> {
-  if (action.type === "scroll") {
-    if (typeof action.dy !== "number" || !Number.isFinite(action.dy)) {
-      return { ok: false, error: "Invalid scroll distance" };
+export function executeAction(action: Action): ActionResult {
+  // Global scroll without target
+  if (action.type === "scroll" && !action.target) {
+    if (typeof window !== "undefined") {
+      const dy = typeof (action as any).dy === "number" && Number.isFinite((action as any).dy) ? (action as any).dy : 300;
+      window.scrollBy({ top: dy, left: 0, behavior: "smooth" });
+      return { ok: true };
     }
-    window.scrollBy({ top: action.dy, left: 0, behavior: "auto" });
-    return { ok: true };
+    return { ok: false, error: "window unavailable for scroll" };
   }
 
   const el = resolveTarget(action.target ?? "");
   if (!el) return { ok: false, error: `Target not found: ${action.target ?? ""}` };
 
+  const interactivity = checkInteractivity(el);
+  if (!interactivity.ok) return interactivity;
+
   switch (action.type) {
     case "click":
+      // Scroll element into view before click if possible
+      if (typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ block: "center", inline: "nearest" });
+      }
       el.click();
       return { ok: true };
+
+    case "scroll":
+      if (typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ block: "center", inline: "nearest" });
+        return { ok: true };
+      }
+      return { ok: false, error: "scrollIntoView unavailable on target" };
+
+    case "select": {
+      const val = action.value ?? "";
+      if (el.tagName.toLowerCase() === "select") {
+        const selectEl = el as HTMLSelectElement;
+        let matched = false;
+        for (let i = 0; i < selectEl.options.length; i++) {
+          const opt = selectEl.options[i]!;
+          if (opt.value === val || opt.text.trim().toLowerCase() === val.trim().toLowerCase()) {
+            selectEl.selectedIndex = i;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          return { ok: false, error: `Option not found: ${val}` };
+        }
+        selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+        selectEl.dispatchEvent(new Event("input", { bubbles: true }));
+        return { ok: true };
+      }
+      return { ok: false, error: `Cannot select on non-select element: ${action.target}` };
+    }
 
     case "type": {
       let value = action.value ?? "";
@@ -97,11 +164,39 @@ export async function executeAction(action: Action): Promise<ActionResult> {
           return { ok: false, error: `Missing local value for placeholder: ${value}` };
         }
       }
+
+      // Checkbox / Radio toggle
+      if (el.tagName.toLowerCase() === "input") {
+        const inputEl = el as HTMLInputElement;
+        if (inputEl.type === "checkbox" || inputEl.type === "radio") {
+          inputEl.checked = value !== "false" && value !== "0";
+          inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+          inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+          return { ok: true };
+        }
+      }
+
+      // Contenteditable elements
+      if (el.hasAttribute("contenteditable") && el.getAttribute("contenteditable") !== "false") {
+        el.textContent = value;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        return { ok: true };
+      }
+
       if (!("value" in el)) {
         return { ok: false, error: `Cannot type into non-form element: ${action.target}` };
       }
-      const field = el as HTMLInputElement;
-      field.value = value;
+      const field = el as HTMLInputElement | HTMLTextAreaElement;
+      // Shape the value to what the FIELD will accept
+      const shaped = formatValue(value, {
+        inputType: (field as any).type,
+        placeholder: (field as any).placeholder || undefined,
+        title: field.title || undefined,
+        pattern: field.getAttribute("pattern") || undefined,
+        maxLength: (field as any).maxLength > 0 ? (field as any).maxLength : undefined,
+      });
+      field.value = shaped.text;
       field.dispatchEvent(new Event("input", { bubbles: true }));
       field.dispatchEvent(new Event("change", { bubbles: true }));
       return { ok: true };
@@ -137,6 +232,13 @@ async function executeActions(actions: Action[]): Promise<ExecuteResponseMessage
     const result = await executeAction(action);
     results.push(result);
     if (!result.ok) break; // stop on first failure
+  }
+  if (typeof document !== "undefined" && (document.body || document.documentElement)) {
+    try {
+      await waitForPageSettle(document.body || document.documentElement, { quietMs: 50, timeoutMs: 500 });
+    } catch {
+      // ignore settle error
+    }
   }
   return { type: "execute.response", payload: { results } };
 }

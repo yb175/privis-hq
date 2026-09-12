@@ -1,0 +1,37 @@
+[
+  {
+    "id": "F001",
+    "layer": "frontend",
+    "injection": "start task while already running",
+    "expected": "UI shows error and does not deadlock",
+    "severity": "P1"
+  },
+  {
+    "id": "F002",
+    "layer": "service_worker",
+    "injection": "worker restart between steps",
+    "expected": "Session recovers or fails gracefully",
+    "severity": "P1"
+  },
+  {
+    "id": "F003",
+    "layer": "content_script",
+    "injection": "missing content script",
+    "expected": "Extension reports missing script error",
+    "severity": "P0"
+  },
+  {
+    "id": "F004",
+    "layer": "ml",
+    "injection": "corrupt ONNX model file",
+    "expected": "ML initialization fails and pipeline aborts without leaking data",
+    "severity": "P0"
+  },
+  {
+    "id": "F030",
+    "layer": "privacy_gate",
+    "injection": "forge receipt",
+    "expected": "Receipt verification fails and action is blocked",
+    "severity": "P0"
+  }
+]

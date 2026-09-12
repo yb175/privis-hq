@@ -7,75 +7,20 @@ import {
   type ModelSettings,
   loadModelSettings,
   normalizeModelSettings,
-} from "../extension/src/settings/models.js";
+} from "../shared/settings.js";
 import { queryOpenAI, type OpenAIOptions } from "./client-openai.js";
 import { queryGemini, type GeminiOptions } from "./client-gemini.js";
-import { guardAction } from "./guard.js";
+import { guardAction, findPiiInValue } from "./guard.js";
+import { assertSanitizedPackage } from "./assert.js";
+
+// Re-exported for compatibility: the outbound boundary lives in assert.ts (a
+// leaf module) so the provider clients can enforce it too, without an import
+// cycle (router -> clients -> assert).
+export { assertSanitizedPackage };
 
 export interface RouterOptions {
   settings?: Partial<ModelSettings>;
   fetchFn?: typeof fetch;
-}
-
-/**
- * Validates that the package is properly sanitized before transmitting over the network.
- * Throws if raw data, missing fields, or unredacted PII patterns are found.
- */
-export function assertSanitizedPackage(pkg: SanitizedPackage): void {
-  if (!pkg || typeof pkg !== "object") {
-    throw new Error("Invalid package: expected a non-null object");
-  }
-
-  const raw = pkg as unknown as Record<string, unknown>;
-  for (const rawKey of ["tabId", "dataUrl", "detections"]) {
-    if (rawKey in raw) {
-      throw new Error(
-        `Refusing to route: package contains raw field "${rawKey}" — run the Sanitizer first`
-      );
-    }
-  }
-
-  if (typeof pkg.goal !== "string" || pkg.goal.trim().length === 0) {
-    throw new Error("Refusing to route: missing or empty goal");
-  }
-
-  if (typeof pkg.sanitizedScreenshot !== "string" || pkg.sanitizedScreenshot.trim().length === 0) {
-    throw new Error("Refusing to route: missing or empty sanitizedScreenshot");
-  }
-
-  if (!pkg.sanitizedContext || !Array.isArray(pkg.sanitizedContext.elements)) {
-    throw new Error("Refusing to route: missing sanitizedContext elements array");
-  }
-
-  if (!pkg.sanitizedContext.browserState) {
-    throw new Error("Refusing to route: missing browserState in sanitizedContext");
-  }
-
-  // Provenance gate: only the on-device Sanitizer path stamps redacted: true
-  // after structural + visual redaction. A textual PII regex scan cannot verify
-  // that PIXELS were redacted, so an unmarked package is never dispatched.
-  // ponytail: flag set by trusted in-device code; a fully compromised extension
-  // process could forge it — real mitigation is the sanitizer being the only
-  // package builder, per CONTRACT.md data flow.
-  if (pkg.redacted !== true) {
-    throw new Error(
-      "Refusing to route: package not marked as sanitized (redacted flag missing) — run the Sanitizer first"
-    );
-  }
-
-  // Scan full serialized payload to ensure no raw PII leaks across the wire
-  const serialized = JSON.stringify({
-    goal: pkg.goal,
-    ...pkg.sanitizedContext,
-  });
-
-  for (const { name, re } of PII_PATTERNS) {
-    if (re.test(serialized)) {
-      throw new Error(
-        `Refusing to route: ${name} pattern detected in sanitized package — Sanitizer leaked`
-      );
-    }
-  }
 }
 
 /**
@@ -104,7 +49,7 @@ function assertPlaceholderInContext(pkg: SanitizedPackage, action: AgentAction):
  * search/lookup action once guessing stops being enough.
  */
 const URL_OR_DOMAIN_RE =
-  /https?:\/\/[^\s"']+|\b[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.(?:com\.in|co\.in|com|in|org|net|io|dev|ai|app|edu|gov)(?![.\w])/i;
+  /https?:\/\/[^\s"']+|\b[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.(?:com\.in|co\.in|com|in|org|net|io|dev|ai|app|edu|gov)(?:\/[^\s"']*)?/i;
 
 const BRAND_URLS: Record<string, string> = {
   uber: "https://m.uber.com/go/home",
@@ -153,7 +98,7 @@ export function planQuickNavigate(
   // Already on that site (same host or sub/superdomain) — the page-level agent
   // loop must run, not re-navigate.
   if (hostOverlap(current.hostname, target.hostname)) return null;
-  return { type: "navigate", url: target.toString() };
+  return { type: "navigate", url: destination };
 }
 
 /**
@@ -168,11 +113,19 @@ async function resolveSearchToNavigate(
   pkg: SanitizedPackage,
   fetchFn?: typeof fetch
 ): Promise<AgentAction> {
+  const piiMatch = findPiiInValue(query);
+  if (piiMatch || /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_\d+$/.test(query.trim()) || /\b(?:my\s+account|my\s+password|user\s+name|ssn|dob|card|address|phone|email|pan|aadhaar|secret|otp|pin|credentials)\b/i.test(query)) {
+    return {
+      type: "ask_human",
+      reason: "Refusing to search: query contains sensitive personal data or placeholder reference",
+    };
+  }
+
   const apiKey = process.env.SERPAPI_KEY;
   if (!apiKey) {
     return {
       type: "ask_human",
-      reason: `Could not search for "${query}": SERPAPI_KEY not configured on the agent server`,
+      reason: "Could not execute search: SERPAPI_KEY not configured on the agent server",
     };
   }
   const endpoint = new URL("https://serpapi.com/search.json");

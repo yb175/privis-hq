@@ -8,3 +8,5 @@ __pycache__/
 *.pyc
 .agents/
 .claude/
+.pytest_cache/
+

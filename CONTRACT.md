@@ -243,16 +243,16 @@ layout and meaning survive while PII does not:
 
 ## Fixtures
 
-`fixtures/` contains one synthetic happy path — an employee portal
+`test/fixtures/` contains one synthetic happy path — an employee portal
 (`https://hr.internal.example/employee-portal`) with PAN, Aadhaar, email, amount,
 phone, name, password, and a face avatar, plus a Submit button (`#submit`). All
 values are synthetic; none are real teammate PII.
 
 | File | Mirrors | Use |
 |------|---------|-----|
-| `fixtures/detections.json` | `Detection[]` | What the engine emits; input to the Sanitizer. |
-| `fixtures/sanitized-context.json` | `SanitizedContext` | Expected Sanitizer output shape. |
-| `fixtures/action-click-submit.json` | `Action` | What the Remote Agent returns; input to the Local Executor. |
+| `test/fixtures/detections.json` | `Detection[]` | What the engine emits; input to the Sanitizer. |
+| `test/fixtures/sanitized-context.json` | `SanitizedContext` | Expected Sanitizer output shape. |
+| `test/fixtures/action-click-submit.json` | `Action` | What the Remote Agent returns; input to the Local Executor. |
 
-An agent implementing any box can use `fixtures/` + `types/index.ts` as its only
-inputs and outputs. See `fixtures/README.md`.
+An agent implementing any box can use `test/fixtures/` + `types/index.ts` as its only
+inputs and outputs. See `test/fixtures/README.md`.
