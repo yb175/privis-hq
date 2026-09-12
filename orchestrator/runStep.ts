@@ -23,6 +23,7 @@ import type {
   CapturePackage,
   CaptureResponseMessage,
   ElementMeta,
+  PlannerContext,
   StepResult,
 } from "../types/index.js";
 import { takeScreenshot } from "../utils/screenshot.js";
@@ -36,6 +37,7 @@ import { decide } from "../privacy/policy-gate/policy-gate.js";
 import { loadModelSettings } from "../extension/src/settings/models.js";
 import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-server.js";
 import { agentActionToExecutorActions } from "../executor/agent-action.js";
+import { redactPii } from "../remote-agent/guard.js";
 import { applyActions } from "../executor/local-executor.js";
 import { navigateTab } from "../executor/navigate.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
@@ -94,6 +96,33 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
   throw new Error(
     "capturePackage: page state kept changing between DOM snapshot and screenshot"
   );
+}
+
+function buildPlannerContext(session: AgentSession): PlannerContext {
+  const recentHistory = session.history.slice(-6).map((step) => ({
+    action: step.action,
+    result: step.result
+      ? {
+          ok: step.result.ok,
+          ...(step.result.error ? { error: redactPii(step.result.error) } : {}),
+        }
+      : undefined,
+  }));
+  const completed = session.history.filter((step) => step.result?.ok).length;
+  const failed = session.history.filter((step) => step.result && !step.result.ok).length;
+
+  return {
+    step: session.history.length,
+    maxSteps: session.maxSteps ?? 0,
+    phase: session.goal.includes("[Human follow-up]:")
+      ? "human_follow_up"
+      : session.history.length === 0
+        ? "initial"
+        : "continuing",
+    progress: `${completed} completed action(s); ${failed} failed action(s); current page state was freshly captured`,
+    lastStep: recentHistory.at(-1),
+    recentHistory,
+  };
 }
 
 // In-memory step cache for the HUD
@@ -329,6 +358,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     goal,
     sanitizedScreenshot,
     sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
+    plannerContext: buildPlannerContext(session),
     redacted: true as const, // sanitizer provenance: structural + visual redaction applied above
   };
   const requestDigest = await computeRequestDigest(outboundPkg);

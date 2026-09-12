@@ -258,6 +258,11 @@ const restoreShims = installCanvasShims();
 interface PlanCall {
   url: string;
   placeholders: string[];
+  plannerContext?: {
+    step?: number;
+    phase?: string;
+    lastStep?: { action?: unknown; result?: { ok?: boolean; error?: string } };
+  };
   raw: string;
 }
 const planCalls: PlanCall[] = [];
@@ -311,6 +316,7 @@ const server: Server = createServer((req, res) => {
         placeholders: elements
           .map((e: any) => e.text as string)
           .filter((t: string) => /^[A-Z]+_\d+$/.test(t)),
+        plannerContext: parsed?.plannerContext,
         raw: body,
       };
       planCalls.push(call);
@@ -371,6 +377,15 @@ async function main() {
 
     // --- Wire privacy tripwire: the RAW HTTP body must never carry PII -----
     assert.ok(planCalls.length >= 6, "remote consulted once per step");
+    assert.strictEqual(planCalls[0].plannerContext?.step, 0, "first planner call starts with empty history");
+    assert.ok(
+      planCalls.some(
+        (call) =>
+          call.plannerContext?.step === 1 &&
+          call.plannerContext.lastStep?.result?.ok === true
+      ),
+      "later planner calls receive the previous successful action result"
+    );
     for (const call of planCalls) {
       for (const secret of SECRET_VALUES) {
         assert.ok(

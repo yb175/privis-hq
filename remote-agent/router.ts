@@ -51,6 +51,17 @@ export function assertSanitizedPackage(pkg: SanitizedPackage): void {
     throw new Error("Refusing to route: missing browserState in sanitizedContext");
   }
 
+  if (pkg.plannerContext !== undefined) {
+    if (
+      typeof pkg.plannerContext !== "object" ||
+      !Number.isInteger(pkg.plannerContext.step) ||
+      !Number.isInteger(pkg.plannerContext.maxSteps) ||
+      !Array.isArray(pkg.plannerContext.recentHistory)
+    ) {
+      throw new Error("Refusing to route: invalid plannerContext");
+    }
+  }
+
   // Provenance gate: only the on-device Sanitizer path stamps redacted: true
   // after structural + visual redaction. A textual PII regex scan cannot verify
   // that PIXELS were redacted, so an unmarked package is never dispatched.
@@ -67,6 +78,7 @@ export function assertSanitizedPackage(pkg: SanitizedPackage): void {
   const serialized = JSON.stringify({
     goal: pkg.goal,
     ...pkg.sanitizedContext,
+    plannerContext: pkg.plannerContext,
   });
 
   for (const { name, re } of PII_PATTERNS) {

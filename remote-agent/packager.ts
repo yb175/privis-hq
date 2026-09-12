@@ -2,7 +2,7 @@
 // CBA-3 Packager: Assembles model prompt from sanitized context,
 // enforces placeholder isolation, attaches last step result, and exports allowlist.
 
-import type { SanitizedPackage, SanitizedContext } from "../types/index.js";
+import type { PlannerContext, SanitizedPackage, SanitizedContext } from "../types/index.js";
 import type { AgentAction } from "./types.js";
 import { assertSanitizedPackage } from "./router.js";
 import { getPlaceholderAllowlistFromContext, redactPii } from "./guard.js";
@@ -65,6 +65,26 @@ function formatLastStepResult(lastStep?: LastStepResult): string | null {
   return parts.length > 0 ? parts.join(" -> ") : null;
 }
 
+function formatPlannerContext(context?: PlannerContext): string | null {
+  if (!context) return null;
+
+  const lines = [
+    `STEP: ${context.step}/${context.maxSteps}`,
+    `PHASE: ${context.phase}`,
+    `PROGRESS: ${redactPii(context.progress)}`,
+  ];
+  const lastStep = formatLastStepResult(context.lastStep);
+  if (lastStep) lines.push(`LAST STEP RESULT: ${lastStep}`);
+  if (context.recentHistory.length > 0) {
+    lines.push(
+      `RECENT HISTORY:\n${context.recentHistory
+        .map((step, index) => `${index + 1}. ${formatLastStepResult(step)}`)
+        .join("\n")}`
+    );
+  }
+  return lines.join("\n");
+}
+
 /**
  * Builds the user prompt summarizing goal, browser state, last step result,
  * placeholder allowlist, and sanitized DOM elements.
@@ -108,6 +128,11 @@ export function buildUserPrompt(
   const formattedLastStep = formatLastStepResult(lastStepResult);
   if (formattedLastStep) {
     lines.push(`LAST STEP RESULT: ${formattedLastStep}`);
+  }
+
+  const formattedPlannerContext = formatPlannerContext(pkg.plannerContext);
+  if (formattedPlannerContext) {
+    lines.push(`SESSION CONTEXT:\n${formattedPlannerContext}`);
   }
 
   lines.push(`AVAILABLE PLACEHOLDERS: [${allowlistSummary}]`);
