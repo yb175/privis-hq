@@ -99,6 +99,10 @@ export function resumeSession(session: AgentSession, humanReply: string): void {
   session.goal = `${session.goal}\n[Human follow-up]: ${humanReply}`;
   session.status = "running";
   session.error = undefined;
+  // Human follow-up is an explicit recovery decision; allow the planner to
+  // retry an action even if the page has not changed since the failure.
+  delete session.lastFailureFingerprint;
+  delete session.lastFailureAction;
   session.maxSteps = (session.step ?? 0) + MAX_SESSION_STEPS;
 }
 
