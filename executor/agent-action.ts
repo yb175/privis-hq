@@ -81,6 +81,12 @@ function resolveTarget(
   return undefined;
 }
 
+function cssTarget(target: Target | undefined, sanitized: ElementMeta[]): string | undefined {
+  if (typeof target?.css === "string" && target.css.trim()) return target.css.trim();
+  const el = resolveTarget(target, sanitized);
+  return el ? selectorFor(el) : undefined;
+}
+
 /**
  * Converts a validated AgentAction into Local-Executor Actions.
  * - click: css selector, or name/role/bbox resolved against the sanitized
@@ -99,6 +105,36 @@ export function agentActionToExecutorActions(
   switch (action.type) {
     case "scroll":
       return [{ type: "scroll", target: "", dy: action.dy }];
+    case "press_key":
+    case "focus":
+    case "hover":
+    case "clear":
+    case "check":
+    case "uncheck": {
+      const css = cssTarget(action.target, sanitized);
+      return [{ type: action.type, target: css ?? `__unresolved:${JSON.stringify(action.target)}`, key: action.type === "press_key" ? action.key : undefined }];
+    }
+    case "select_option": {
+      const css = cssTarget(action.target, sanitized);
+      return [{ type: "select_option", target: css ?? `__unresolved:${JSON.stringify(action.target)}`, value: action.option }];
+    }
+    case "wait_for": {
+      const css = cssTarget(action.target, sanitized);
+      if (["element", "gone"].includes(action.condition) && !css) {
+        return [{ type: "wait_for", target: `__unresolved:${JSON.stringify(action.target)}`, condition: action.condition, timeoutMs: action.timeoutMs }];
+      }
+      return [{
+        type: "wait_for",
+        target: css ?? "",
+        condition: action.condition,
+        value: action.needle ?? action.urlPattern,
+        timeoutMs: action.timeoutMs,
+      }];
+    }
+    case "go_back":
+    case "go_forward":
+    case "reload":
+      return [{ type: action.type, target: "" }];
     case "click": {
       const t = action.target;
       const css =

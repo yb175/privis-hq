@@ -7,6 +7,7 @@ import {
   type AgentAction,
   type AskHumanAction,
   type Target,
+  ALLOWED_KEYS,
   PII_PATTERNS,
   PLACEHOLDER_TOKEN_REGEX,
   isTarget,
@@ -236,6 +237,76 @@ function validateActionWithGuard(
       }
       return { ok: true, action: { type: "click", target: obj.target as Target } };
     }
+
+    case "press_key": {
+      if (!isTarget(obj.target)) return { ok: false, error: "'press_key' action requires a valid 'target'" };
+      if (!(ALLOWED_KEYS as readonly string[]).includes(obj.key as string)) {
+        return { ok: false, error: `Unsupported key: "${String(obj.key)}"` };
+      }
+      const keyPii = findPiiInValue(obj.target);
+      if (keyPii) return { ok: false, error: `Raw ${keyPii} detected in press_key target` };
+      return { ok: true, action: { type: "press_key", target: obj.target as Target, key: obj.key as any } };
+    }
+
+    case "focus":
+    case "hover":
+    case "clear":
+    case "check":
+    case "uncheck": {
+      if (!isTarget(obj.target)) return { ok: false, error: `'${obj.type}' action requires a valid 'target'` };
+      const targetPii = findPiiInValue(obj.target);
+      if (targetPii) return { ok: false, error: `Raw ${targetPii} detected in action target` };
+      return { ok: true, action: { type: obj.type, target: obj.target as Target } as AgentAction };
+    }
+
+    case "select_option": {
+      if (!isTarget(obj.target)) return { ok: false, error: "'select_option' action requires a valid 'target'" };
+      if (typeof obj.option !== "string" || !obj.option.trim()) {
+        return { ok: false, error: "'select_option' action requires a non-empty 'option'" };
+      }
+      if (obj.option.length > 200) return { ok: false, error: "'select_option' option exceeds 200 characters" };
+      const optionPii = findPiiInValue(obj.option) || findPiiInValue(obj.target);
+      if (optionPii) return { ok: false, error: `Raw ${optionPii} detected in select_option` };
+      return { ok: true, action: { type: "select_option", target: obj.target as Target, option: obj.option.trim() } };
+    }
+
+    case "wait_for": {
+      const conditions = ["element", "text", "url", "gone", "stable"];
+      if (typeof obj.condition !== "string" || !conditions.includes(obj.condition)) {
+        return { ok: false, error: "'wait_for' action requires a supported condition" };
+      }
+      if (["element", "gone"].includes(obj.condition) && !isTarget(obj.target)) {
+        return { ok: false, error: `'wait_for ${obj.condition}' requires a valid 'target'` };
+      }
+      if (obj.condition === "text" && (typeof obj.needle !== "string" || !obj.needle.trim())) {
+        return { ok: false, error: "'wait_for text' requires a non-empty 'needle'" };
+      }
+      if (obj.condition === "url" && (typeof obj.urlPattern !== "string" || !obj.urlPattern.trim())) {
+        return { ok: false, error: "'wait_for url' requires a non-empty 'urlPattern'" };
+      }
+      if (obj.timeoutMs !== undefined &&
+          (typeof obj.timeoutMs !== "number" || !Number.isFinite(obj.timeoutMs) || obj.timeoutMs < 1 || obj.timeoutMs > 30000)) {
+        return { ok: false, error: "'wait_for' timeoutMs must be between 1 and 30000" };
+      }
+      const waitPii = findPiiInValue(obj.target) || findPiiInValue(obj.needle) || findPiiInValue(obj.urlPattern);
+      if (waitPii) return { ok: false, error: `Raw ${waitPii} detected in wait_for` };
+      return {
+        ok: true,
+        action: {
+          type: "wait_for",
+          condition: obj.condition as any,
+          ...(isTarget(obj.target) ? { target: obj.target as Target } : {}),
+          ...(typeof obj.needle === "string" ? { needle: obj.needle.trim() } : {}),
+          ...(typeof obj.urlPattern === "string" ? { urlPattern: obj.urlPattern.trim() } : {}),
+          ...(typeof obj.timeoutMs === "number" ? { timeoutMs: obj.timeoutMs } : {}),
+        },
+      };
+    }
+
+    case "go_back":
+    case "go_forward":
+    case "reload":
+      return { ok: true, action: { type: obj.type } as AgentAction };
 
     case "type": {
       if (!isTarget(obj.target)) {

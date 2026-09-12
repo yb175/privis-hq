@@ -1198,6 +1198,26 @@ assert.deepStrictEqual(
 assert.strictEqual(typeGen[0].value, "user@x.com");
 console.log("  ✔ Bridge passes css targets through with real values");
 
+const focusAction = agentActionToExecutorActions(
+  { type: "focus", target: { role: "textbox" } },
+  bridgeElements,
+  bridgeMap
+);
+assert.deepStrictEqual(focusAction, [{ type: "focus", target: "#pan-input", key: undefined }]);
+const selectAction = agentActionToExecutorActions(
+  { type: "select_option", target: { role: "combobox" }, option: "India" },
+  [{ element_id: "country", tag: "select", type: null, role: "combobox", label: "Country", text: "", bbox: [10, 140, 200, 30] }],
+  {}
+);
+assert.deepStrictEqual(selectAction, [{ type: "select_option", target: "#country", value: "India" }]);
+const waitAction = agentActionToExecutorActions(
+  { type: "wait_for", condition: "text", needle: "Added to cart", timeoutMs: 5000 },
+  bridgeElements,
+  bridgeMap
+);
+assert.deepStrictEqual(waitAction, [{ type: "wait_for", target: "", condition: "text", value: "Added to cart", timeoutMs: 5000 }]);
+console.log("  ✔ Bridge maps focus, select, and wait actions to local executor actions");
+
 // Goal-substring literals: search boxes are not PII fields, but the DEVICE
 // (not the server) decides — the phrase must appear in the on-device goal.
 const literal = agentActionToExecutorActions(

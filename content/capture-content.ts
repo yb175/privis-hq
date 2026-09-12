@@ -66,40 +66,127 @@ const PLACEHOLDER_RE = /^(EMAIL|PAN|AADHAAR|AMOUNT|PHONE|NAME)_\d+$/;
  * Executes an action on the page DOM, substituting placeholders with real local values.
  * @param action The requested action (click, type, etc.)
  */
+function failure(code: NonNullable<ActionResult["code"]>, error: string): ActionResult {
+  return { ok: false, code, error };
+}
+
+function timeoutMsFor(action: Action): number {
+  return Math.min(Math.max(action.timeoutMs ?? 5000, 1), 30000);
+}
+
+async function waitFor(action: Action): Promise<ActionResult> {
+  const deadline = Date.now() + timeoutMsFor(action);
+  const matches = (): boolean => {
+    if (action.condition === "stable") return true;
+    if (action.condition === "url") return window.location.href.includes(action.value ?? "");
+    if (action.condition === "text") return document.body?.innerText.includes(action.value ?? "") ?? false;
+    const element = resolveTarget(action.target ?? "");
+    return action.condition === "gone" ? !element : Boolean(element);
+  };
+
+  let previousHtml = document.body?.innerHTML ?? "";
+  while (Date.now() < deadline) {
+    if (action.condition === "stable") {
+      const currentHtml = document.body?.innerHTML ?? "";
+      if (currentHtml === previousHtml) return { ok: true };
+      previousHtml = currentHtml;
+    } else if (matches()) {
+      return { ok: true };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return failure("TIMEOUT", `Timed out waiting for ${action.condition}`);
+}
+
 export async function executeAction(action: Action): Promise<ActionResult> {
   if (action.type === "scroll") {
     if (typeof action.dy !== "number" || !Number.isFinite(action.dy)) {
-      return { ok: false, error: "Invalid scroll distance" };
+      return failure("INVALID_ACTION", "Invalid scroll distance");
     }
     window.scrollBy({ top: action.dy, left: 0, behavior: "auto" });
     return { ok: true };
   }
 
+  if (action.type === "wait_for") return waitFor(action);
+  if (action.type === "go_back") {
+    window.history.back();
+    return { ok: true };
+  }
+  if (action.type === "go_forward") {
+    window.history.forward();
+    return { ok: true };
+  }
+  if (action.type === "reload") {
+    window.location.reload();
+    return { ok: true };
+  }
+
   const el = resolveTarget(action.target ?? "");
-  if (!el) return { ok: false, error: `Target not found: ${action.target ?? ""}` };
+  if (!el) return failure("TARGET_NOT_FOUND", `Target not found: ${action.target ?? ""}`);
 
   switch (action.type) {
     case "click":
       el.click();
       return { ok: true };
 
+    case "focus":
+      el.focus();
+      return { ok: true };
+
+    case "hover":
+      el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      el.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+      return { ok: true };
+
+    case "clear":
+      if (!("value" in el)) return failure("NOT_INTERACTABLE", `Cannot clear non-form element: ${action.target}`);
+      (el as HTMLInputElement).value = "";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return { ok: true };
+
+    case "press_key": {
+      if (!action.key) return failure("INVALID_ACTION", "Missing key");
+      const control = action.key === "Control+A";
+      const key = control ? "a" : action.key === "Shift+Tab" ? "Tab" : action.key;
+      const init = { key, code: key, bubbles: true, cancelable: true, ctrlKey: control, shiftKey: action.key === "Shift+Tab" };
+      el.dispatchEvent(new KeyboardEvent("keydown", init));
+      el.dispatchEvent(new KeyboardEvent("keyup", init));
+      return { ok: true };
+    }
+
+    case "select_option": {
+      if (!(el instanceof HTMLSelectElement)) return failure("UNSUPPORTED_CONTROL", `Not a select element: ${action.target}`);
+      const option = Array.from(el.options).find((candidate) => candidate.value === action.value || candidate.textContent?.trim() === action.value);
+      if (!option) return failure("TARGET_NOT_FOUND", `Option not found: ${action.value}`);
+      el.value = option.value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return { ok: true };
+    }
+
+    case "check":
+    case "uncheck": {
+      if (!(el instanceof HTMLInputElement) || !["checkbox", "radio"].includes(el.type)) {
+        return failure("UNSUPPORTED_CONTROL", `Not a checkbox or radio: ${action.target}`);
+      }
+      el.checked = action.type === "check";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return { ok: true };
+    }
+
     case "type": {
       let value = action.value ?? "";
       if (PLACEHOLDER_RE.test(value)) {
-        // Substitute the placeholder with the real value only when the Sanitizer
-        // already stored one for this element; otherwise type what was sent.
         const elementId = el.id || el.dataset.privisId || "";
-        // Own-property check so page ids like "constructor"/"toString" never
-        // resolve to inherited Object.prototype members.
         if (Object.hasOwn(localValues, elementId)) {
           value = localValues[elementId];
         } else {
-          return { ok: false, error: `Missing local value for placeholder: ${value}` };
+          return failure("INVALID_ACTION", `Missing local value for placeholder: ${value}`);
         }
       }
-      if (!("value" in el)) {
-        return { ok: false, error: `Cannot type into non-form element: ${action.target}` };
-      }
+      if (!("value" in el)) return failure("NOT_INTERACTABLE", `Cannot type into non-form element: ${action.target}`);
       const field = el as HTMLInputElement;
       field.value = value;
       field.dispatchEvent(new Event("input", { bubbles: true }));
@@ -108,7 +195,7 @@ export async function executeAction(action: Action): Promise<ActionResult> {
     }
 
     default:
-      return { ok: false, error: `Unsupported action type: ${action.type}` };
+      return failure("UNSUPPORTED_CONTROL", `Unsupported action type: ${action.type}`);
   }
 }
 

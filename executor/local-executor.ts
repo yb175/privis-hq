@@ -20,6 +20,6 @@ export async function applyActions(tabId: number, actions: Action[]): Promise<Ac
     return response.payload.results;
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    return [{ ok: false, error }];
+    return [{ ok: false, code: "EXECUTION_ERROR", error }];
   }
 }

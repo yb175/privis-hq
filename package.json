@@ -10,6 +10,7 @@
     "test:face-pipeline": "npm run build && esbuild privacy/engine/vision/test-face-pipeline.ts --bundle --format=esm --platform=node --outfile=dist-test/test-face-pipeline.mjs && node dist-test/test-face-pipeline.mjs",
     "test:privacy": "npm run build && esbuild privacy/engine/vision/test-privacy-boundary.ts --bundle --format=esm --platform=node --outfile=dist-test/test-privacy-boundary.mjs && node dist-test/test-privacy-boundary.mjs",
     "test:cba": "esbuild tests/test-agent-action.ts --bundle --format=esm --platform=node --outfile=dist-test/test-agent-action.mjs && node dist-test/test-agent-action.mjs",
+    "test:executor-actions": "esbuild tests/test-executor-actions.ts --bundle --format=esm --platform=node --outfile=dist-test/test-executor-actions.mjs && node dist-test/test-executor-actions.mjs",
     "test:navigate": "esbuild tests/test-navigate.ts --bundle --format=esm --platform=node --outfile=dist-test/test-navigate.mjs && node dist-test/test-navigate.mjs",
     "test:router": "esbuild tests/test-router.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist-test/test-router.mjs && node dist-test/test-router.mjs",
     "test:guard": "esbuild tests/test-packager-guard.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist-test/test-packager-guard.mjs && node dist-test/test-packager-guard.mjs",
@@ -21,7 +22,7 @@
     "test:goal": "esbuild tests/test-run-goal.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist-test/test-run-goal.mjs && node dist-test/test-run-goal.mjs",
     "test:transparency": "esbuild tests/test-transparency-purity.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist-test/test-transparency-purity.mjs && node dist-test/test-transparency-purity.mjs && esbuild tests/test-transparency-buffer.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist-test/test-transparency-buffer.mjs && node dist-test/test-transparency-buffer.mjs && esbuild tests/test-transparency-digest.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist-test/test-transparency-digest.mjs && node dist-test/test-transparency-digest.mjs",
     "serve:agent": "esbuild remote-agent/server.ts --bundle --format=esm --platform=node --loader:.md=text --outfile=dist/remote-agent/server.mjs && node dist/remote-agent/server.mjs",
-    "test": "npm run typecheck && npm run test:cba && npm run test:navigate && npm run test:router && npm run test:guard && npm run test:privacy && npm run test:popup && npm run test:loop && npm run test:session-e2e && npm run test:settings && npm run test:goal && npm run test:quota && npm run test:transparency",
+    "test": "npm run typecheck && npm run test:cba && npm run test:executor-actions && npm run test:navigate && npm run test:router && npm run test:guard && npm run test:privacy && npm run test:popup && npm run test:loop && npm run test:session-e2e && npm run test:settings && npm run test:goal && npm run test:quota && npm run test:transparency",
     "typecheck": "tsc --noEmit",
     "watch": "npm run build -- --watch"
   },

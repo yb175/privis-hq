@@ -322,6 +322,34 @@ const longSearch = guardModelOutput(
 );
 assert.strictEqual(longSearch.ok, false, "query length cap enforced");
 
+const validNewActions = [
+  { type: "press_key", target: { css: "#search" }, key: "Enter" },
+  { type: "focus", target: { css: "#search" } },
+  { type: "hover", target: { css: "#menu" } },
+  { type: "clear", target: { css: "#search" } },
+  { type: "select_option", target: { role: "combobox" }, option: "India" },
+  { type: "check", target: { role: "checkbox" } },
+  { type: "uncheck", target: { role: "checkbox" } },
+  { type: "wait_for", condition: "text", needle: "Added to cart", timeoutMs: 5000 },
+  { type: "go_back" },
+  { type: "go_forward" },
+  { type: "reload" },
+];
+for (const action of validNewActions) {
+  const result = guardModelOutput(JSON.stringify(action), { sanitizedPackage: pkg });
+  assert.strictEqual(result.ok, true, `new action should pass: ${action.type}`);
+}
+assert.strictEqual(
+  guardModelOutput(JSON.stringify({ type: "press_key", target: { css: "#search" }, key: "Paste" }), { sanitizedPackage: pkg }).ok,
+  false,
+  "unsupported keys are rejected"
+);
+assert.strictEqual(
+  guardModelOutput(JSON.stringify({ type: "wait_for", condition: "text", needle: "x", timeoutMs: 30001 }), { sanitizedPackage: pkg }).ok,
+  false,
+  "wait timeout is bounded"
+);
+
 const validDone = guardModelOutput('{"type": "done", "reason": "Completed successfully"}', {
   sanitizedPackage: pkg,
 });
