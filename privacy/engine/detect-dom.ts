@@ -15,6 +15,7 @@
 // Privacy: pure local computation, no I/O, no network, no persistence.
 
 import type { Detection, ElementMeta, SensitiveCategory } from "../../types/index.js";
+import { scanText } from "./detect-lexical.js";
 
 export const CATEGORIES: SensitiveCategory[] = [
   "EMAIL",
@@ -25,34 +26,35 @@ export const CATEGORIES: SensitiveCategory[] = [
   "NAME",
   "FACE",
   "PASSWORD",
+  "CARD",
+  "IFSC",
+  "GSTIN",
+  "UPI",
+  "ACCOUNT",
+  "DOB",
+  "PASSPORT",
+  "LICENCE",
 ];
 
-// Confidence: 0.95 for regex / input[type] hits, 0.7 for label-only hits.
+// Confidence: 0.95 for input[type] hits, 0.7 for label-only hits. Lexical
+// (checksum-validated) hits carry their own per-class confidence from
+// detect-lexical.ts (0.85-0.99).
 const CONFIDENCE_HIT = 0.95;
 const CONFIDENCE_LABEL = 0.7;
 
-const PAN_RE = /[A-Z]{5}[0-9]{4}[A-Z]/;
-const EMAIL_RE = /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/;
-// Indian mobile: optional +91 country code, starts 6-9, 10 digits total.
-const PHONE_RE = /^(\+91)?[6-9][0-9]{9}$/;
-// Currency symbol / currency unit in value text.
+// Value-text currency marker (the lexical layer covers identifiers, not money).
 const AMOUNT_TEXT_RE = /[₹$€£]|\b(?:inr|rs\.?)\b/i;
 
 // Label-only fallbacks are restricted to the documented password / amount / name
-// rules; PAN, phone, Aadhaar, and email are only detected from strong regex/type
-// evidence, never from a bare label.
+// rules; identifier classes are only detected from checksum/type evidence,
+// never from a bare label.
 const PASSWORD_LABEL_RE = /otp|password/i;
 const AMOUNT_LABEL_RE = /salary|amount|ctc|reimbursement|inr|₹|rs\.?/i;
 const NAME_LABEL_RE = /name/i;
 
-// "2341 5678 9012" -> "234156789012", so grouped Aadhaar still matches.
-function compactDigits(s: string): string {
-  return s.replace(/[\s-]/g, "");
-}
-
 /**
  * Detects a single sensitive entity in one element, or null when nothing matches.
- * Stronger (regex/type) signals win over label-only hits.
+ * Stronger (input-type / checksum) signals win over label-only hits.
  */
 function detectElement(
   el: ElementMeta
@@ -62,20 +64,27 @@ function detectElement(
   const label = (el.label ?? "").trim();
   const type = (el.type ?? "").toLowerCase();
   const text = el.text.trim();
-  const compact = compactDigits(text);
 
   // Buttons are CTAs, not data fields: skip so a label like "Pay ₹100" isn't
   // treated as AMOUNT and its whole label replaced with a placeholder.
   if (tag === "button" || role === "button") return null;
 
-  // Pass 1: strong regex / input-type hits only. These always win, regardless
-  // of any label, so "Phone" with an email value is EMAIL, not PHONE.
-  // PHONE before AADHAAR so "+91 98765 43210" isn't read as 12 digits.
+  // Pass 1a: input-type evidence — the page itself declares the class.
   if (type === "password") return { category: "PASSWORD", confidence: CONFIDENCE_HIT };
-  if (PAN_RE.test(text.toUpperCase())) return { category: "PAN", confidence: CONFIDENCE_HIT };
-  if (PHONE_RE.test(compact)) return { category: "PHONE", confidence: CONFIDENCE_HIT };
-  if (/^[0-9]{12}$/.test(compact)) return { category: "AADHAAR", confidence: CONFIDENCE_HIT };
-  if (type === "email" || EMAIL_RE.test(text)) return { category: "EMAIL", confidence: CONFIDENCE_HIT };
+  if (type === "email") return { category: "EMAIL", confidence: CONFIDENCE_HIT };
+
+  // Pass 1b: value-shape evidence via the checksum-validated lexical layer
+  // (SIH26171 L1 port). A bare regex used to live here; every identifier now
+  // goes through validators.ts — a twelve-digit invoice number is not an
+  // Aadhaar. Highest-confidence lexical match in the value wins.
+  if (text) {
+    const matches = scanText(text);
+    if (matches.length > 0) {
+      const best = matches.reduce((a, b) => (b.confidence > a.confidence ? b : a));
+      return { category: best.cls, confidence: best.confidence };
+    }
+  }
+
   if (AMOUNT_TEXT_RE.test(text)) return { category: "AMOUNT", confidence: CONFIDENCE_HIT };
 
   // Pass 2: label-only fallbacks (0.7) — documented password / amount / name.
