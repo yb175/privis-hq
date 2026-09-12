@@ -15,7 +15,7 @@ import {
   saveModelSettings,
   toClientSettings,
   STORAGE_KEY_MODEL_SETTINGS,
-} from "../extension/src/settings/models.js";
+} from "../shared/settings.js";
 import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-server.js";
 
 console.log("=== Running CBA-8 Settings QA ===");
@@ -35,7 +35,14 @@ for (const envKey of [
   delete process.env[envKey];
 }
 
-function createValidSanitizedPackage(): SanitizedPackage {
+import {
+  canonicaliseManifest,
+  dataUrlToBytes,
+  digest,
+  POLICY_VERSION,
+} from "../privacy/sanitizer/redaction-gate.js";
+
+async function createValidSanitizedPackage(): Promise<SanitizedPackage> {
   const elements: ElementMeta[] = [
     { element_id: "el-input-1", tag: "input", type: "text", role: "textbox", label: null, text: "PAN_1", bbox: [100, 150, 200, 32] },
     { element_id: "submit-btn", tag: "button", type: "submit", role: "button", label: null, text: "Submit Form", bbox: [100, 200, 120, 40] },
@@ -45,11 +52,32 @@ function createValidSanitizedPackage(): SanitizedPackage {
     title: "Employee Verification Portal",
     viewport: { w: 1280, h: 720 },
   };
+  const sanitizedScreenshot =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const imageHash = await digest(dataUrlToBytes(sanitizedScreenshot));
+  const withoutReceipt = {
+    policyVersion: POLICY_VERSION,
+    redactedFraction: 0,
+    overRedactedFraction: 0,
+    counts: {},
+  };
+  const mHash = await digest(
+    new TextEncoder().encode(canonicaliseManifest(withoutReceipt))
+  );
   return {
     goal: "Fill PAN and submit the verification form",
-    sanitizedScreenshot: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    sanitizedScreenshot,
     sanitizedContext: { elements, browserState },
     redacted: true,
+    redactionManifest: {
+      ...withoutReceipt,
+      receipt: {
+        algo: "SHA-256",
+        hash: imageHash,
+        manifestHash: mHash,
+        sealedAt: 1700000000000,
+      },
+    },
   };
 }
 
@@ -143,7 +171,7 @@ console.log("  ✔ loadModelSettings reads provider keys from env (server), not 
 // --------------------------------------------------------------------------
 console.log("\n[5] No server URL fail-fast");
 
-const pkg = createValidSanitizedPackage();
+const pkg = await createValidSanitizedPackage();
 let fetchCalls = 0;
 const spyFetch: typeof fetch = async () => {
   fetchCalls++;

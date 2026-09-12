@@ -19,8 +19,6 @@
     {
       "matches": ["<all_urls>"],
       "js": [
-        "dist/utils/dom-extractor.js",
-        "dist/privacy/sanitizer/structural-redact.js",
         "dist/content/capture-content.js"
       ]
     }

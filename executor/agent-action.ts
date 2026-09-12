@@ -21,7 +21,7 @@ const cssEscape: (s: string) => string =
     : (s) =>
         s.replace(/^[0-9]|[^a-zA-Z0-9_-]/g, (ch) => `\\${ch.charCodeAt(0).toString(16).toUpperCase()} `);
 
-function selectorFor(el: ElementMeta): string {
+export function selectorFor(el: ElementMeta): string {
   return el.generated ? `__privis_generated:${el.element_id}` : `#${cssEscape(el.element_id)}`;
 }
 
@@ -35,7 +35,7 @@ function norm(s: string): string {
  * role the model actually sees in a11y trees (a bare <button> has no role
  * ATTRIBUTE, so a `role: "button"` target must still match it).
  */
-function effectiveRole(el: ElementMeta): string | null {
+export function effectiveRole(el: ElementMeta): string | null {
   if (el.role) return el.role;
   const t = el.tag.toLowerCase();
   if (t === "button" || (t === "input" && /^(submit|button|image)$/.test(el.type ?? "")))

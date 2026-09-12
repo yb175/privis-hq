@@ -1,5 +1,9 @@
-// extension/src/settings/models.ts
+// shared/settings.ts
 // Configuration and persistence for CBA-8 Settings (server URL + model toggle).
+// Moved out of extension/src/settings so core subsystems (remote-agent server,
+// orchestrator) depend on a neutral module instead of extension UI code. The
+// extension still owns persistence (chrome.storage.local); every chrome.* access
+// here is guarded, so the Node-side server can import it unchanged.
 //
 // Privacy boundary: the extension persists ONLY non-provider-key settings —
 // model preference, operator server URL, and optional server auth token.

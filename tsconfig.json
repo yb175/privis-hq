@@ -17,9 +17,9 @@
     "content/**/*",
     "executor/**/*",
     "privacy/**/*",
-    "remote/**/*",
     "remote-agent/**/*",
     "extension/**/*",
+    "shared/**/*",
     "types/**/*",
     "utils/**/*",
     "tests/**/*"

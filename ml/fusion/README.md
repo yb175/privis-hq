@@ -12,7 +12,7 @@ implementation of the fusion algorithm.
 | Input | Shape | Producer |
 |---|---|---|
 | `elements` | `ElementMeta[]` | Capture Layer content script (`utils/dom-extractor.ts`) |
-| `dom_detections` | `Detection[]`, `source:"dom"` | existing `detectSensitive()` in `privacy/sanitizer/structural-redact.ts` — **not duplicated here** |
+| `dom_detections` | `Detection[]`, `source:"dom"` | existing `detectSensitive()` in `privacy/engine/detect-dom.ts` — **not duplicated here** |
 | `vision_detections` | `{category, bbox, confidence, source:"vision"}` | ML-1 (`face_detector.py`) + ML-3 (`pii_classifier.py`) |
 | `screenshot` | `{w, h}` | screenshot pixel dimensions |
 | `viewport` | `{w, h}` | CSS viewport dimensions |

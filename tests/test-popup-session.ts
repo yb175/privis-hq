@@ -14,7 +14,7 @@ import {
   loadModelSettings,
   saveModelSettings,
   STORAGE_KEY_MODEL_SETTINGS,
-} from "../extension/src/settings/models.js";
+} from "../shared/settings.js";
 import type {
   AgentAction,
   AgentSession,

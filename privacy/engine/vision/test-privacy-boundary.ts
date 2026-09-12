@@ -4,8 +4,8 @@
 // Runs the REAL modules end-to-end — detectSensitive, runVisionPath (real
 // decode + real YuNet + real M4 fusion), applyPlaceholders, redactVisual
 // (real redaction logic via test-canvas-shim.ts), decide, and the REAL
-// sendSanitized last-line defense — on synthetic fixtures. Only the network
-// transport is absent (the v0 remote client makes no network call anyway).
+// router boundary (assertSanitizedPackage) — on synthetic fixtures. Only the
+// network transport is absent.
 //
 // Privacy test matrix (A–H) per M6-E, plus raw-screenshot boundary (hashes),
 // FACE pixel redaction, PII placeholders, PASSWORD handling, policy ordering
@@ -34,13 +34,11 @@ import { runVisionPath } from "./face-pipeline.js";
 import { loadFaceDetector, type FaceDetector } from "./face-detector.js";
 import { decodePngRGBA } from "./test-png.js";
 import { installCanvasShims } from "./test-canvas-shim.js";
-import {
-  detectSensitive,
-  applyPlaceholders,
-} from "../../sanitizer/structural-redact.js";
-import { redactVisual } from "../../sanitizer/visual-redact.js";
+import { detectSensitive } from "../../engine/detect-dom.js";
+import { applyPlaceholders } from "../../sanitizer/structural-redact.js";
+import { redactVisual } from "../../sanitizer/redaction-gate.js";
 import { decide } from "../../policy-gate/policy-gate.js";
-import { sendSanitized } from "../../../remote/client.js";
+import { assertSanitizedPackage } from "../../../remote-agent/router.js";
 
 const failures: string[] = [];
 
@@ -173,8 +171,9 @@ function pixelationCheck(
 
 // ---------------------------------------------------------------------------
 // simulateStep: the runStep() flow from background/service-worker.ts, with the
-// REAL modules at every stage. The remote call is the REAL sendSanitized (its
-// last-line defense runs); the payload copy is kept for assertions.
+// REAL modules at every stage. The remote call is the REAL router boundary
+// (assertSanitizedPackage, the production outbound defense); the payload copy
+// is kept for assertions.
 // ---------------------------------------------------------------------------
 
 interface StepOutcome {
@@ -219,7 +218,7 @@ async function simulateStep(scenario: {
     sanitizedContext: { elements: remoteElements, browserState: scenario.browserState },
     redacted: true, // sanitizer provenance (required by every outbound boundary)
   };
-  await sendSanitized(payload); // REAL last-line defense: throws if anything raw slipped in
+  await assertSanitizedPackage(payload); // REAL router boundary: throws if anything raw slipped in
   return { gate, sent: payload, map, detections, sanitized, sanitizedScreenshot };
 }
 
@@ -237,7 +236,10 @@ const passEl = el("e-pass", "input", [10, 430, 200, 20], {
   type: "password", label: "Password", text: "",
 });
 const panEl = el("e-pan", "span", [10, 460, 200, 20], {
-  label: "PAN", text: "ABCDE1234F",
+  // Structurally valid PAN (4th char 'P' = individual holder) — the Phase 01
+  // lexical layer validates structure, and the old fake ('D' entity char)
+  // is correctly refused now.
+  label: "PAN", text: "ABCPE1234F",
 });
 
 /** Common payload assertions (in-memory structure + serialized regexes). */
@@ -270,7 +272,7 @@ function assertPayloadClean(
   const hits = PII_PATTERNS.filter((re) => re.test(json));
   check(`${tag}: serialized payload free of PII patterns (PAN/AADHAAR/EMAIL/PHONE)`,
     hits.length === 0, hits.map(String).join(","));
-  check(`${tag}: REAL sendSanitized last-line defense accepted the payload`, true);
+  check(`${tag}: REAL router boundary (assertSanitizedPackage) accepted the payload`, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -451,7 +453,7 @@ async function main(): Promise<void> {
     {
       const els = [
         el("e-phone", "span", [10, 10, 200, 20], { label: "Phone", text: "9876543210" }),
-        el("e-aadhaar", "span", [10, 40, 200, 20], { label: "Aadhaar", text: "1234 5678 9012" }),
+        el("e-aadhaar", "span", [10, 40, 200, 20], { label: "Aadhaar", text: "2341 2341 2346" }), // Verhoeff-valid, series 2-9
         el("e-amount", "span", [10, 70, 200, 20], { label: "Amount", text: "₹50,000" }),
         el("e-name", "span", [10, 100, 200, 20], { label: "Full name", text: "Arjun Mehta" }),
       ];
@@ -462,16 +464,16 @@ async function main(): Promise<void> {
         textOf("e-amount") === "AMOUNT_1" && textOf("e-name") === "NAME_1",
         [textOf("e-phone"), textOf("e-aadhaar"), textOf("e-amount"), textOf("e-name")].join("/"));
       check("PII: real values isolated in the local map",
-        r.map["e-phone"] === "9876543210" && r.map["e-aadhaar"] === "1234 5678 9012");
+        r.map["e-phone"] === "9876543210" && r.map["e-aadhaar"] === "2341 2341 2346");
       assertPayloadClean("PII", r, F5);
     }
 
     // --- Remote client last-line defense (existing, now regression-pinned) --
-    console.log("\n[Defense] sendSanitized refuses raw packages");
+    console.log("\n[Defense] router boundary refuses raw packages");
     {
       let refused = false;
       try {
-        await sendSanitized({
+        await assertSanitizedPackage({
           goal: "g",
           sanitizedScreenshot: "data:image/png;base64,AAAA",
           sanitizedContext: { elements: [], browserState: VIEWPORT_640 },
@@ -486,7 +488,7 @@ async function main(): Promise<void> {
     {
       let refused = false;
       try {
-        await sendSanitized({
+        await assertSanitizedPackage({
           goal: "g",
           sanitizedScreenshot: "data:image/png;base64,AAAA",
           sanitizedContext: { elements: [el("e-x", "span", [0, 0, 1, 1], { text: "ABCDE1234F" })], browserState: VIEWPORT_640 },
@@ -505,11 +507,12 @@ async function main(): Promise<void> {
         ["capturePackage(tabId)", sw.indexOf("await capturePackage(tabId)")],
         ["runVisionPath", sw.indexOf("await runVisionPath(")],
         ["applyPlaceholders", sw.indexOf("applyPlaceholders(pkg")],
-        ["redactVisual", sw.indexOf("await redactVisual(")],
+        ["sealAndRedact (encoding gate)", sw.indexOf("await sealAndRedact(")],
         ["decide", sw.indexOf("decide({")],
+        ["tokeniseGoal", sw.indexOf("tokeniseGoal(goal).goal")],
         ["queryServer (remote agent)", sw.indexOf("queryServer(")],
       ] as const;
-      check("Order: capture -> vision -> placeholders -> redact -> gate -> remote",
+      check("Order: capture -> vision -> placeholders -> gate -> policy -> tokenise -> remote",
         order.every(([, i]) => i !== -1) && order.every(([name], k) => order[k][1] > (k > 0 ? order[k - 1][1] : -1)),
         order.map(([name, i]) => `${name}@${i}`).join(" "));
       check("Order: no queryServer call outside runStep's post-gate path",
@@ -520,21 +523,26 @@ async function main(): Promise<void> {
     console.log("\n[Audit] Persistence & network (static source scan)");
     const RUNTIME_FILES = [
       "background/service-worker.ts",
-      "extension/src/background/index.ts",
       "orchestrator/runGoal.ts",
       "orchestrator/runStep.ts",
+      "orchestrator/capture.ts",
+      "orchestrator/hud.ts",
+      "orchestrator/outbound.ts",
       "orchestrator/session.ts",
       "content/capture-content.ts",
       "utils/screenshot.ts",
       "utils/messaging.ts",
       "privacy/sanitizer/structural-redact.ts",
+      "privacy/sanitizer/placeholders.ts",
+      "privacy/sanitizer/redaction-gate.ts",
+      "privacy/engine/detect-dom.ts",
       "privacy/sanitizer/visual-redact.ts",
       "privacy/policy-gate/policy-gate.ts",
       "privacy/engine/fuse.ts",
       "privacy/engine/vision/ort-runtime.ts",
       "privacy/engine/vision/face-detector.ts",
       "privacy/engine/vision/face-pipeline.ts",
-      "remote/client.ts",
+      "remote-agent/router.ts",
       "executor/local-executor.ts",
     ];
     const PERSISTENCE_FORBIDDEN = [
@@ -551,7 +559,8 @@ async function main(): Promise<void> {
     }
     {
       // fetch( may appear ONLY for in-memory data: URLs (decode), never for
-      // network resources. The single conceptual boundary is remote/client.ts.
+      // network resources. The single conceptual outbound boundary is
+      // remote-agent/router.ts (assertSanitizedPackage) + client-server.ts.
       const src = readFileSync("privacy/engine/vision/face-pipeline.ts", "utf-8");
       check("Audit: face-pipeline fetch is data:-URL decode only", src.includes("await fetch(dataUrl)"));
       const vr = readFileSync("privacy/sanitizer/visual-redact.ts", "utf-8");

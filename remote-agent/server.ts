@@ -10,7 +10,9 @@ import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import type { SanitizedPackage } from "../types/index.js";
 import { routeAgentRequest } from "./router.js";
-import { loadModelSettings } from "../extension/src/settings/models.js";
+import { redactPii } from "./guard.js";
+import { verifyReceipt } from "./receipt.js";
+import { loadModelSettings } from "../shared/settings.js";
 
 export function createAgentApp() {
   const app = new Hono();
@@ -108,10 +110,25 @@ export function createAgentApp() {
         return s.length > n ? s.slice(0, n) + "…" : s;
       };
       console.log(
-        `[agent] /plan request goal=${short(body.goal)} model=${preferred ?? serverSettings.model} ` +
+        `[agent] /plan request goal=${short(redactPii(body.goal))} model=${preferred ?? serverSettings.model} ` +
           `redacted=${pkg.redacted} elements=${pkg.sanitizedContext?.elements?.length ?? 0} ` +
           `screenshotChars=${pkg.sanitizedScreenshot?.length ?? 0}`
       );
+
+      // Phase 01: server-side receipt verification (SIH26171 worker-side
+      // check, ported). The client verifies before transmitting; this is the
+      // independent re-check at the receiving boundary — the operator refuses
+      // a payload whose screenshot bytes do not match the receipt the gate
+      // stamped, whatever path it took to get here. 422, not 400: the request
+      // was well-formed; its provenance was not.
+      const receipt = await verifyReceipt(pkg.sanitizedScreenshot, pkg.redactionManifest);
+      if (!receipt.ok) {
+        console.error(`[agent] /plan receipt verification failed: ${receipt.reason}`);
+        return c.json(
+          { ok: false, error: `redaction receipt verification failed (${receipt.reason})` },
+          422
+        );
+      }
 
       const action = await routeAgentRequest(
         pkg,

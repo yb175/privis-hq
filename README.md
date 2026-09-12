@@ -125,7 +125,7 @@ Both must exit 0. `typecheck` catches type drift; `build` catches import/bundle 
    ```bash
    cd demo-portal && python3 -m http.server 8000
    ```
-   Open `http://localhost:8000`. All three content scripts (`dist/utils/dom-extractor.js`, `dist/privacy/sanitizer/structural-redact.js`, `dist/content/capture-content.js`) must inject cleanly — no errors in the page console.
+   Open `http://localhost:8000`. The content script (`dist/content/capture-content.js`) must inject cleanly — no errors in the page console.
 3. **Trigger the manual capture hook** from the service worker console: `chrome://extensions` → **PRIVIS** → **service worker** link → DevTools console:
    ```js
    chrome.tabs.query({ active: true }, ([t]) =>

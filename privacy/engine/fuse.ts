@@ -32,6 +32,7 @@
 // Privacy: pure local computation, no I/O, no network, no persistence.
 
 import type { Detection, ElementMeta, Viewport } from "../../types/index.js";
+import { scaleBBox } from "../../utils/coords.js";
 
 /** Minimum IoU for a vision detection to match a DOM element (M4 rule). */
 export const IOU_THRESHOLD = 0.3;
@@ -48,21 +49,6 @@ export function iou(a: readonly number[], b: readonly number[]): number {
   const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
   const union = aw * ah + bw * bh - inter;
   return union > 0 ? inter / union : 0;
-}
-
-/** Python round(): round-half-to-even (JS Math.round is half-up). */
-function roundHalfEven(v: number): number {
-  const f = Math.floor(v);
-  const d = v - f;
-  if (d > 0.5) return f + 1;
-  if (d < 0.5) return f;
-  return f % 2 === 0 ? f : f + 1;
-}
-
-/** Scale a screenshot-pixel bbox into viewport/CSS pixels (fuse.py:scale_bbox). */
-function scaleBBox(bbox: readonly number[], sx: number, sy: number): [number, number, number, number] {
-  const [x, y, w, h] = bbox;
-  return [roundHalfEven(x * sx), roundHalfEven(y * sy), roundHalfEven(w * sx), roundHalfEven(h * sy)];
 }
 
 /**

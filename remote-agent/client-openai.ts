@@ -5,6 +5,7 @@ import type { SanitizedPackage } from "../types/index.js";
 import { type AgentAction, parseAgentAction } from "./types.js";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./packager.js";
 import { guardModelOutput } from "./guard.js";
+import { assertSanitizedPackage } from "./assert.js";
 
 export { SYSTEM_PROMPT };
 
@@ -29,6 +30,10 @@ export async function queryOpenAI(
   pkg: SanitizedPackage,
   options?: OpenAIOptions
 ): Promise<AgentAction> {
+  // Outbound boundary: no provider client may dispatch an unproven package,
+  // even when called directly instead of through the router.
+  assertSanitizedPackage(pkg);
+
   const apiKey = options?.apiKey?.trim();
   if (!apiKey) {
     return {
