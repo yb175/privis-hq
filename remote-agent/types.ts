@@ -24,6 +24,52 @@ export interface TypeAction {
   placeholder: string; // e.g. "PAN_1", "EMAIL_1", "AADHAAR_1", "NAME_1", "AMOUNT_1", "PHONE_1", "SSN_1", "CARD_1"
 }
 
+export const ALLOWED_KEYS = [
+  "Enter",
+  "Tab",
+  "Shift+Tab",
+  "Escape",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "Backspace",
+  "Delete",
+  "Control+A",
+] as const;
+
+export type AllowedKey = (typeof ALLOWED_KEYS)[number];
+
+export interface PressKeyAction {
+  type: "press_key";
+  target: Target;
+  key: AllowedKey;
+}
+
+export interface TargetAction {
+  type: "focus" | "hover" | "clear" | "check" | "uncheck";
+  target: Target;
+}
+
+export interface SelectOptionAction {
+  type: "select_option";
+  target: Target;
+  option: string;
+}
+
+export interface WaitForAction {
+  type: "wait_for";
+  condition: "element" | "text" | "url" | "gone" | "stable";
+  target?: Target;
+  needle?: string;
+  urlPattern?: string;
+  timeoutMs?: number;
+}
+
+export interface HistoryAction {
+  type: "go_back" | "go_forward" | "reload";
+}
+
 export interface ScrollAction {
   type: "scroll";
   dy: number;
@@ -54,6 +100,11 @@ export type AgentAction =
   | ClickAction
   | TypeAction
   | ScrollAction
+  | PressKeyAction
+  | TargetAction
+  | SelectOptionAction
+  | WaitForAction
+  | HistoryAction
   | SearchAction
   | DoneAction
   | AskHumanAction;
@@ -227,6 +278,85 @@ export function validateAgentAction(
       }
       return { ok: true, action: { type: "click", target: obj.target } };
     }
+
+    case "press_key": {
+      if (!isTarget(obj.target)) {
+        return { ok: false, error: "'press_key' action requires a valid 'target'" };
+      }
+      if (!(ALLOWED_KEYS as readonly string[]).includes(obj.key as string)) {
+        return { ok: false, error: `Unsupported key: "${String(obj.key)}"` };
+      }
+      return { ok: true, action: { type: "press_key", target: obj.target, key: obj.key as AllowedKey } };
+    }
+
+    case "focus":
+    case "hover":
+    case "clear":
+    case "check":
+    case "uncheck": {
+      if (!isTarget(obj.target)) {
+        return { ok: false, error: `'${obj.type}' action requires a valid 'target'` };
+      }
+      return { ok: true, action: { type: obj.type, target: obj.target } as TargetAction };
+    }
+
+    case "select_option": {
+      if (!isTarget(obj.target)) {
+        return { ok: false, error: "'select_option' action requires a valid 'target'" };
+      }
+      if (typeof obj.option !== "string" || !obj.option.trim()) {
+        return { ok: false, error: "'select_option' action requires a non-empty 'option'" };
+      }
+      if (obj.option.length > 200) {
+        return { ok: false, error: "'select_option' option exceeds 200 characters" };
+      }
+      for (const { name, re } of PII_PATTERNS) {
+        if (re.test(obj.option)) return { ok: false, error: `Raw ${name} detected in option` };
+      }
+      return { ok: true, action: { type: "select_option", target: obj.target, option: obj.option.trim() } };
+    }
+
+    case "wait_for": {
+      const conditions = ["element", "text", "url", "gone", "stable"];
+      if (typeof obj.condition !== "string" || !conditions.includes(obj.condition)) {
+        return { ok: false, error: "'wait_for' action requires a supported condition" };
+      }
+      if (["element", "gone"].includes(obj.condition) && !isTarget(obj.target)) {
+        return { ok: false, error: `'wait_for ${obj.condition}' requires a valid 'target'` };
+      }
+      if (obj.condition === "text" && (typeof obj.needle !== "string" || !obj.needle.trim())) {
+        return { ok: false, error: "'wait_for text' requires a non-empty 'needle'" };
+      }
+      if (obj.condition === "url" && (typeof obj.urlPattern !== "string" || !obj.urlPattern.trim())) {
+        return { ok: false, error: "'wait_for url' requires a non-empty 'urlPattern'" };
+      }
+      if (obj.timeoutMs !== undefined &&
+          (typeof obj.timeoutMs !== "number" || !Number.isFinite(obj.timeoutMs) || obj.timeoutMs < 1 || obj.timeoutMs > 30000)) {
+        return { ok: false, error: "'wait_for' timeoutMs must be between 1 and 30000" };
+      }
+      const waitStrings = [obj.needle, obj.urlPattern].filter((v): v is string => typeof v === "string");
+      for (const value of waitStrings) {
+        for (const { name, re } of PII_PATTERNS) {
+          if (re.test(value)) return { ok: false, error: `Raw ${name} detected in wait condition` };
+        }
+      }
+      return {
+        ok: true,
+        action: {
+          type: "wait_for",
+          condition: obj.condition as WaitForAction["condition"],
+          ...(isTarget(obj.target) ? { target: obj.target } : {}),
+          ...(typeof obj.needle === "string" ? { needle: obj.needle.trim() } : {}),
+          ...(typeof obj.urlPattern === "string" ? { urlPattern: obj.urlPattern.trim() } : {}),
+          ...(typeof obj.timeoutMs === "number" ? { timeoutMs: obj.timeoutMs } : {}),
+        },
+      };
+    }
+
+    case "go_back":
+    case "go_forward":
+    case "reload":
+      return { ok: true, action: { type: obj.type } as HistoryAction };
 
     case "type": {
       for (const rawKey of ["value", "text", "input", "val", "content"]) {

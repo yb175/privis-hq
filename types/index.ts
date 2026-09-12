@@ -46,16 +46,30 @@ export interface BrowserState {
   viewport: Viewport;
 }
 
+export type ActionErrorCode =
+  | "TARGET_NOT_FOUND"
+  | "NOT_INTERACTABLE"
+  | "UNSUPPORTED_CONTROL"
+  | "TIMEOUT"
+  | "INVALID_ACTION"
+  | "EXECUTION_ERROR";
+
 export interface Action {
-  type: "click" | "type" | "scroll" | string;
+  type: "click" | "type" | "scroll" | "press_key" | "focus" | "hover" | "clear" |
+    "select_option" | "check" | "uncheck" | "wait_for" | "go_back" | "go_forward" | "reload" | string;
   target: string;
   value?: string;
+  key?: string;
+  condition?: "element" | "text" | "url" | "gone" | "stable";
+  timeoutMs?: number;
+  targetLocator?: { css?: string; role?: string; name?: string; bbox?: [number, number, number, number] };
   dy?: number;
 }
 
 export interface ActionResult {
   ok: boolean;
   error?: string;
+  code?: ActionErrorCode;
 }
 
 export type PolicyGateDecision = "allow" | "human_approval" | "block";

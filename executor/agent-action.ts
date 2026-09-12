@@ -57,28 +57,32 @@ function resolveTarget(
   sanitized: ElementMeta[]
 ): ElementMeta | undefined {
   if (typeof target?.css === "string" && target.css.trim()) return undefined; // css used directly
-  if (target?.role) {
-    const want = norm(target.role);
-    const byRole = sanitized.find((el) => effectiveRole(el) && norm(effectiveRole(el)!) === want);
-    if (byRole) return byRole;
-  }
-  if (target?.name) {
-    const want = norm(target.name);
-    const byName = sanitized.find(
-      (el) => (el.text && norm(el.text) === want) || (el.label && norm(el.label) === want)
-    );
-    if (byName) return byName;
-  }
-  if (target?.bbox) {
-    const [bx, by, bw, bh] = target.bbox;
-    const overlaps = (el: ElementMeta): boolean => {
+  if (!target?.role && !target?.name && !target?.bbox) return undefined;
+  const candidates = sanitized.filter((el) => {
+    if (target?.role && (!effectiveRole(el) || norm(effectiveRole(el)!) !== norm(target.role))) {
+      return false;
+    }
+    if (
+      target?.name &&
+      !((el.text && norm(el.text) === norm(target.name)) ||
+        (el.label && norm(el.label) === norm(target.name)))
+    ) {
+      return false;
+    }
+    if (target?.bbox) {
+      const [bx, by, bw, bh] = target.bbox;
       const [x, y, w, h] = el.bbox;
-      return x < bx + bw && bx < x + w && y < by + bh && by < y + h;
-    };
-    const byBbox = sanitized.find(overlaps);
-    if (byBbox) return byBbox;
-  }
-  return undefined;
+      if (!(x < bx + bw && bx < x + w && y < by + bh && by < y + h)) return false;
+    }
+    return true;
+  });
+  return candidates[0];
+}
+
+function cssTarget(target: Target | undefined, sanitized: ElementMeta[]): string | undefined {
+  if (typeof target?.css === "string" && target.css.trim()) return target.css.trim();
+  const el = resolveTarget(target, sanitized);
+  return el ? selectorFor(el) : undefined;
 }
 
 /**
@@ -99,6 +103,34 @@ export function agentActionToExecutorActions(
   switch (action.type) {
     case "scroll":
       return [{ type: "scroll", target: "", dy: action.dy }];
+    case "press_key":
+    case "focus":
+    case "hover":
+    case "clear":
+    case "check":
+    case "uncheck": {
+      const css = cssTarget(action.target, sanitized);
+      return [{ type: action.type, target: css ?? `__unresolved:${JSON.stringify(action.target)}`, key: action.type === "press_key" ? action.key : undefined }];
+    }
+    case "select_option": {
+      const css = cssTarget(action.target, sanitized);
+      return [{ type: "select_option", target: css ?? `__unresolved:${JSON.stringify(action.target)}`, value: action.option }];
+    }
+    case "wait_for":
+      return [{
+        type: "wait_for",
+        target: "",
+        ...(action.target ? { targetLocator: action.target } : {}),
+        condition: action.condition,
+        ...((action.needle ?? action.urlPattern) !== undefined
+          ? { value: action.needle ?? action.urlPattern }
+          : {}),
+        timeoutMs: action.timeoutMs,
+      }];
+    case "go_back":
+    case "go_forward":
+    case "reload":
+      return [{ type: action.type, target: "" }];
     case "click": {
       const t = action.target;
       const css =
