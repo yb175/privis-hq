@@ -354,6 +354,18 @@ const validDone = guardModelOutput('{"type": "done", "reason": "Completed succes
   sanitizedPackage: pkg,
 });
 assert.strictEqual(validDone.ok, true);
+const verifiedDone = guardModelOutput(JSON.stringify({
+  type: "done",
+  reason: "Cart completed",
+  verify: { condition: "text", needle: "Order confirmed", timeoutMs: 5000 },
+}), { sanitizedPackage: pkg });
+assert.strictEqual(verifiedDone.ok, true, "done verification should be accepted");
+const invalidDoneVerification = guardModelOutput(JSON.stringify({
+  type: "done",
+  reason: "Cart completed",
+  verify: { condition: "text", needle: "", timeoutMs: 5000 },
+}), { sanitizedPackage: pkg });
+assert.strictEqual(invalidDoneVerification.ok, false, "invalid done verification should be rejected");
 
 const validAskHuman = guardModelOutput('{"type": "ask_human", "reason": "Need OTP code"}', {
   sanitizedPackage: pkg,

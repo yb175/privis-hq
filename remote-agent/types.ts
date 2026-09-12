@@ -1,5 +1,6 @@
 // remote-agent/types.ts
 // CBA-1: AgentAction contract + session types for Cloud Browser Agent
+import type { ActionErrorCode } from "../types/index.js";
 
 export interface Target {
   css?: string;
@@ -85,9 +86,18 @@ export interface SearchAction {
   query: string;
 }
 
+export interface DoneVerification {
+  condition: "element" | "text" | "url" | "gone";
+  target?: Target;
+  needle?: string;
+  urlPattern?: string;
+  timeoutMs?: number;
+}
+
 export interface DoneAction {
   type: "done";
   reason: string;
+  verify?: DoneVerification;
 }
 
 export interface AskHumanAction {
@@ -117,7 +127,7 @@ export interface SessionStep {
   step: number;
   url: string;
   action: AgentAction;
-  result?: { ok: boolean; error?: string };
+  result?: { ok: boolean; error?: string; code?: ActionErrorCode };
   timestamp: number;
 }
 
@@ -131,6 +141,9 @@ export interface AgentSession {
   gateDecision?: "allow" | "human_approval" | "block";
   history: SessionStep[];
   lastAction?: AgentAction;
+  /** Redacted state/action fingerprints used to stop blind identical retries. */
+  lastFailureFingerprint?: string;
+  lastFailureAction?: string;
   /** Exact redacted-only package view dispatched to the remote planner. */
   outboundPayload?: {
     sanitizedScreenshot: string;
@@ -428,7 +441,44 @@ export function validateAgentAction(
       if (typeof obj.reason !== "string" || obj.reason.trim().length === 0) {
         return { ok: false, error: "'done' action requires a non-empty 'reason' string" };
       }
-      return { ok: true, action: { type: "done", reason: obj.reason.trim() } };
+      const verify = obj.verify;
+      if (verify !== undefined) {
+        if (typeof verify !== "object" || verify === null || Array.isArray(verify)) {
+          return { ok: false, error: "'done.verify' must be an object" };
+        }
+        const v = verify as Record<string, unknown>;
+        const conditions = ["element", "text", "url", "gone"];
+        if (typeof v.condition !== "string" || !conditions.includes(v.condition)) {
+          return { ok: false, error: "'done.verify' requires a supported condition" };
+        }
+        if (["element", "gone"].includes(v.condition) && !isTarget(v.target)) {
+          return { ok: false, error: `'done.verify ${v.condition}' requires a valid target` };
+        }
+        if (v.condition === "text" && (typeof v.needle !== "string" || !v.needle.trim())) {
+          return { ok: false, error: "'done.verify text' requires a non-empty needle" };
+        }
+        if (v.condition === "url" && (typeof v.urlPattern !== "string" || !v.urlPattern.trim())) {
+          return { ok: false, error: "'done.verify url' requires a non-empty urlPattern" };
+        }
+        if (v.timeoutMs !== undefined &&
+            (typeof v.timeoutMs !== "number" || !Number.isFinite(v.timeoutMs) || v.timeoutMs < 1 || v.timeoutMs > 30000)) {
+          return { ok: false, error: "'done.verify' timeoutMs must be between 1 and 30000" };
+        }
+        const strings = [v.needle, v.urlPattern].filter((value): value is string => typeof value === "string");
+        for (const value of strings) {
+          for (const { name, re } of PII_PATTERNS) {
+            if (re.test(value)) return { ok: false, error: `Raw ${name} detected in done verification` };
+          }
+        }
+      }
+      return {
+        ok: true,
+        action: {
+          type: "done",
+          reason: obj.reason.trim(),
+          ...(verify !== undefined ? { verify: verify as DoneVerification } : {}),
+        },
+      };
     }
 
     case "ask_human": {

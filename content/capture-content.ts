@@ -114,6 +114,18 @@ function failure(code: NonNullable<ActionResult["code"]>, error: string): Action
   return { ok: false, code, error };
 }
 
+function interactionFailure(el: HTMLElement): ActionResult | undefined {
+  if ("disabled" in el && (el as HTMLInputElement).disabled) {
+    return failure("NOT_INTERACTABLE", "Target is disabled");
+  }
+  const point = el.getBoundingClientRect?.();
+  const top = point && document.elementFromPoint?.(point.x + point.width / 2, point.y + point.height / 2);
+  if (top && top !== el && !el.contains(top)) {
+    return failure("NOT_INTERACTABLE", "Target is covered by another element");
+  }
+  return undefined;
+}
+
 function timeoutMsFor(action: Action): number {
   return Math.min(Math.max(action.timeoutMs ?? 5000, 1), 30000);
 }
@@ -172,6 +184,8 @@ export async function executeAction(action: Action): Promise<ActionResult> {
 
   const el = resolveTarget(action.target ?? "");
   if (!el) return failure("TARGET_NOT_FOUND", `Target not found: ${action.target ?? ""}`);
+  const blocked = interactionFailure(el);
+  if (blocked) return blocked;
 
   switch (action.type) {
     case "click":
