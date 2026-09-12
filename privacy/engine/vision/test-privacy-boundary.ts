@@ -36,7 +36,7 @@ import { decodePngRGBA } from "./test-png.js";
 import { installCanvasShims } from "./test-canvas-shim.js";
 import { detectSensitive } from "../../engine/detect-dom.js";
 import { applyPlaceholders } from "../../sanitizer/structural-redact.js";
-import { redactVisual } from "../../sanitizer/visual-redact.js";
+import { redactVisual } from "../../sanitizer/redaction-gate.js";
 import { decide } from "../../policy-gate/policy-gate.js";
 import { assertSanitizedPackage } from "../../../remote-agent/router.js";
 
@@ -236,7 +236,10 @@ const passEl = el("e-pass", "input", [10, 430, 200, 20], {
   type: "password", label: "Password", text: "",
 });
 const panEl = el("e-pan", "span", [10, 460, 200, 20], {
-  label: "PAN", text: "ABCDE1234F",
+  // Structurally valid PAN (4th char 'P' = individual holder) — the Phase 01
+  // lexical layer validates structure, and the old fake ('D' entity char)
+  // is correctly refused now.
+  label: "PAN", text: "ABCPE1234F",
 });
 
 /** Common payload assertions (in-memory structure + serialized regexes). */
@@ -450,7 +453,7 @@ async function main(): Promise<void> {
     {
       const els = [
         el("e-phone", "span", [10, 10, 200, 20], { label: "Phone", text: "9876543210" }),
-        el("e-aadhaar", "span", [10, 40, 200, 20], { label: "Aadhaar", text: "1234 5678 9012" }),
+        el("e-aadhaar", "span", [10, 40, 200, 20], { label: "Aadhaar", text: "2341 2341 2346" }), // Verhoeff-valid, series 2-9
         el("e-amount", "span", [10, 70, 200, 20], { label: "Amount", text: "₹50,000" }),
         el("e-name", "span", [10, 100, 200, 20], { label: "Full name", text: "Arjun Mehta" }),
       ];
@@ -461,7 +464,7 @@ async function main(): Promise<void> {
         textOf("e-amount") === "AMOUNT_1" && textOf("e-name") === "NAME_1",
         [textOf("e-phone"), textOf("e-aadhaar"), textOf("e-amount"), textOf("e-name")].join("/"));
       check("PII: real values isolated in the local map",
-        r.map["e-phone"] === "9876543210" && r.map["e-aadhaar"] === "1234 5678 9012");
+        r.map["e-phone"] === "9876543210" && r.map["e-aadhaar"] === "2341 2341 2346");
       assertPayloadClean("PII", r, F5);
     }
 
@@ -504,11 +507,12 @@ async function main(): Promise<void> {
         ["capturePackage(tabId)", sw.indexOf("await capturePackage(tabId)")],
         ["runVisionPath", sw.indexOf("await runVisionPath(")],
         ["applyPlaceholders", sw.indexOf("applyPlaceholders(pkg")],
-        ["redactVisual", sw.indexOf("await redactVisual(")],
+        ["sealAndRedact (encoding gate)", sw.indexOf("await sealAndRedact(")],
         ["decide", sw.indexOf("decide({")],
+        ["tokeniseGoal", sw.indexOf("tokeniseGoal(goal).goal")],
         ["queryServer (remote agent)", sw.indexOf("queryServer(")],
       ] as const;
-      check("Order: capture -> vision -> placeholders -> redact -> gate -> remote",
+      check("Order: capture -> vision -> placeholders -> gate -> policy -> tokenise -> remote",
         order.every(([, i]) => i !== -1) && order.every(([name], k) => order[k][1] > (k > 0 ? order[k - 1][1] : -1)),
         order.map(([name, i]) => `${name}@${i}`).join(" "));
       check("Order: no queryServer call outside runStep's post-gate path",
@@ -529,6 +533,8 @@ async function main(): Promise<void> {
       "utils/screenshot.ts",
       "utils/messaging.ts",
       "privacy/sanitizer/structural-redact.ts",
+      "privacy/sanitizer/placeholders.ts",
+      "privacy/sanitizer/redaction-gate.ts",
       "privacy/engine/detect-dom.ts",
       "privacy/sanitizer/visual-redact.ts",
       "privacy/policy-gate/policy-gate.ts",

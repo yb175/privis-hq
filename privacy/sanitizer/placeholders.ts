@@ -42,6 +42,14 @@ export function formatPlaceholder(cls: SensitiveCategory, index: number): string
  * The map never leaves the device and is never serialised. Callers get
  * three verbs: allocate, resolve, counts.
  */
+export type PlaceholderSource = "dom" | "vision" | "ocr" | "user" | "derived";
+
+/**
+ * Hands out stable placeholders and holds the local rehydration map.
+ *
+ * The map never leaves the device and is never serialised. Callers get
+ * three verbs: allocate, resolve, counts.
+ */
 export class PlaceholderAllocator {
   readonly sessionId: string;
 
@@ -52,10 +60,9 @@ export class PlaceholderAllocator {
   /** class -> highest index handed out so far. */
   readonly #counters = new Map<SensitiveCategory, number>();
   /**
-   * Placeholders whose value came out of the operator's own sentence (goal
-   * tokenization), not off the page. Provenance travels with the token.
+   * Provenance of each placeholder (where it was detected / allocated).
    */
-  readonly #fromUser = new Set<string>();
+  readonly #provenance = new Map<string, PlaceholderSource>();
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -66,16 +73,15 @@ export class PlaceholderAllocator {
    * and value always come back to the same placeholder, which is what makes
    * numbering stable across steps.
    */
-  allocate(cls: SensitiveCategory, value: string, fromUser = false): string {
+  allocate(cls: SensitiveCategory, value: string, fromUser: boolean | PlaceholderSource = false): string {
     if (NO_VALUE.has(cls)) {
       throw new TypeError(`${cls} has no value to stand for and cannot be allocated`);
     }
+    const source: PlaceholderSource = typeof fromUser === "string" ? fromUser : fromUser ? "user" : "dom";
     const key = `${cls}\0${value}`;
     const existing = this.#byValue.get(key);
     if (existing !== undefined) {
-      // A value first seen on the page and later recognised as the user's own
-      // gains the provenance; it never loses it.
-      if (fromUser) this.#fromUser.add(existing);
+      if (source === "user") this.#provenance.set(existing, "user");
       return existing;
     }
 
@@ -84,13 +90,18 @@ export class PlaceholderAllocator {
     const placeholder = formatPlaceholder(cls, next);
     this.#byValue.set(key, placeholder);
     this.#byPlaceholder.set(placeholder, value);
-    if (fromUser) this.#fromUser.add(placeholder);
+    this.#provenance.set(placeholder, source);
     return placeholder;
   }
 
   /** Did this token's value come from the operator's own sentence? */
   isFromUser(placeholder: string): boolean {
-    return this.#fromUser.has(placeholder);
+    return this.#provenance.get(placeholder) === "user";
+  }
+
+  /** Get exact provenance source for a placeholder token */
+  getProvenance(placeholder: string): PlaceholderSource | undefined {
+    return this.#provenance.get(placeholder);
   }
 
   /**
@@ -106,6 +117,31 @@ export class PlaceholderAllocator {
   count(cls: SensitiveCategory): number {
     return this.#counters.get(cls) ?? 0;
   }
+
+  /** Explicitly purges all in-memory values and mappings */
+  clear(): void {
+    this.#byValue.clear();
+    this.#byPlaceholder.clear();
+    this.#counters.clear();
+    this.#provenance.clear();
+  }
+
+  /** Secure serialization: exposes only safe session counters, NEVER raw values */
+  toJSON(): Record<string, unknown> {
+    const counts: Record<string, number> = {};
+    for (const [cls, cnt] of this.#counters.entries()) {
+      counts[cls] = cnt;
+    }
+    return {
+      sessionId: this.sessionId,
+      totalAllocated: this.#byPlaceholder.size,
+      counts,
+    };
+  }
+
+  toString(): string {
+    return `[PlaceholderAllocator: session=${this.sessionId}, tokens=${this.#byPlaceholder.size}]`;
+  }
 }
 
 // ── The session allocator ─────────────────────────────────────────────────────
@@ -117,6 +153,7 @@ let sessionAllocator = new PlaceholderAllocator("session");
 
 /** Clears all placeholder state. Called at session start. */
 export function resetPlaceholderTokens(): void {
+  sessionAllocator.clear();
   sessionAllocator = new PlaceholderAllocator("session");
 }
 
