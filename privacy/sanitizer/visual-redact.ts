@@ -152,18 +152,38 @@ export function mergedMaskOps(detections: readonly Detection[]): MaskOp[] {
     });
   }
 
+  // Pass 1: same-category adjacency & overlap merging
   let merged = true;
   while (merged) {
     merged = false;
     const next: Op[] = [];
     for (const op of pending) {
-      const partner = next.find((c) => shouldMerge(c, op));
+      const partner = next.find((c) => c.cls === op.cls && shouldMerge(c, op));
       if (!partner) {
         next.push(op);
         continue;
       }
       partner.box = unionBox(partner.box, op.box);
       partner.ids.push(...op.ids);
+      merged = true;
+    }
+    pending = next;
+  }
+
+  // Pass 2: cross-category spatial overlap merging
+  merged = true;
+  while (merged) {
+    merged = false;
+    const next: Op[] = [];
+    for (const op of pending) {
+      const partner = next.find((c) => iou(c.box, op.box) > MERGE_IOU);
+      if (!partner) {
+        next.push(op);
+        continue;
+      }
+      partner.box = unionBox(partner.box, op.box);
+      partner.ids.push(...op.ids);
+      partner.cls = partner.cls === op.cls ? partner.cls : `${partner.cls}+${op.cls}`;
       merged = true;
     }
     pending = next;

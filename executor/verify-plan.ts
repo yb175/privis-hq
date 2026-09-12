@@ -116,6 +116,25 @@ export function verifyPlan(
         });
         return;
       }
+
+      // Check that target exists in context if context elements were supplied
+      if (elements.length > 0) {
+        const targetMatches =
+          elementMap.has(action.target) ||
+          (action.target.startsWith("#") && elementMap.has(action.target.slice(1))) ||
+          Array.from(elementMap.values()).some((e) =>
+            action.target.includes(e.element_id) ||
+            (action.target.startsWith("__privis_generated:") && action.target.slice("__privis_generated:".length) === e.element_id)
+          );
+        if (!targetMatches) {
+          violations.push({
+            code: "TARGET_NOT_IN_CONTEXT",
+            message: `Target '${action.target}' cannot be resolved in sanitized context`,
+            actionIndex: idx,
+          });
+          return;
+        }
+      }
     }
 
     if (action.type === "type") {
@@ -150,7 +169,11 @@ export function verifyPlan(
       }
 
       // Check for hallucinated placeholder (if a token is used, must exist in context or allocated)
-      if (PLACEHOLDER_RE.test(val) && knownPlaceholders.size > 0 && !knownPlaceholders.has(val)) {
+      if (
+        PLACEHOLDER_RE.test(val) &&
+        (context?.elements !== undefined || context?.sanitizedPackage !== undefined) &&
+        !knownPlaceholders.has(val)
+      ) {
         violations.push({
           code: "HALLUCINATED_PLACEHOLDER",
           message: `Placeholder '${val}' does not exist in sanitized context`,

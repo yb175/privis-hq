@@ -69,12 +69,23 @@ export function checkInteractivity(el: Element): InteractivityState {
     return { interactive: true, actionable: false, reason: "aria-disabled" };
   }
 
-  // Inert or aria-hidden
+  // Inert or aria-hidden or hidden ancestor
   if (el.hasAttribute("inert") || (typeof el.closest === "function" && el.closest("[inert]"))) {
     return { interactive: true, actionable: false, reason: "inert" };
   }
-  if (el.getAttribute("aria-hidden") === "true" || (typeof el.closest === "function" && el.closest("[aria-hidden='true']"))) {
+  if (el.getAttribute("aria-hidden") === "true" || (typeof el.closest === "function" && el.closest("[aria-hidden='true'], [hidden]"))) {
     return { interactive: true, actionable: false, reason: "aria-hidden" };
+  }
+
+  // Disabled fieldset check for form controls
+  if (typeof el.closest === "function") {
+    const disabledFieldset = el.closest("fieldset[disabled], fieldset:disabled");
+    if (disabledFieldset) {
+      const firstLegend = disabledFieldset.querySelector(":scope > legend");
+      if (!firstLegend || !firstLegend.contains(el)) {
+        return { interactive: true, actionable: false, reason: "disabled-fieldset" };
+      }
+    }
   }
 
   // Window/DOM environment computed styles check

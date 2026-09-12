@@ -66,13 +66,21 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
  */
 export async function waitForTabSettled(tabId: number, timeoutMs = 5000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  let hasChecked = false;
   while (Date.now() < deadline) {
     try {
       const tab = await chrome.tabs.get(tabId);
-      if (tab.status === "complete") return;
+      if (tab.status === "complete") {
+        if (!hasChecked) {
+          // Allow in-page DOM mutations / microtasks to settle
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        return;
+      }
     } catch {
       return; // tab closed — capturePackage will surface the real error
     }
+    hasChecked = true;
     await new Promise((r) => setTimeout(r, 200));
   }
 }

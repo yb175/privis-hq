@@ -185,6 +185,11 @@ export function chunkDocument(text: string, options: ChunkOptions = {}): Chunk[]
 
   while (offset < text.length) {
     let end = Math.min(text.length, offset + windowChars);
+    // Ensure chunk does not exceed maxTokens when token density is high
+    while (end > offset + 1 && countTokens(text.slice(offset, end)) > maxTokens) {
+      end = Math.max(offset + 1, end - Math.max(1, Math.floor(windowChars * 0.1)));
+    }
+
     if (end < text.length) {
       const lastSpace = text.lastIndexOf(" ", end);
       // Only honour a space that is actually near the end; otherwise a long
@@ -195,7 +200,7 @@ export function chunkDocument(text: string, options: ChunkOptions = {}): Chunk[]
     chunks.push({ text: text.slice(offset, end), offset, index });
     index += 1;
     if (end >= text.length) break;
-    offset += stride;
+    offset = Math.max(offset + 1, end - overlapChars);
   }
 
   return chunks;

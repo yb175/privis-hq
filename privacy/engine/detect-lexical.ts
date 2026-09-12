@@ -63,7 +63,7 @@ const NEGATIVE_CONTEXT =
 
 /** Currency, decimals and thousands separators: an amount, not an identifier. */
 const MONEY_BEFORE = /(₹|rs\.?|inr|usd|\$|total|amount|balance|paid|due)\s*[-]?\s*$/i;
-const MONEY_AFTER = /^\s*(\.\d{1,2}\b|%|\s*(lakh|crore|cr|k)\b)/i;
+const MONEY_AFTER = /^\s*(\.\d{1,2}\b|%|\s*(lakh|crore|cr|k|inr|rs\.?)\b)/i;
 
 const ACCOUNT_CONTEXT =
   /\b(a\/c|ac|acct|account|bank\s*account|savings|current|beneficiary)\s*(no\.?|number|#)?[\s.:#-]*$/i;
@@ -147,7 +147,7 @@ const PATTERNS: readonly Pattern[] = [
   {
     cls: "UPI",
     labelCanDisqualify: false,
-    re: /\b[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,32}\b/g,
+    re: /(?<![a-zA-Z0-9._%+-])\b[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,32}\b(?!\.)/g,
     check: (text) => (isUpiHandleValid(text) ? { reason: "upi-psp", confidence: 0.96 } : null),
   },
   {

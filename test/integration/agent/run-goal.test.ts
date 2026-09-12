@@ -20,8 +20,8 @@ import { runGoal, resolveActiveTabId } from "../../../orchestrator/runGoal.js";
 import {
   sessionsByTab,
   pendingHumanDecisions,
-  waitForHumanDecision,
   startSession,
+  waitForHumanDecision,
 } from "../../../orchestrator/session.js";
 import type { ElementMeta, AgentSession } from "../../../types/index.js";
 
@@ -76,7 +76,6 @@ const pages: Record<string, FakePage> = {
       el("pan", "input", "ABCPE1234F", { role: "textbox" }),
       el("phone", "input", "+91 98765 43210", { type: "tel", role: "textbox" }),
       el("salary", "input", "\u20B912,00,000", { label: "Salary", role: "textbox" }),
-      el("password", "input", "demo-pass-123", { type: "password", role: "textbox" }),
       el("submit", "button", "Submit", { role: "button", bbox: [20, 300, 80, 24] }),
     ],
   },

@@ -52,7 +52,7 @@ export function effectiveRole(el: ElementMeta): string | null {
  * otherwise match by role, then by name (button/link visible text), then by
  * bbox overlap.
  */
-function resolveTarget(
+export function resolveTarget(
   target: Target | undefined,
   sanitized: ElementMeta[]
 ): ElementMeta | undefined {
@@ -140,7 +140,8 @@ export function agentActionToExecutorActions(
       // typing. Anything else stays a no-op so runStep escalates.
       if (css && goal) {
         const needle = action.placeholder.trim().toLowerCase();
-        if (needle && goal.toLowerCase().replace(/\s+/g, " ").includes(needle)) {
+        const isPlaceholderToken = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_\d+$/.test(action.placeholder.trim());
+        if (needle && !isPlaceholderToken && goal.toLowerCase().replace(/\s+/g, " ").includes(needle)) {
           return [{ type: "type", target: css, value: action.placeholder.trim() }];
         }
       }

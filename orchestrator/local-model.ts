@@ -55,7 +55,7 @@ export interface LocalModelOptions {
 export function selectExecutionTier(
   goal: string,
   elements: readonly ElementMeta[],
-  options?: { allowTier1?: boolean }
+  options?: { allowTier1?: boolean; localPlanner?: (goal: string, elements: readonly ElementMeta[]) => Action[] | null }
 ): TierSelection {
   // 1. Try Tier 0: Deterministic grammar & resolution
   const t0Result = tryLocalIntent(goal, elements as ElementMeta[]);
@@ -68,11 +68,14 @@ export function selectExecutionTier(
   }
 
   // 2. If Tier 1 is enabled and local reasoning can handle it
-  if (options?.allowTier1) {
-    return {
-      tier: 1,
-      reason: "tier-1-local-reasoning-enabled",
-    };
+  if (options?.allowTier1 && typeof options?.localPlanner === "function") {
+    const plan = options.localPlanner(goal, elements);
+    if (plan && plan.length > 0) {
+      return {
+        tier: 1,
+        reason: "tier-1-local-reasoning-planned",
+      };
+    }
   }
 
   // 3. Fall through to Tier 2 (Sanitized Remote Planner)

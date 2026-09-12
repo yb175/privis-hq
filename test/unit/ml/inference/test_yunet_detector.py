@@ -18,11 +18,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "ml" / "fusion"))            # yunet_detector
-REPO_ROOT = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "ml" / "inference"))
-sys.path.insert(0, str(REPO_ROOT / "ml" / "scripts"))        # repo root (ml.evaluation)
+sys.path.insert(0, str(REPO_ROOT / "ml" / "scripts"))
 
 from PIL import Image
 
@@ -30,8 +27,8 @@ from yunet_detector import (
     MODEL_PATH, YuNetDetector, decode_stride, nms, preprocess, verify_model,
 )
 
-IMAGES = Path(__file__).resolve().parents[1] / "dataset" / "images"
-ANNOTATIONS = Path(__file__).resolve().parents[1] / "dataset" / "annotations" / "m6b_face_fixtures.json"
+IMAGES = REPO_ROOT / "ml" / "dataset" / "images"
+ANNOTATIONS = REPO_ROOT / "ml" / "dataset" / "annotations" / "m6b_face_fixtures.json"
 
 passed = []
 

@@ -69,10 +69,6 @@ function detectElement(
   const type = (el.type ?? "").toLowerCase();
   const text = el.text.trim();
 
-  // Buttons are CTAs, not data fields: skip so a label like "Pay ₹100" isn't
-  // treated as AMOUNT and its whole label replaced with a placeholder.
-  if (tag === "button" || role === "button") return null;
-
   // Pass 1a: input-type evidence — the page itself declares the class.
   if (type === "password") return { category: "PASSWORD", confidence: CONFIDENCE_HIT };
   if (type === "email") return { category: "EMAIL", confidence: CONFIDENCE_HIT };

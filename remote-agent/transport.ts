@@ -41,7 +41,8 @@ export async function securePostJson<T = unknown>(
   options: TransportOptions = {}
 ): Promise<TransportResponse<T>> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const rawRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const maxRetries = Number.isSafeInteger(rawRetries) && rawRetries >= 0 ? Math.min(rawRetries, 10) : DEFAULT_MAX_RETRIES;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   const fetchFn = options.fetchFn ?? fetch;
   const start = Date.now();
@@ -74,12 +75,11 @@ export async function securePostJson<T = unknown>(
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
       if (!resp.ok) {
         // 4xx client errors or privacy errors: non-retryable
         if (resp.status >= 400 && resp.status < 500) {
           const errText = await resp.text();
+          clearTimeout(timeoutId);
           return {
             ok: false,
             status: resp.status,
@@ -92,6 +92,7 @@ export async function securePostJson<T = unknown>(
         lastError = `Server error ${resp.status}`;
       } else {
         const data = (await resp.json()) as T;
+        clearTimeout(timeoutId);
         return {
           ok: true,
           status: resp.status,
@@ -101,12 +102,13 @@ export async function securePostJson<T = unknown>(
         };
       }
     } catch (err: any) {
-      clearTimeout(timeoutId);
       if (err.name === "AbortError") {
         lastError = `Request timeout after ${timeoutMs}ms`;
       } else {
         lastError = err instanceof Error ? err.message : String(err);
       }
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     retries++;

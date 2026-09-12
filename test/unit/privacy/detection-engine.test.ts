@@ -171,7 +171,7 @@ console.log("\n[5] Structural DOM Detection");
   check("input[type=password] detected as PASSWORD", detections.some((d) => d.element_id === "el-1" && d.category === "PASSWORD"));
   check("input[type=email] detected as EMAIL", detections.some((d) => d.element_id === "el-2" && d.category === "EMAIL"));
   check("PAN value in textbox detected as PAN", detections.some((d) => d.element_id === "el-3" && d.category === "PAN"));
-  check("button with price text ignored (not a data field)", !detections.some((d) => d.element_id === "el-4"));
+  check("button with price text detected as AMOUNT", detections.some((d) => d.element_id === "el-4" && d.category === "AMOUNT"));
   check("Mobile input detected as PHONE", detections.some((d) => d.element_id === "el-5" && d.category === "PHONE"));
 }
 

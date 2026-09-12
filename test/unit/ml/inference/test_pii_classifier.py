@@ -15,7 +15,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "ml" / "fusion"))
+sys.path.insert(0, str(REPO_ROOT / "ml" / "inference"))
 
 from pii_classifier import classify_line, classify_ocr_lines
 

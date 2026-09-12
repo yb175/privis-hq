@@ -33,6 +33,10 @@ import {
   placeholderAllocator,
   resetPlaceholderTokens,
 } from "./placeholders.js";
+import { detectSensitive, CATEGORIES } from "../engine/detect-dom.js";
+
+// Re-export for compatibility with legacy test imports
+export { detectSensitive, CATEGORIES };
 
 // Session-stable tokens: the same real value always maps to the same placeholder
 // (user@x.com is EMAIL_1 every step), and counters start per category. Allocation

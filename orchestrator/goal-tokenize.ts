@@ -32,14 +32,17 @@ export interface TokenisedGoal {
   changed: boolean;
   /** Categories tokenised, counts only — safe for logs. */
   classes: Partial<Record<SensitiveCategory, number>>;
+  /** Map of token -> real value from goal. */
+  tokenMap: Record<string, string>;
 }
 
 export function tokeniseGoal(goal: string): TokenisedGoal {
   const matches = scanText(goal);
-  if (matches.length === 0) return { goal, changed: false, classes: {} };
+  if (matches.length === 0) return { goal, changed: false, classes: {}, tokenMap: {} };
 
   const allocator = placeholderAllocator();
   const classes: Partial<Record<SensitiveCategory, number>> = {};
+  const tokenMap: Record<string, string> = {};
 
   // Replace from the end backwards so earlier indices stay valid.
   let out = goal;
@@ -47,7 +50,8 @@ export function tokeniseGoal(goal: string): TokenisedGoal {
     const token = allocator.allocate(match.cls, match.text, true);
     out = out.slice(0, match.start) + token + out.slice(match.end);
     classes[match.cls] = (classes[match.cls] ?? 0) + 1;
+    tokenMap[token] = match.text;
   }
 
-  return { goal: out, changed: true, classes };
+  return { goal: out, changed: true, classes, tokenMap };
 }

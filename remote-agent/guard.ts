@@ -43,7 +43,8 @@ const FORBIDDEN_RAW_KEYS = ["value", "text", "input", "val", "content", "passwor
 export function redactPii(text: string): string {
   let out = text;
   for (const { name, re } of PII_PATTERNS) {
-    out = out.replace(re, `[REDACTED_${name}]`);
+    const globalRe = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+    out = out.replace(globalRe, `[REDACTED_${name}]`);
   }
   return out;
 }
@@ -167,7 +168,8 @@ export function findPiiInValue(val: unknown): string | null {
 function validateActionWithGuard(
   candidate: unknown,
   allowlist: Set<string> | null,
-  goalText = ""
+  goalText = "",
+  pkg?: SanitizedPackage
 ): { ok: true; action: AgentAction } | { ok: false; error: string } {
   if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
     return { ok: false, error: "Action must be a non-null JSON object" };
@@ -284,6 +286,28 @@ function validateActionWithGuard(
             error: `Invalid placeholder format: "${obj.placeholder}". Must be a CATEGORY_N token from the allowlist or an exact phrase from the USER GOAL.`,
           };
         }
+
+        // Secret field check: goal phrases may NOT be typed into password/OTP/secret fields
+        if (pkg?.sanitizedContext?.elements) {
+          const elements = pkg.sanitizedContext.elements;
+          const targetObj = obj.target as Target;
+          const matchedEl = elements.find((e) => {
+            if (targetObj.css) {
+              if (targetObj.css === e.element_id || targetObj.css === `#${e.element_id}` || targetObj.css.includes(e.element_id)) return true;
+            }
+            if (targetObj.name && e.label && e.label.toLowerCase().includes(targetObj.name.toLowerCase())) return true;
+            return false;
+          });
+          if (matchedEl) {
+            const isSecret = matchedEl.type === "password" || (matchedEl.label && /password|otp|pin|cvv|secret|token/i.test(matchedEl.label));
+            if (isSecret) {
+              return {
+                ok: false,
+                error: `Typing goal phrase into secret/password field is forbidden. Escalate to ask_human.`,
+              };
+            }
+          }
+        }
       }
 
       // 4. Enforce placeholder allowlist if available (tokens only — literal
@@ -332,6 +356,13 @@ function validateActionWithGuard(
         return {
           ok: false,
           error: `Raw ${piiMatch} detected in search query — search terms must be PII-free`,
+        };
+      }
+      // Prohibit personal identity/account queries
+      if (/\b(?:my\s+account|my\s+password|user\s+name|ssn|dob|card|address|phone|email|pan|aadhaar)\b/i.test(trimmedQuery)) {
+        return {
+          ok: false,
+          error: "Search query contains sensitive personal keywords — search queries must be destination-only or generic",
         };
       }
       return { ok: true, action: { type: "search", query: trimmedQuery } };
@@ -388,7 +419,8 @@ export function guardModelOutput(
     const result = validateActionWithGuard(
       normalized,
       allowlist,
-      options?.sanitizedPackage?.goal ?? ""
+      options?.sanitizedPackage?.goal ?? "",
+      options?.sanitizedPackage
     );
     if (!result.ok) {
       return {
@@ -427,7 +459,8 @@ export function guardAction(
   const result = validateActionWithGuard(
     action,
     allowlist,
-    options?.sanitizedPackage?.goal ?? ""
+    options?.sanitizedPackage?.goal ?? "",
+    options?.sanitizedPackage
   );
   if (!result.ok) {
     return {

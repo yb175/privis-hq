@@ -15,8 +15,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "ml" / "fusion"))            # ocr_reader
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))  # make_synthetic_text
+sys.path.insert(0, str(REPO_ROOT / "ml" / "inference"))
+sys.path.insert(0, str(REPO_ROOT / "ml" / "scripts"))
 
 import torch
 

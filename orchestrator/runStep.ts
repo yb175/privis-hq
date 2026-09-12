@@ -36,8 +36,9 @@ import { sealAndRedact } from "../privacy/sanitizer/redaction-gate.js";
 import { decide } from "../privacy/policy-gate/policy-gate.js";
 import { loadModelSettings } from "../shared/settings.js";
 import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-server.js";
-import { agentActionToExecutorActions } from "../executor/agent-action.js";
+import { agentActionToExecutorActions, selectorFor, resolveTarget } from "../executor/agent-action.js";
 import { applyActions } from "../executor/local-executor.js";
+import { verifyPlan } from "../executor/verify-plan.js";
 import { navigateTab } from "../executor/navigate.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
 import { tokeniseGoal } from "./goal-tokenize.js";
@@ -272,7 +273,9 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   // the redaction manifest + receipt that queryServer verifies pre-flight.
   // Privacy-first: NO LLM keys on this device — the package goes to the
   // operator's remote-agent server, which holds the keys and picks the brain.
-  const outboundGoal = tokeniseGoal(goal).goal;
+  const tokenised = tokeniseGoal(goal);
+  const outboundGoal = tokenised.goal;
+  Object.assign(map, tokenised.tokenMap);
   const remoteElements = stripLabels(sanitized);
   const settings = await loadModelSettings();
   session.outboundPayload = buildOutboundPayload(
@@ -394,6 +397,56 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     // Loop continues: next iteration recaptures the navigated page.
     notifySessionUpdate(session, gate);
     return { decision: gate.decision, reason: gate.reason };
+  }
+
+  // Schema & semantic verification on the proposed plan (before secret substitution)
+  const plannedActions: Action[] = (() => {
+    if (agentAction.type === "click") {
+      const explicitCss = typeof agentAction.target?.css === "string" && agentAction.target.css.trim() ? agentAction.target.css.trim() : undefined;
+      const el = resolveTarget(agentAction.target, sanitized);
+      const target = explicitCss ?? (el ? selectorFor(el) : "");
+      return [{ type: "click", target }];
+    }
+    if (agentAction.type === "type") {
+      const explicitCss = typeof agentAction.target?.css === "string" && agentAction.target.css.trim() ? agentAction.target.css.trim() : undefined;
+      const valueEl = sanitized.find((e) => e.text === agentAction.placeholder);
+      const el = valueEl ?? resolveTarget(agentAction.target, sanitized);
+      const target = explicitCss ?? (el ? selectorFor(el) : "");
+      return [{ type: "type", target, value: agentAction.placeholder }];
+    }
+    if (agentAction.type === "scroll") {
+      return [{ type: "scroll", target: "", dy: agentAction.dy }];
+    }
+    return [];
+  })();
+
+  if (plannedActions.length > 0) {
+    const planReport = verifyPlan(plannedActions, { elements: sanitized, sanitizedPackage: outboundPkg });
+    if (!planReport.ok) {
+      const reason = `Plan verification failed: ${planReport.violations.map((v) => v.message).join("; ")}`;
+      const escalation = {
+        type: "ask_human" as const,
+        reason,
+      };
+      session.lastAction = escalation;
+      session.history.push({
+        step: session.history.length + 1,
+        url: pkg.browserState.url,
+        action: escalation,
+        result: { ok: false, error: reason },
+        timestamp: Date.now(),
+      });
+      session.step = session.history.length;
+      session.status = "waiting_human";
+      broadcastHudStep(6, {
+        actions: [],
+        results: [{ ok: false, error: reason }],
+        outcome: "ask_human",
+        reason,
+      });
+      notifySessionUpdate(session, gate);
+      return { decision: gate.decision, reason, actions: [{ ok: false, error: reason }], stop: true };
+    }
   }
 
   // Convert the AgentAction contract into executor Actions (name/role/bbox

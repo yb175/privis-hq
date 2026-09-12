@@ -145,19 +145,32 @@ export class PlaceholderAllocator {
 }
 
 // ── The session allocator ─────────────────────────────────────────────────────
-// Module-level instance reset per session by resetPlaceholderTokens() (called
-// from orchestrator/runStep.ts at session start), so real values are retained
-// only for the minimum lifetime the multi-step session semantics require.
+// Session-scoped allocators stored in a map, keyed by sessionId/tabId.
+// Cleared per session by resetPlaceholderTokens() (called from orchestrator/runStep.ts).
 
-let sessionAllocator = new PlaceholderAllocator("session");
+const allocatorsBySession = new Map<string, PlaceholderAllocator>();
+let defaultSessionId = "session";
 
-/** Clears all placeholder state. Called at session start. */
-export function resetPlaceholderTokens(): void {
-  sessionAllocator.clear();
-  sessionAllocator = new PlaceholderAllocator("session");
+/** Clears placeholder state for a session, or all if omitted. */
+export function resetPlaceholderTokens(sessionId?: string): void {
+  if (sessionId) {
+    allocatorsBySession.get(sessionId)?.clear();
+    allocatorsBySession.delete(sessionId);
+  } else {
+    for (const alloc of allocatorsBySession.values()) {
+      alloc.clear();
+    }
+    allocatorsBySession.clear();
+  }
 }
 
-/** The live session allocator. */
-export function placeholderAllocator(): PlaceholderAllocator {
-  return sessionAllocator;
+/** The live session allocator for a given session. */
+export function placeholderAllocator(sessionId?: string): PlaceholderAllocator {
+  const sid = sessionId ?? defaultSessionId;
+  let allocator = allocatorsBySession.get(sid);
+  if (!allocator) {
+    allocator = new PlaceholderAllocator(sid);
+    allocatorsBySession.set(sid, allocator);
+  }
+  return allocator;
 }

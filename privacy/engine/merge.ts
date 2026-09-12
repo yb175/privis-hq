@@ -103,8 +103,11 @@ export function mergeOverlappingDetections(
         const x2 = Math.max(current.bbox[0] + current.bbox[2], other.bbox[0] + other.bbox[2]);
         const y2 = Math.max(current.bbox[1] + current.bbox[3], other.bbox[1] + other.bbox[3]);
 
+        const pickOther = other.confidence > current.confidence ||
+          (other.confidence === current.confidence && (SOURCE_PRIORITY[other.source] ?? 0) > (SOURCE_PRIORITY[current.source] ?? 0));
+
         current = {
-          element_id: current.element_id,
+          element_id: pickOther ? other.element_id : current.element_id,
           category: current.category,
           bbox: [x1, y1, x2 - x1, y2 - y1],
           confidence: Math.max(current.confidence, other.confidence),

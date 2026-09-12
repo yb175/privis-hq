@@ -64,7 +64,9 @@ interface Intent {
 }
 
 export function parseGoal(goal: string): Intent | undefined {
-  const g = norm(goal).replace(/["']/g, "");
+  const trimmed = goal.trim();
+  if (!trimmed) return undefined;
+  const g = norm(trimmed).replace(/["']/g, "");
   if (!g) return undefined;
 
   // Multi-clause goals ("fill X with leo then click submit") are not tier-0's
@@ -81,25 +83,27 @@ export function parseGoal(goal: string): Intent | undefined {
     if (target) return { verb: "click", target };
   }
 
-  // Value-first: "type leo in first name", "enter x@y.in into the email box".
-  const typeVerb = TYPE_VERBS.find((v) => g.startsWith(`${v} `));
+  // Value-first: "type Alice in first name", "enter x@y.in into the email box".
+  const typeVerb = TYPE_VERBS.find((v) => new RegExp(`^${v}\\s+`, "i").test(trimmed));
   if (typeVerb) {
-    const m = new RegExp(`^(.+)\\s+(?:in|into|on)\\s+(.+)$`).exec(g.slice(typeVerb.length + 1));
+    const afterVerb = trimmed.replace(new RegExp(`^${typeVerb}\\s+`, "i"), "");
+    const m = new RegExp(`^(.+?)\\s+(?:in|into|on)\\s+(.+)$`, "i").exec(afterVerb);
     if (m) {
-      const value = norm(m[1] ?? "");
+      const value = m[1]?.replace(/^["']|["']$/g, "").trim() ?? "";
       const target = cleanTarget(m[2] ?? "");
       if (value && target) return { verb: "type", target, value };
     }
     return undefined;
   }
 
-  // Target-first: "fill first name with leo", "set my email to x@y.in".
-  const fillVerb = FILL_VERBS.find((v) => g.startsWith(`${v} `));
+  // Target-first: "fill first name with Alice", "set my email to x@y.in".
+  const fillVerb = FILL_VERBS.find((v) => new RegExp(`^${v}\\s+`, "i").test(trimmed));
   if (fillVerb) {
-    const m = new RegExp(`^(.+?)\\s+(?:with|to|as)\\s+(.+)$`).exec(g.slice(fillVerb.length + 1));
+    const afterVerb = trimmed.replace(new RegExp(`^${fillVerb}\\s+`, "i"), "");
+    const m = new RegExp(`^(.+?)\\s+(?:with|to|as)\\s+(.+)$`, "i").exec(afterVerb);
     if (m) {
       const target = cleanTarget(m[1] ?? "");
-      const value = norm(m[2] ?? "");
+      const value = m[2]?.replace(/^["']|["']$/g, "").trim() ?? "";
       if (value && target) return { verb: "type", target, value };
     }
   }
@@ -206,7 +210,15 @@ export function tryLocalIntent(goal: string, elements: ElementMeta[]): LocalInte
 
   // type
   const tag = el.tag.toLowerCase();
-  if (!FILLABLE_TAGS.has(tag) || el.type === "password" || el.type === "checkbox" || el.type === "radio") {
+  const inputType = (el.type ?? "text").toLowerCase();
+  const isFillableInput = tag === "input" && (
+    inputType === "text" || inputType === "email" || inputType === "tel" ||
+    inputType === "number" || inputType === "search" || inputType === "url" ||
+    inputType === "date" || inputType === ""
+  );
+  const isTextarea = tag === "textarea";
+  const isContentEditable = el.role === "textbox" && tag !== "input" && tag !== "button";
+  if (!isFillableInput && !isTextarea && !isContentEditable) {
     return { handled: false, actions: [], reason: "target-not-fillable" };
   }
   // Already satisfied (a recapture after an earlier fill): leave it alone and

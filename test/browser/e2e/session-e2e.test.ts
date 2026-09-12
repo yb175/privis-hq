@@ -41,9 +41,9 @@ const HOME = "http://localhost:8671/";
 const FORM = "http://localhost:8671/form";
 const THANKS = "http://localhost:8671/thanks";
 const LOOP = "http://localhost:8671/loop";
+const LEAK = "http://localhost:8671/leak";
 const BANK = "https://onlinesbi.example.net/login";
 const UBER = "https://riders.uber.com/login";
-const LEAK = "http://localhost:8671/leak";
 
 const SECRET_VALUES = [
   "Asha Rao",
@@ -52,6 +52,7 @@ const SECRET_VALUES = [
   "+91 98765 43210",
   "\u20B912,00,000",
   "demo-pass-123",
+  "uber-pass-1",
 ];
 
 function el(
@@ -109,6 +110,11 @@ const pages: Record<string, FakePage> = {
     title: "HR Portal",
     elements: [el("stay", "button", "Continue", { role: "button" })],
   },
+  [LEAK]: {
+    url: LEAK,
+    title: "Leaky Brain",
+    elements: [el("open", "button", "Open", { role: "button" })],
+  },
   [BANK]: {
     url: BANK,
     title: "Bank Login",
@@ -123,13 +129,8 @@ const pages: Record<string, FakePage> = {
     elements: [
       el("phone", "input", "+91 98765 43210", { type: "tel", role: "textbox" }),
       el("pwd", "input", "uber-pass-1", { type: "password", role: "textbox" }),
-      el("next", "button", "Next", { role: "button" }),
+      el("login", "button", "Log in", { role: "button" }),
     ],
-  },
-  [LEAK]: {
-    url: LEAK,
-    title: "Leak Page",
-    elements: [el("btn", "button", "Go", { role: "button" })],
   },
 };
 

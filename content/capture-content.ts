@@ -23,6 +23,7 @@ import {
 } from "../utils/dom-extractor.js";
 import { formatValue } from "../executor/format-value.js";
 import { isPrivisMessage } from "../utils/messaging.js";
+import { waitForPageSettle } from "./settle-watch.js";
 
 /**
  * Capture Layer content-script half: visible elements + browser state.
@@ -71,17 +72,19 @@ const PLACEHOLDER_RE =
  * Executes an action on the page DOM, substituting placeholders with real local values.
  * @param action The requested action (click, type, etc.)
  */
-export async function executeAction(action: Action): Promise<ActionResult> {
+export function executeAction(action: Action): ActionResult {
   // Global scroll without target
   if (action.type === "scroll" && !action.target) {
     if (typeof window !== "undefined") {
-      window.scrollBy({ top: (action as any).dy ?? 300, behavior: "smooth" });
+      const dy = typeof (action as any).dy === "number" && Number.isFinite((action as any).dy) ? (action as any).dy : 300;
+      window.scrollBy({ top: dy, left: 0, behavior: "smooth" });
       return { ok: true };
     }
+    return { ok: false, error: "window unavailable for scroll" };
   }
 
-  const el = resolveTarget(action.target);
-  if (!el) return { ok: false, error: `Target not found: ${action.target}` };
+  const el = resolveTarget(action.target ?? "");
+  if (!el) return { ok: false, error: `Target not found: ${action.target ?? ""}` };
 
   switch (action.type) {
     case "click":
@@ -204,6 +207,13 @@ async function executeActions(actions: Action[]): Promise<ExecuteResponseMessage
     const result = await executeAction(action);
     results.push(result);
     if (!result.ok) break; // stop on first failure
+  }
+  if (typeof document !== "undefined" && (document.body || document.documentElement)) {
+    try {
+      await waitForPageSettle(document.body || document.documentElement, { quietMs: 50, timeoutMs: 500 });
+    } catch {
+      // ignore settle error
+    }
   }
   return { type: "execute.response", payload: { results } };
 }

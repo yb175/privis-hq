@@ -63,6 +63,15 @@ export async function verifyReceipt(
     };
   }
 
+  const allowedManifestKeys = new Set(["counts", "redactedFraction", "overRedactedFraction", "policyVersion", "receipt"]);
+  const allowedReceiptKeys = new Set(["algo", "hash", "manifestHash", "sealedAt"]);
+  if (
+    Object.keys(manifest).some((key) => !allowedManifestKeys.has(key)) ||
+    Object.keys(receipt).some((key) => !allowedReceiptKeys.has(key))
+  ) {
+    return { ok: false, reason: "manifest-digest-mismatch" };
+  }
+
   const { receipt: _receipt, ...withoutReceipt } = manifest;
   const actualManifest = await digest(
     new TextEncoder().encode(canonicaliseManifest(withoutReceipt))

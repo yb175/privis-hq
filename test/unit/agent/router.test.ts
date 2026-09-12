@@ -24,6 +24,10 @@ import {
   manifestDigest,
   POLICY_VERSION,
 } from "../../../privacy/sanitizer/redaction-gate.js";
+import {
+  applyPlaceholders,
+  detectSensitive,
+} from "../../../privacy/sanitizer/structural-redact.js";
 
 console.log("=== Running CBA-2 Model Router Test Suite (chatgpt vs Gemini) ===");
 
@@ -82,6 +86,7 @@ for (const envKey of [
   "GEMINI_API_KEY",
   "GEMINI_BASE_URL",
   "GEMINI_MODEL",
+  "SERPAPI_KEY",
 ]) {
   delete process.env[envKey];
 }
@@ -497,6 +502,38 @@ assert.throws(
   }
 );
 
+// Currency in a CTA must be sanitized too. Uber exposes promo/fare amounts
+// in button-like controls; skipping buttons lets the router fail closed before
+// the agent can plan the ride.
+const rideElements: ElementMeta[] = [
+  {
+    element_id: "ride-promo",
+    tag: "button",
+    type: null,
+    role: "button",
+    label: "Ride offer",
+    text: "Up to ₹50 off",
+    bbox: [0, 0, 100, 30],
+  },
+  {
+    element_id: "ride-promo-usd",
+    tag: "input",
+    type: "text",
+    role: "textbox",
+    label: null,
+    text: "USD5 off",
+    bbox: [0, 30, 100, 30],
+  },
+];
+const rideRedaction = applyPlaceholders(rideElements, detectSensitive(rideElements));
+assert.doesNotThrow(() =>
+  assertSanitizedPackage(
+    createValidSanitizedPackage({
+      sanitizedContext: { ...pkg.sanitizedContext, elements: rideRedaction.sanitized },
+    })
+  )
+);
+
 // Reject raw PII leaked inside sanitizedContext
 const leakedPkg = createValidSanitizedPackage({
   sanitizedContext: {
@@ -608,7 +645,6 @@ const passThroughFetch: typeof fetch = async () =>
       choices: [{ message: { content: JSON.stringify({ type: "scroll", dy: 100 }) } }],
     }),
   } as Response);
-
 const onSite = await routeAgentRequest(
   createValidSanitizedPackage({
     goal: "open amazon.in and track my order",

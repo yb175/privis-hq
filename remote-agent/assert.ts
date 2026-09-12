@@ -59,7 +59,7 @@ export function assertSanitizedPackage(pkg: SanitizedPackage): void {
   // Scan full serialized payload to ensure no raw PII leaks across the wire
   const serialized = JSON.stringify({
     goal: pkg.goal,
-    ...pkg.sanitizedContext,
+    sanitizedContext: pkg.sanitizedContext,
   });
 
   for (const { name, re } of PII_PATTERNS) {

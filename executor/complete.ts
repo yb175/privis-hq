@@ -50,7 +50,10 @@ export function verifyActionCompletion(
 
   const targetSelector = action.target || "";
   const postEl = postElements.find(
-    (e) => e.element_id === targetSelector || (targetSelector.startsWith("#") && e.element_id === targetSelector.slice(1))
+    (e) =>
+      e.element_id === targetSelector ||
+      (targetSelector.startsWith("#") && e.element_id === targetSelector.slice(1)) ||
+      (targetSelector.startsWith("__privis_generated:") && e.element_id === targetSelector.slice("__privis_generated:".length))
   );
 
   if (!postEl) {
@@ -79,7 +82,7 @@ export function verifyActionCompletion(
       };
     }
 
-    if (norm(actual) === norm(expected) || actual.includes(expected) || expected.includes(actual)) {
+    if (norm(actual) === norm(expected) || (expected !== "" && (actual.includes(expected) || expected.includes(actual)))) {
       return { verdict: "VERIFIED_FILLED", ok: true };
     }
 

@@ -14,8 +14,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "ml" / "fusion"))            # face_detector
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))  # make_synthetic_face
+sys.path.insert(0, str(REPO_ROOT / "ml" / "inference"))
+sys.path.insert(0, str(REPO_ROOT / "ml" / "scripts"))
 
 import torch
 

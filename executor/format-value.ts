@@ -179,10 +179,18 @@ export function parseDate(
     const month = monthFrom(words[named] ?? '');
     const rest = words.filter((_, i) => i !== named).map(Number);
     if (rest.some((n) => !Number.isFinite(n))) return undefined;
-    // Whichever of the two is the year: the four-digit one, or the larger.
     const [a = 0, b = 0] = rest;
-    const yearIsSecond =
-      String(words.filter((_, i) => i !== named)[1] ?? '').length === 4 || b > 31;
+    let yearIsSecond: boolean;
+    if (String(words.filter((_, i) => i !== named)[1] ?? '').length === 4 || b > 31) {
+      yearIsSecond = true;
+    } else if (String(words.filter((_, i) => i !== named)[0] ?? '').length === 4 || a > 31) {
+      yearIsSecond = false;
+    } else if (named === 0 || named === 1) {
+      // In "Jan 24 20" or "24 Jan 20", the trailing number is the year
+      yearIsSecond = true;
+    } else {
+      yearIsSecond = !order || order.indexOf('D') < order.indexOf('Y');
+    }
     const y = yearIsSecond ? b : a;
     const d = yearIsSecond ? a : b;
     return finish({ y, m: month, d }, now);

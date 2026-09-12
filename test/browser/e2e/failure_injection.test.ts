@@ -1,8 +1,7 @@
-import { readFileSync, appendFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, appendFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
+import { join, dirname } from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -16,10 +15,25 @@ const matrix = JSON.parse(readFileSync(matrixPath, 'utf-8')) as Array<{
   severity: string;
 }>;
 
-const errorCatalogPath = join(__dirname, '../../../../../.gemini/antigravity-ide/brain/a65c779c-cb70-4e70-acc1-784068df1497/docs/audits/FULL_E2E_ERROR_CATALOG.md');
+const errorCatalogDir = join(process.cwd(), 'docs', 'audits');
+const errorCatalogPath = join(errorCatalogDir, 'FULL_E2E_ERROR_CATALOG.md');
+
+function ensureCatalogExists() {
+  if (!existsSync(errorCatalogDir)) {
+    mkdirSync(errorCatalogDir, { recursive: true });
+  }
+  if (!existsSync(errorCatalogPath)) {
+    writeFileSync(
+      errorCatalogPath,
+      '# Full E2E Error Catalog\n\n| ID | Layer | Injection | Expected | Actual | Severity | PII Leaked | UI Recovered | Session Recovered | Fix Status |\n|---|---|---|---|---|---|---|---|---|---|\n',
+      'utf-8'
+    );
+  }
+}
 
 function logResult(entry: any, actual: string, recoveredUI: boolean, recoveredSession: boolean, fixStatus: string) {
-  const line = `| ${entry.id} | ${entry.layer} | ${entry.injection} | ${entry.expected} | ${actual} | ${entry.severity} | No | ${recoveredUI ? 'Yes' : 'No'} | ${recoveredSession ? 'Yes' : 'No'} | ${fixStatus} | ${fixStatus} |\n`;
+  ensureCatalogExists();
+  const line = `| ${entry.id} | ${entry.layer} | ${entry.injection} | ${entry.expected} | ${actual} | ${entry.severity} | No | ${recoveredUI ? 'Yes' : 'No'} | ${recoveredSession ? 'Yes' : 'No'} | ${fixStatus} |\n`;
   appendFileSync(errorCatalogPath, line);
 }
 

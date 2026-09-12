@@ -18,9 +18,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "ml" / "fusion"))
-REPO_ROOT = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "ml" / "inference"))
 sys.path.insert(0, str(REPO_ROOT / "ml" / "scripts"))
 
@@ -28,7 +25,7 @@ from PIL import Image
 
 from yunet_detector import YuNetDetector, verify_model
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = REPO_ROOT
 IMAGES = ROOT / "ml" / "dataset" / "images"
 MANIFEST_F1_7 = ROOT / "ml" / "dataset" / "annotations" / "m6b_face_fixtures.json"
 MANIFEST_F8_12 = ROOT / "ml" / "dataset" / "annotations" / "m6b2_face_fixtures.json"
