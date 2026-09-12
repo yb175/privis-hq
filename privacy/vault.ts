@@ -50,12 +50,13 @@ export interface VaultEntry {
   label: string;
   value: string;
   savedAt: number;
+  expiresAt?: number;
 }
 
 /** What a read can produce. Declining is a first-class outcome, not an error. */
 export type VaultRead =
   | { ok: true; value: string }
-  | { ok: false; reason: "not-stored" | "declined" };
+  | { ok: false; reason: "not-stored" | "declined" | "expired" | "invalid-key" };
 
 /**
  * The parts of the backing store this needs, and no more. Injected so the
@@ -83,11 +84,14 @@ export type ConfirmRelease = (request: {
 }) => Promise<boolean>;
 
 export function vaultKeyOf({ origin, cls }: VaultKey): string {
+  if (!origin || typeof origin !== "string" || !cls) {
+    throw new Error("vault: invalid key parameters");
+  }
   return `${VAULT_PREFIX}${origin}|${cls}`;
 }
 
 /**
- * Read a secret, if one is stored and the operator says yes.
+ * Read a secret, if one is stored, not expired, and the operator says yes.
  *
  * The order is deliberate: look first, then ask. Asking about a secret that
  * is not stored would tell the operator, every time a page has a password
@@ -96,10 +100,19 @@ export function vaultKeyOf({ origin, cls }: VaultKey): string {
  */
 export async function readSecret(
   key: VaultKey,
-  deps: { store: VaultStore; confirm: ConfirmRelease }
+  deps: { store: VaultStore; confirm: ConfirmRelease; now?: () => number }
 ): Promise<VaultRead> {
+  if (!key.origin || !key.cls) return { ok: false, reason: "invalid-key" };
+
   const entry = await deps.store.get(vaultKeyOf(key));
   if (!entry) return { ok: false, reason: "not-stored" };
+
+  const now = (deps.now ?? Date.now)();
+  if (entry.expiresAt && now > entry.expiresAt) {
+    // Automatically purge expired secret
+    await deps.store.remove(vaultKeyOf(key));
+    return { ok: false, reason: "expired" };
+  }
 
   const allowed = await deps.confirm({
     origin: key.origin,
@@ -119,14 +132,22 @@ export async function readSecret(
  */
 export async function saveSecret(
   key: VaultKey,
-  entry: { label: string; value: string },
+  entry: { label: string; value: string; ttlMs?: number },
   deps: { store: VaultStore; now?: () => number }
 ): Promise<void> {
+  if (!key.origin || typeof key.origin !== "string") {
+    throw new Error("vault: invalid origin");
+  }
   if (entry.value === "") throw new Error("vault: refusing to store an empty secret");
+  
+  const now = (deps.now ?? Date.now)();
+  const expiresAt = entry.ttlMs && entry.ttlMs > 0 ? now + entry.ttlMs : undefined;
+
   await deps.store.set(vaultKeyOf(key), {
     label: entry.label,
     value: entry.value,
-    savedAt: (deps.now ?? Date.now)(),
+    savedAt: now,
+    expiresAt,
   });
 }
 

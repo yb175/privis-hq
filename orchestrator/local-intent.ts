@@ -121,16 +121,26 @@ export const CLEAR_MARGIN = 3;
 
 function scoreElement(el: ElementMeta, target: string): number {
   let score = 0;
+  const isActionableTextContainer =
+    el.tag.toLowerCase() === "button" ||
+    el.role === "button" ||
+    el.tag.toLowerCase() === "a" ||
+    el.role === "link";
+
   const label = norm(el.label ?? "");
   if (label) {
     if (label === target) score += W_LABEL;
-    else if (label.includes(target)) score += W_LABEL / 2;
+    else if (label.includes(target) || target.includes(label)) score += W_LABEL / 2;
   }
   const role = effectiveRole(el);
   if (role && role.toLowerCase() === target) score += W_ROLE;
   if (el.element_id.toLowerCase() === target) score += W_NAME;
+  
   const text = norm(el.text);
-  if (text && text === target) score += W_TEXT;
+  if (text) {
+    if (text === target) score += isActionableTextContainer ? W_LABEL : W_TEXT;
+    else if (text.includes(target) || target.includes(text)) score += (isActionableTextContainer ? W_LABEL : W_TEXT) / 2;
+  }
   return score;
 }
 
