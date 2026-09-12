@@ -43,7 +43,10 @@ IOU_THRESHOLD = 0.5
 # Per-category metrics are always reported for these (issue requirement)...
 REQUIRED_CATEGORIES = ("FACE", "EMAIL", "PHONE", "PAN", "AADHAAR", "AMOUNT")
 # ...in contract order for any other category that shows up in the data.
-ALL_CATEGORIES = ("EMAIL", "PAN", "AADHAAR", "AMOUNT", "PHONE", "NAME", "FACE", "PASSWORD")
+ALL_CATEGORIES = (
+    "EMAIL", "PAN", "AADHAAR", "AMOUNT", "PHONE", "NAME", "FACE", "PASSWORD",
+    "CARD", "IFSC", "GSTIN", "UPI", "ACCOUNT", "DOB", "PASSPORT", "LICENCE"
+)
 
 DETECTION_KEYS = {"element_id", "category", "bbox", "confidence", "source"}
 
@@ -69,8 +72,8 @@ def _validate_detection(det: Any, kind: str, index: int) -> None:
         raise ValueError(f"{where}: missing key(s): {sorted(missing)}")
     if det["category"] not in ALL_CATEGORIES:
         raise ValueError(f"{where}: unknown category {det['category']!r}")
-    if det["source"] not in ("dom", "vision"):
-        raise ValueError(f"{where}: source must be 'dom' or 'vision', got {det['source']!r}")
+    if det["source"] not in ("dom", "vision", "ocr"):
+        raise ValueError(f"{where}: source must be 'dom', 'vision' or 'ocr', got {det['source']!r}")
     if not isinstance(det["element_id"], str) or not det["element_id"]:
         raise ValueError(f"{where}: element_id must be a non-empty string")
     bbox = det["bbox"]
