@@ -43,10 +43,8 @@ import {
   type FaceDetectorInput,
 } from "./face-detector.js";
 import { decodePngRGBA } from "./test-png.js";
-import {
-  detectSensitive,
-  applyPlaceholders,
-} from "../../sanitizer/structural-redact.js";
+import { detectSensitive } from "../../engine/detect-dom.js";
+import { applyPlaceholders } from "../../sanitizer/structural-redact.js";
 import { decide } from "../../policy-gate/policy-gate.js";
 
 const failures: string[] = [];
@@ -180,7 +178,8 @@ async function simulateStep(scenario: {
   return { gate, sent: payload, map, detections, sanitized, record };
 }
 
-// PII patterns from remote/client.ts (last-line defense) for boundary checks.
+// PII tripwire regexes (same patterns the outbound boundary enforces) for
+// boundary checks on simulated wire payloads.
 const PII_PATTERNS: RegExp[] = [
   /[a-z]{5}[0-9]{4}[a-z]/i,
   /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/,
@@ -409,13 +408,17 @@ async function main(): Promise<void> {
   check("FACE on a login page -> human approval (existing rule, vision-fed)",
     login.gate.decision === "human_approval" && login.record.remotePayloads.length === 0, login.gate.reason);
 
-  // --- Fail-closed ordering pinned in the real service worker ---
-  console.log("\n[9] service-worker.ts wiring (static)");
+  // --- Fail-closed ordering pinned in the real orchestrator loop ---
+  // The pipeline wiring moved from the service worker into orchestrator/runStep.ts
+  // with the CBA-6 session loop; the check follows the wiring. Intent unchanged:
+  // vision runs after capture and before the gate and the remote call, and the
+  // fail-closed contract is documented at the wiring point.
+  console.log("\n[9] orchestrator/runStep.ts wiring (static)");
   {
-    const sw = readFileSync("background/service-worker.ts", "utf-8");
+    const sw = readFileSync("orchestrator/runStep.ts", "utf-8");
     const iVision = sw.indexOf("await runVisionPath(");
     const iDecide = sw.indexOf("decide({");
-    const iRemote = sw.indexOf("sendSanitized({");
+    const iRemote = sw.indexOf("queryServer(");
     check("runVisionPath wired between capture and sanitizer/gate/remote",
       iVision !== -1 && iDecide !== -1 && iRemote !== -1 && iVision < iDecide && iDecide < iRemote,
       `vision@${iVision} decide@${iDecide} remote@${iRemote}`);

@@ -7,6 +7,8 @@
 // - Returns sanitized image data URL (raw image is never emitted or retained).
 
 import type { Detection, Viewport } from "../../types/index.js";
+import { assertValidBBox } from "../engine/normalize.js";
+import { scaledClampedRect, viewportToScreenshotScale } from "../../utils/coords.js";
 
 // Every category except FACE is blacked out; FACE is pixelated.
 const BLACKOUT_CATEGORIES: ReadonlySet<Detection["category"]> = new Set([
@@ -106,21 +108,23 @@ export async function redactVisual(
   ctx.drawImage(img, 0, 0);
 
   // bboxes are CSS pixels relative to the viewport; the screenshot is device pixels.
-  const scaleX = viewport.w > 0 ? img.width / viewport.w : 1;
-  const scaleY = viewport.h > 0 ? img.height / viewport.h : 1;
+  const { scaleX, scaleY } = viewportToScreenshotScale(viewport, {
+    w: img.width,
+    h: img.height,
+  });
 
   for (const detection of detections) {
-    const [bx, by, bw, bh] = detection.bbox;
-    if (bw <= 0 || bh <= 0) continue; // ignore empty bboxes
-    // Clamp the right/bottom edges too, so a bbox starting off-page doesn't
-    // black out unrelated content inside the page (width/height shrink to fit).
-    const x = Math.max(0, Math.round(bx * scaleX));
-    const y = Math.max(0, Math.round(by * scaleY));
-    const right = Math.min(canvas.width, Math.round((bx + bw) * scaleX));
-    const bottom = Math.min(canvas.height, Math.round((by + bh) * scaleY));
-    const w = right - x;
-    const h = bottom - y;
-    if (w <= 0 || h <= 0) continue;
+    // Geometry contract (fail closed): a malformed bbox — NaN/Infinity,
+    // non-array, zero/negative size — can never be silently skipped, because
+    // skipping means the sensitive region's raw pixels would cross the
+    // boundary. Malformed geometry aborts the whole step. Valid-but-offscreen
+    // boxes (partially or fully outside the canvas) are the legitimate case:
+    // scaledClampedRect clamps/empties them — nothing to paint means nothing
+    // sensitive is visible in this screenshot.
+    assertValidBBox(detection.bbox, `visual redaction (${detection.category})`);
+    const rect = scaledClampedRect(detection.bbox, scaleX, scaleY, canvas.width, canvas.height);
+    if (!rect) continue;
+    const { x, y, w, h } = rect;
 
     if (detection.category === "FACE") {
       // Pixelate from the already-redacted canvas, not the raw image, so any

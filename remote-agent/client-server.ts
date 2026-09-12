@@ -5,7 +5,7 @@
 
 import type { SanitizedPackage } from "../types/index.js";
 import { type AgentAction, parseAgentAction } from "./types.js";
-import type { ModelChoice, ModelSettings } from "../extension/src/settings/models.js";
+import type { ModelChoice, ModelSettings } from "../shared/settings.js";
 import { assertSanitizedPackage } from "./router.js";
 
 export interface ServerOptions {

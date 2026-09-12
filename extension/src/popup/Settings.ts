@@ -8,7 +8,7 @@ import {
   DEFAULT_MODEL_SETTINGS,
   loadModelSettings,
   saveModelSettings,
-} from "../settings/models.js";
+} from "../../../shared/settings.js";
 
 export class SettingsComponent {
   private container: HTMLElement;

@@ -10,7 +10,7 @@ import {
   loadModelSettings,
   saveModelSettings,
   STORAGE_KEY_MODEL_SETTINGS,
-} from "../extension/src/settings/models.js";
+} from "../shared/settings.js";
 import { queryOpenAI, buildPrompt } from "../remote-agent/client-openai.js";
 import { queryGemini } from "../remote-agent/client-gemini.js";
 import { routeAgentRequest, assertSanitizedPackage } from "../remote-agent/router.js";

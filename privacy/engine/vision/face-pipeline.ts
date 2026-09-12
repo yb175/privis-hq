@@ -23,6 +23,7 @@
 
 import type { Detection, ElementMeta, Viewport } from "../../../types/index.js";
 import { fuseDetections } from "../fuse.js";
+import { normalizeDetections } from "../normalize.js";
 import {
   loadFaceDetector,
   type FaceDetector,
@@ -151,8 +152,19 @@ async function runVisionPathLocal(opts: VisionPathOptions): Promise<Detection[]>
  * FUSED Detection[] (DOM + vision, M4 rules). Any failure (decode, model
  * load, inference, fusion input) rejects — callers must treat the rejection
  * as "abort the step, send nothing to the remote agent".
+ *
+ * The result is normalized through the canonical finding contract before it
+ * is returned: the offscreen path crosses a chrome.runtime message channel
+ * (a trust boundary), so nothing downstream ever consumes unvalidated
+ * findings. Malformed findings throw (fail closed) rather than degrade to a
+ * partial detection list.
  */
 export async function runVisionPath(opts: VisionPathOptions): Promise<Detection[]> {
+  const detections = await runVisionPathInner(opts);
+  return normalizeDetections(detections);
+}
+
+async function runVisionPathInner(opts: VisionPathOptions): Promise<Detection[]> {
   // If running inside a Service Worker with chrome.offscreen available, delegate
   // to the offscreen document (W3C ServiceWorker disallows dynamic import() for WASM glue).
   if (

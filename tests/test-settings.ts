@@ -15,7 +15,7 @@ import {
   saveModelSettings,
   toClientSettings,
   STORAGE_KEY_MODEL_SETTINGS,
-} from "../extension/src/settings/models.js";
+} from "../shared/settings.js";
 import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-server.js";
 
 console.log("=== Running CBA-8 Settings QA ===");

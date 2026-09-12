@@ -11,7 +11,13 @@ export type SensitiveCategory =
   | "FACE"
   | "PASSWORD";
 
-export type DetectionSource = "dom" | "vision";
+/**
+ * Provenance of a finding. "dom": Capture Layer DOM rules; "vision":
+ * on-device model (face, later visual detectors); "ocr": reserved seam for
+ * the document pipeline (no detector emits it yet). The set is closed —
+ * normalizeDetections() rejects anything else.
+ */
+export type DetectionSource = "dom" | "vision" | "ocr";
 
 export type BoundingBox = [x: number, y: number, width: number, height: number];
 
@@ -84,7 +90,7 @@ export interface SanitizedPackage {
   /**
    * Provenance stamp — REQUIRED. Only the on-device Sanitizer path sets it to
    * true after structural + visual redaction. Every outbound boundary (router,
-   * sendSanitized, queryServer) refuses packages without it, so an unredacted
+   * queryServer) refuses packages without it, so an unredacted
    * raw screenshot can never be dispatched to a cloud model. ponytail: stamped
    * by trusted in-device code; a fully compromised extension process could
    * forge it — real mitigation is the sanitizer being the only package builder,

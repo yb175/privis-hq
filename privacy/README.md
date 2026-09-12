@@ -5,7 +5,7 @@
 ## Responsibility
 
 - `engine/` — Local Privacy Vision Engine: fuse DOM detections with (later) vision boxes into a detection list. **README only — no code files yet.**
-- `sanitizer/` — visual redaction on a canvas copy (`visual-redact.js`) + DOM-rule detection and placeholders (`structural-redact.js`).
+- `sanitizer/` — placeholder replacement and the local real-value map (`structural-redact.js`) + visual redaction on a canvas copy (`visual-redact.js`). Detection lives in `engine/`.
 - `policy-gate/` — Allow / Human Approval / Block decision (`policy-gate.js`).
 
 ## Inputs
