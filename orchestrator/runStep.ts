@@ -548,6 +548,39 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     return { decision: gate.decision, reason: gate.reason, stop: true };
   }
 
+  if (agentAction.type === "batch") {
+    const actions = agentAction.actions.flatMap((subAction) =>
+      agentActionToExecutorActions(subAction, sanitized, map, goal)
+    );
+    const frameId = agentAction.actions[0]?.target.ref?.frameId ?? 0;
+    const results = await applyActions(tabId, actions, frameId);
+    const failed = results.find((result) => !result.ok);
+    const aggregate: ActionResult = {
+      ok: !failed && results.length === actions.length,
+      ...(failed?.error ? { error: failed.error } : {}),
+      detail: JSON.stringify(results),
+    };
+    session.history.push({
+      step: session.history.length + 1,
+      url: pkg.browserState.url,
+      action: agentAction,
+      result: aggregate,
+      timestamp: Date.now(),
+    });
+    session.step = session.history.length;
+    if (!aggregate.ok) {
+      session.lastFailureFingerprint = currentStateFingerprint;
+      session.lastFailureAction = JSON.stringify(agentAction);
+    } else {
+      delete session.lastFailureFingerprint;
+      delete session.lastFailureAction;
+    }
+    broadcastHudStep(6, { actions, results, outcome: aggregate.ok ? "ok" : "failure" });
+    notifySessionUpdate(session, gate);
+    await waitForTabSettled(tabId);
+    return { decision: gate.decision, reason: gate.reason, actions: results };
+  }
+
   // Browser-context actions run in the background because content scripts do
   // not have tabs access. A context change always loops into a fresh capture.
   if (agentAction.type === "open_tab" || agentAction.type === "switch_tab" || agentAction.type === "close_tab" || agentAction.type === "list_tabs") {

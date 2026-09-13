@@ -41,6 +41,18 @@ export interface ListTabsAction {
   type: "list_tabs";
 }
 
+export type BatchableAction =
+  | ClickAction
+  | TypeAction
+  | PressKeyAction
+  | TargetAction
+  | SelectOptionAction;
+
+export interface BatchAction {
+  type: "batch";
+  actions: BatchableAction[];
+}
+
 export interface ClickAction {
   type: "click";
   target: Target;
@@ -137,6 +149,7 @@ export type AgentAction =
   | SwitchTabAction
   | CloseTabAction
   | ListTabsAction
+  | BatchAction
   | ClickAction
   | TypeAction
   | ScrollAction
