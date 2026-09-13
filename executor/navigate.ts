@@ -52,6 +52,7 @@ export function waitForTabTransition(
   const cleanup = () => {
     if (timer) clearTimeout(timer);
     chrome.tabs.onUpdated?.removeListener(listener);
+    chrome.runtime?.onMessage?.removeListener(runtimeListener);
   };
   const finish = (result: ActionResult) => {
     if (settled) return;
@@ -69,6 +70,16 @@ export function waitForTabTransition(
       finish({ ok: true });
     }
   };
+  const runtimeListener = (message: unknown, sender: { tab?: { id?: number } }) => {
+    if (
+      kind !== "reload" &&
+      typeof message === "object" && message !== null &&
+      (message as { type?: string }).type === "history.transition" &&
+      sender.tab?.id === tabId
+    ) {
+      finish({ ok: true });
+    }
+  };
 
   const promise = new Promise<ActionResult>((resolve) => {
     resolvePromise = resolve;
@@ -77,6 +88,7 @@ export function waitForTabTransition(
       return;
     }
     chrome.tabs.onUpdated.addListener(listener);
+    chrome.runtime?.onMessage?.addListener(runtimeListener);
     timer = setTimeout(() => finish({ ok: false, code: "TIMEOUT", error: `Timed out waiting for ${kind}` }), timeoutMs);
   });
 

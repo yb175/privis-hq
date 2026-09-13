@@ -339,11 +339,13 @@ for (const action of validNewActions) {
   const result = guardModelOutput(JSON.stringify(action), { sanitizedPackage: pkg });
   assert.strictEqual(result.ok, true, `new action should pass: ${action.type}`);
 }
-assert.strictEqual(
-  guardModelOutput(JSON.stringify({ type: "press_key", target: { css: "#search" }, key: "Paste" }), { sanitizedPackage: pkg }).ok,
-  false,
-  "unsupported keys are rejected"
-);
+for (const key of ["Paste", "Escape"]) {
+  assert.strictEqual(
+    guardModelOutput(JSON.stringify({ type: "press_key", target: { css: "#search" }, key }), { sanitizedPackage: pkg }).ok,
+    false,
+    `unsupported key is rejected: ${key}`
+  );
+}
 assert.strictEqual(
   guardModelOutput(JSON.stringify({ type: "wait_for", condition: "text", needle: "x", timeoutMs: 30001 }), { sanitizedPackage: pkg }).ok,
   false,
@@ -354,6 +356,18 @@ const validDone = guardModelOutput('{"type": "done", "reason": "Completed succes
   sanitizedPackage: pkg,
 });
 assert.strictEqual(validDone.ok, true);
+const verifiedDone = guardModelOutput(JSON.stringify({
+  type: "done",
+  reason: "Cart completed",
+  verify: { condition: "text", needle: "Order confirmed", timeoutMs: 5000 },
+}), { sanitizedPackage: pkg });
+assert.strictEqual(verifiedDone.ok, true, "done verification should be accepted");
+const invalidDoneVerification = guardModelOutput(JSON.stringify({
+  type: "done",
+  reason: "Cart completed",
+  verify: { condition: "text", needle: "", timeoutMs: 5000 },
+}), { sanitizedPackage: pkg });
+assert.strictEqual(invalidDoneVerification.ok, false, "invalid done verification should be rejected");
 
 const validAskHuman = guardModelOutput('{"type": "ask_human", "reason": "Need OTP code"}', {
   sanitizedPackage: pkg,

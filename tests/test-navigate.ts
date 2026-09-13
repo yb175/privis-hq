@@ -2,7 +2,7 @@
 // CBA-5: navigate executor QA — URL allowlist boundary + chrome.tabs behavior.
 
 import assert from "node:assert";
-import { isAllowedNavigateUrl, navigateTab } from "../executor/navigate.js";
+import { isAllowedNavigateUrl, navigateTab, waitForTabTransition } from "../executor/navigate.js";
 
 console.log("=== Running CBA-5 navigate executor test suite ===");
 
@@ -74,5 +74,21 @@ delete (globalThis as any).chrome;
 const noChromeRes = await navigateTab(7, "https://example.com");
 assert.strictEqual(noChromeRes.ok, false, "navigate fails closed when chrome is absent");
 
-console.log("  ✔ navigateTab ok-path, reject-path, error-path, and no-chrome path all behave");
+let runtimeHistoryListener: ((message: unknown, sender: { tab?: { id?: number } }) => void) | undefined;
+(globalThis as any).chrome = {
+  tabs: {
+    onUpdated: { addListener() {}, removeListener() {} },
+  },
+  runtime: {
+    onMessage: {
+      addListener(listener: typeof runtimeHistoryListener) { runtimeHistoryListener = listener; },
+      removeListener() {},
+    },
+  },
+};
+const historyWait = waitForTabTransition(7, "https://portal.local/app", "go_back", 100);
+runtimeHistoryListener?.({ type: "history.transition", direction: "back" }, { tab: { id: 7 } });
+assert.strictEqual((await historyWait.promise).ok, true, "same-document history transition acknowledged");
+
+console.log("  ✔ navigateTab and same-document history transitions behave");
 console.log("\nAll CBA-5 navigate executor checks passed");

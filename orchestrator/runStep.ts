@@ -25,6 +25,7 @@ import type {
   ElementMeta,
   PlannerContext,
   StepResult,
+  DoneVerification,
 } from "../types/index.js";
 import { takeScreenshot } from "../utils/screenshot.js";
 import { sendToContent } from "../utils/messaging.js";
@@ -104,6 +105,7 @@ function buildPlannerContext(session: AgentSession): PlannerContext {
     result: step.result
       ? {
           ok: step.result.ok,
+          ...(step.result.code ? { code: step.result.code } : {}),
           ...(step.result.error ? { error: redactPii(step.result.error) } : {}),
         }
       : undefined,
@@ -162,6 +164,28 @@ async function waitForTabSettled(tabId: number, timeoutMs = 5000): Promise<void>
     }
     await new Promise((r) => setTimeout(r, 200));
   }
+}
+
+function sanitizedStateFingerprint(pkg: CapturePackage, elements: ElementMeta[]): string {
+  return JSON.stringify({
+    url: pkg.browserState.url,
+    elements: elements.map(({ element_id, tag, type, role, label, text, bbox }) => ({
+      element_id, tag, type, role, label, text, bbox,
+    })),
+  });
+}
+
+function verificationAction(verify: DoneVerification): Action {
+  return {
+    type: "wait_for",
+    target: "",
+    condition: verify.condition,
+    ...(verify.target ? { targetLocator: verify.target } : {}),
+    ...(verify.needle ?? verify.urlPattern
+      ? { value: verify.needle ?? verify.urlPattern }
+      : {}),
+    timeoutMs: verify.timeoutMs,
+  };
 }
 
 /**
@@ -237,6 +261,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
 
   // Sanitizer: structural placeholders + in-memory visual redaction.
   const { sanitized, map } = applyPlaceholders(pkg.elements, pkg.detections);
+  const currentStateFingerprint = sanitizedStateFingerprint(pkg, sanitized);
   const sanitizedScreenshot = await redactVisual(
     pkg.dataUrl,
     pkg.detections,
@@ -425,20 +450,56 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     session.lastAction = agentAction;
   }
 
-  // Terminal actions: the remote says the goal is complete, or gives up and
-  // asks the human. Record, stop the loop, tell the chat. No executor run.
+  if (
+    session.lastFailureFingerprint === currentStateFingerprint &&
+    session.lastFailureAction === JSON.stringify(agentAction)
+  ) {
+    const reason = "The same action failed on unchanged page state; asking for human guidance instead of retrying blindly.";
+    session.history.push({
+      step: session.history.length + 1,
+      url: pkg.browserState.url,
+      action: { type: "ask_human", reason },
+      result: { ok: false, code: "EXECUTION_ERROR", error: reason },
+      timestamp: Date.now(),
+    });
+    session.step = session.history.length;
+    session.lastAction = { type: "ask_human", reason };
+    session.status = "waiting_human";
+    notifySessionUpdate(session, gate);
+    return { decision: gate.decision, reason, stop: true };
+  }
+
+  // Terminal actions: done is terminal only after its optional configured
+  // verification passes. A failed verification becomes planner feedback.
   if (agentAction.type === "done" || agentAction.type === "ask_human") {
+    let result = { ok: true } as import("../types/index.js").ActionResult;
+    if (agentAction.type === "done" && agentAction.verify) {
+      result = (await applyActions(tabId, [verificationAction(agentAction.verify)]))[0] ?? {
+        ok: false,
+        code: "EXECUTION_ERROR",
+        error: "Completion verification returned no result",
+      };
+    }
     const stepRecord = {
       step: session.history.length + 1,
       url: pkg.browserState.url,
       action: agentAction,
-      result: { ok: true },
+      result,
       timestamp: Date.now(),
     };
     session.history.push(stepRecord);
     session.step = session.history.length;
+    if (!result.ok && agentAction.type === "done") {
+      session.lastFailureFingerprint = currentStateFingerprint;
+      session.lastFailureAction = JSON.stringify(agentAction);
+      session.status = "running";
+      const reason = `Completion verification failed: ${result.error ?? "unknown verification error"}`;
+      broadcastHudStep(6, { actions: [], results: [result], outcome: "retry" });
+      notifySessionUpdate(session, gate);
+      return { decision: gate.decision, reason, actions: [result] };
+    }
     session.status = agentAction.type === "done" ? "done" : "waiting_human";
-    broadcastHudStep(6, { actions: [], results: [] });
+    broadcastHudStep(6, { actions: [], results: [result] });
     notifySessionUpdate(session, gate);
     return { decision: gate.decision, reason: gate.reason, stop: true };
   }
@@ -531,6 +592,14 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   };
   session.history.push(stepRecord);
   session.step = session.history.length;
+  const result = results[0];
+  if (result && !result.ok) {
+    session.lastFailureFingerprint = currentStateFingerprint;
+    session.lastFailureAction = JSON.stringify(agentAction);
+  } else {
+    delete session.lastFailureFingerprint;
+    delete session.lastFailureAction;
+  }
   broadcastHudStep(6, {
     actions,
     results,

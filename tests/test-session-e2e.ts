@@ -231,6 +231,12 @@ const storageStore: Record<string, unknown> = {};
             const hit = page.elements.find((e) => "#" + e.element_id === a.target);
             return hit ? { ok: true } : { ok: false, error: "click target not found: " + a.target };
           }
+          if (a.type === "wait_for" && a.condition === "text") {
+            const text = page.elements.map((e) => e.text).join(" ");
+            return text.includes(a.value ?? "")
+              ? { ok: true }
+              : { ok: false, code: "TIMEOUT", error: "verification text not found" };
+          }
           return { ok: false, error: "unsupported action: " + a.type };
         });
         return { type: "execute.response", payload: { results } };
@@ -284,7 +290,11 @@ function scriptAction(call: PlanCall): unknown {
     }
     return { type: "click", target: { name: "Submit" } };
   }
-  if (call.url === THANKS) return { type: "done", reason: "form submitted, thanks page reached" };
+  if (call.url === THANKS) return {
+    type: "done",
+    reason: "form submitted, thanks page reached",
+    verify: { condition: "text", needle: "details were submitted", timeoutMs: 5000 },
+  };
   if (call.url === UBER) {
     uberScriptCalls++;
     if (uberScriptCalls === 1) {

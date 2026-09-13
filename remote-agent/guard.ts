@@ -419,7 +419,42 @@ function validateActionWithGuard(
           error: `Raw ${piiMatch} detected in done reason: "${obj.reason}"`,
         };
       }
-      return { ok: true, action: { type: "done", reason: obj.reason.trim() } };
+      const verify = obj.verify;
+      if (verify !== undefined) {
+        if (typeof verify !== "object" || verify === null || Array.isArray(verify)) {
+          return { ok: false, error: "'done.verify' must be an object" };
+        }
+        const v = verify as Record<string, unknown>;
+        const conditions = ["element", "text", "url", "gone"];
+        if (typeof v.condition !== "string" || !conditions.includes(v.condition)) {
+          return { ok: false, error: "'done.verify' requires a supported condition" };
+        }
+        if (["element", "gone"].includes(v.condition) && !isTarget(v.target)) {
+          return { ok: false, error: `'done.verify ${v.condition}' requires a valid target` };
+        }
+        const targetPii = findPiiInValue(v.target);
+        if (targetPii) return { ok: false, error: `Raw ${targetPii} detected in done verification target` };
+        if (v.condition === "text" && (typeof v.needle !== "string" || !v.needle.trim())) {
+          return { ok: false, error: "'done.verify text' requires a non-empty needle" };
+        }
+        if (v.condition === "url" && (typeof v.urlPattern !== "string" || !v.urlPattern.trim())) {
+          return { ok: false, error: "'done.verify url' requires a non-empty urlPattern" };
+        }
+        if (v.timeoutMs !== undefined &&
+            (typeof v.timeoutMs !== "number" || !Number.isFinite(v.timeoutMs) || v.timeoutMs < 1 || v.timeoutMs > 30000)) {
+          return { ok: false, error: "'done.verify' timeoutMs must be between 1 and 30000" };
+        }
+        for (const value of [v.needle, v.urlPattern]) {
+          if (typeof value === "string") {
+            const valuePii = findPiiInValue(value);
+            if (valuePii) return { ok: false, error: `Raw ${valuePii} detected in done verification` };
+          }
+        }
+      }
+      return {
+        ok: true,
+        action: { type: "done", reason: obj.reason.trim(), ...(verify !== undefined ? { verify } : {}) } as AgentAction,
+      };
     }
 
     case "ask_human": {
