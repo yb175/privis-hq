@@ -144,6 +144,7 @@ const BRAND_URLS: Record<string, string> = {
   flipkart: "https://www.flipkart.com/",
   amazon: "https://www.amazon.in/",
   myntra: "https://www.myntra.com/",
+  zepto: "https://www.zeptonow.com/",
   irctc: "https://www.irctc.co.in/",
   gmail: "https://mail.google.com/",
   google: "https://www.google.com/",
@@ -214,7 +215,7 @@ async function resolveSearchToNavigate(
   endpoint.searchParams.set("api_key", apiKey);
   try {
     const res = await (fetchFn ?? fetch)(endpoint.toString(), {
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) {
       return { type: "ask_human", reason: `Search for "${query}" failed (HTTP ${res.status})` };

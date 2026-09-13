@@ -21,6 +21,7 @@ async function snapshot(tabId: number): Promise<Snapshot> {
 
 function targetMatches(element: ElementMeta, target: Target): boolean {
   if (target.ref) return element.element_id === target.ref.elementId && element.documentId === target.ref.documentId && (element.frameId ?? 0) === (target.ref.frameId ?? 0);
+  if (target.css?.startsWith("#")) return element.element_id === target.css.slice(1);
   if (target.role && element.role !== target.role) return false;
   if (target.name && !(element.label === target.name || element.text === target.name)) return false;
   if (target.bbox) {

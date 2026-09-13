@@ -180,7 +180,20 @@ export type AgentAction = AgentActionBody & { verification?: VerificationSpec };
 function isVerificationTarget(target: unknown): target is Target {
   if (!isTarget(target)) return false;
   const value = target as Target;
-  return Boolean(value.ref || value.role || value.name || value.bbox);
+  const simpleId = typeof value.css === "string" && /^#[A-Za-z_][A-Za-z0-9_-]*$/.test(value.css);
+  return Boolean(value.ref || value.role || value.name || value.bbox || simpleId);
+}
+
+function normalizeVerificationCheck(input: unknown): unknown {
+  if (typeof input === "string") return { type: "text_appeared", needle: input };
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const check = { ...(input as Record<string, unknown>) };
+  const condition = typeof check.condition === "string" ? check.condition : check.type;
+  if (condition === "text") return { ...check, type: "text_appeared", needle: check.needle ?? check.value ?? check.expected };
+  if (condition === "url") return { ...check, type: "url_matches", urlPattern: check.urlPattern ?? check.value ?? check.expected };
+  if (condition === "element") return { ...check, type: "element_appeared" };
+  if (condition === "gone") return { ...check, type: "element_disappeared" };
+  return check;
 }
 
 function findVerificationPii(value: unknown): string | null {
@@ -200,10 +213,26 @@ function findVerificationPii(value: unknown): string | null {
 }
 
 export function validateVerificationSpec(input: unknown): { ok: true; verification: VerificationSpec } | { ok: false; error: string } {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, error: "verification must be an object" };
+  if (!input || typeof input !== "object") return { ok: false, error: "verification must be an object" };
   const pii = findVerificationPii(input);
   if (pii) return { ok: false, error: `Raw ${pii} detected in verification` };
-  const v = input as Record<string, unknown>;
+  let v: Record<string, unknown> = Array.isArray(input) ? { checks: input } : input as Record<string, unknown>;
+  if (v.checks !== undefined) {
+    const checks = Array.isArray(v.checks) ? v.checks : [v.checks];
+    v = { ...v, checks: checks.map(normalizeVerificationCheck) };
+  }
+  // Backward-compatible repair for models that reuse the older done.verify
+  // shape. It stays read-only and bounded; malformed contracts still fail closed.
+  if (!Array.isArray(v.checks) && typeof v.condition === "string") {
+    const check = v.condition === "text" && typeof v.needle === "string"
+      ? { type: "text_appeared", needle: v.needle }
+      : v.condition === "url" && typeof v.urlPattern === "string"
+        ? { type: "url_matches", urlPattern: v.urlPattern }
+        : ["element", "gone"].includes(v.condition) && isVerificationTarget(v.target)
+          ? { type: v.condition === "gone" ? "element_disappeared" : "element_appeared", target: v.target }
+          : undefined;
+    if (check) v = { checks: [check], timeoutMs: v.timeoutMs };
+  }
   if (!Array.isArray(v.checks) || v.checks.length < 1 || v.checks.length > 4) return { ok: false, error: "verification.checks must contain 1 to 4 checks" };
   if (v.mode !== undefined && v.mode !== "all" && v.mode !== "any") return { ok: false, error: "verification.mode must be all or any" };
   if (v.timeoutMs !== undefined && (typeof v.timeoutMs !== "number" || !Number.isFinite(v.timeoutMs) || v.timeoutMs < 100 || v.timeoutMs > 10000)) return { ok: false, error: "verification.timeoutMs must be between 100 and 10000" };
