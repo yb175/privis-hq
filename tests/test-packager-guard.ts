@@ -115,21 +115,16 @@ assert.ok(plannerPrompt.includes("PHASE: continuing"));
 assert.ok(plannerPrompt.includes("Element not found"));
 console.log("  ✔ Planner context includes bounded progress, last result, and recent history");
 
-// 1.3b Label metadata must NEVER leak into the prompt (labels can carry raw
-// page/user data the PII regexes cannot catch — names, passwords, etc.; the
-// sanitizer only swaps `text`). Regression guard: if a change reintroduces
-// labels into the element summary, this fails. (Regex-detectable values like
-// raw PANs in labels are separately refused by the boundary assert.)
-const labelLeakPkg = createValidPackage();
-labelLeakPkg.sanitizedContext.elements[1].label = "Squadron Leader Priya Sharma";
-labelLeakPkg.sanitizedContext.elements[0].label = "default_password_is_Hunter2Secret";
-const labelLeakPrompt = buildUserPrompt(labelLeakPkg);
-assert.ok(
-  !labelLeakPrompt.includes("Priya Sharma"),
-  "Element label values must never reach the model prompt"
-);
-assert.ok(!labelLeakPrompt.includes("Hunter2Secret"), "Label-carried secrets must never reach the model prompt");
-console.log("  ✔ Raw data injected into element labels never leaks into the prompt");
+// 1.3b Safe semantic labels are included so similar controls remain
+// distinguishable (for example, Uber pickup vs dropoff fields). Known PII in
+// labels is still redacted at prompt-build time.
+const labelPkg = createValidPackage();
+labelPkg.sanitizedContext.elements[1].label = "Pickup location";
+labelPkg.sanitizedContext.elements[0].label = "Dropoff location";
+const labelPrompt = buildUserPrompt(labelPkg);
+assert.ok(labelPrompt.includes('label="Pickup location"'));
+assert.ok(labelPrompt.includes('label="Dropoff location"'));
+console.log("  ✔ Safe semantic labels reach the planner prompt");
 
 // 1.3c Last-step result errors are PII-redacted before entering the prompt
 const leakyLastStepPrompt = buildUserPrompt(pkg, {

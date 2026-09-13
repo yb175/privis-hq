@@ -115,9 +115,7 @@ export function buildUserPrompt(
       ] as const) {
         if (value !== undefined) parts.push(`${key}=${value}`);
       }
-      // `label` is intentionally omitted: the sanitizer only swaps `text`, so a
-      // label can still carry raw page/user data (same boundary the extension
-      // service-worker applies before dispatching to the remote agent).
+      if (el.label) parts.push(`label="${redactPii(el.label)}"`);
       parts.push(`>`);
       if (el.text) parts.push(`text="${el.text}"`);
       if (el.bbox) parts.push(`bbox=[${el.bbox.join(",")}]`);

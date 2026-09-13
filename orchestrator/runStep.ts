@@ -289,6 +289,19 @@ function sanitizedStateFingerprint(pkg: CapturePackage, elements: ElementMeta[])
   });
 }
 
+function safeSemanticLabel(label: string | null): string | null {
+  if (!label) return null;
+  const value = label.toLowerCase();
+  if (/pick\s*up|pickup|origin|^from\b/.test(value)) return "Pickup / origin";
+  if (/drop\s*off|dropoff|destination|^to\b/.test(value)) return "Dropoff / destination";
+  if (/where\s*to|search/.test(value)) return "Search / destination";
+  if (/email/.test(value)) return "Email";
+  if (/phone|mobile/.test(value)) return "Phone";
+  if (/name/.test(value)) return "Name";
+  if (/address/.test(value)) return "Address";
+  return null;
+}
+
 /** Same task + same page/risk can reuse an explicit human approval. */
 export function approvalFingerprint(pkg: CapturePackage): string {
   let page = pkg.browserState.url;
@@ -548,15 +561,15 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   }
 
   // Remote Agent: only the sanitized package crosses the wire — never the raw
-  // dataUrl, never the element_id -> real value map. applyPlaceholders swaps
-  // only `text`, so strip the user-controlled `label` (accessible label /
-  // placeholder / title) to keep any raw value out of the remote context.
+  // dataUrl, never the element_id -> real value map. Labels are useful for
+  // distinguishing same-shaped controls (Uber pickup vs dropoff), so retain
+  // only their PII-redacted semantic text.
   // Privacy-first: NO LLM keys on this device — the package goes to the
   // operator's remote-agent server, which holds the keys and picks the brain.
   const remoteElements: ElementMeta[] = sanitized.map((el) => ({
     ...el,
     text: redactPii(el.text),
-    label: null,
+    label: safeSemanticLabel(el.label),
   }));
   const remoteBrowserState = {
     ...pkg.browserState,

@@ -190,7 +190,7 @@ async function runTests() {
     console.log(`  ✔ All ${count} PII leaks cleanly failed closed to digest-only stubs`);
   }
 
-  // 3. Raw Field Injection (tabId, dataUrl, detections, label)
+  // 3. Raw Field Injection (tabId, dataUrl, detections)
   console.log("\n[3] Structural forbidden fields fail-closed test");
   {
     const forbiddenKeys = ["tabId", "dataUrl", "detections"];
@@ -220,9 +220,9 @@ async function runTests() {
       assert.ok(stored.error?.includes("FAIL_CLOSED"));
     }
 
-    // Element with unredacted user label
+    // Known PII in a label still fails closed via the serialized PII tripwire.
     const labelPkg = createValidPackage();
-    labelPkg.sanitizedContext.elements[0].label = "leaked real secret";
+    labelPkg.sanitizedContext.elements[0].label = "user@example.com";
     const labelEntry: TransparencyEntry = {
       sessionId: "sess_raw_label",
       goal: "Test label",
@@ -238,7 +238,7 @@ async function runTests() {
     const store = await getTransparencyLog();
     const stored = store.entries[store.entries.length - 1];
     assert.ok(stored.error?.includes("FAIL_CLOSED"));
-    console.log("  ✔ Structural raw fields (tabId, dataUrl, detections, labels) all fail closed");
+    console.log("  ✔ Structural raw fields and PII-bearing labels fail closed");
   }
 
   // 4. AC-2 Tripwire: Grep entire storage JSON for zero PII or raw secrets
