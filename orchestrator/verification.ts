@@ -14,8 +14,8 @@ async function snapshot(tabId: number): Promise<Snapshot> {
   const packages = results
     .filter((r): r is PromiseFulfilledResult<{ type: "capture.response"; payload: { elements: ElementMeta[]; browserState: BrowserState; frameId?: number } }> => r.status === "fulfilled")
     .map((r) => r.value.payload);
-  const primary = packages.find((p) => (p.frameId ?? 0) === 0) ?? packages[0];
-  if (!primary) throw new Error("verification capture returned no frame");
+  const primary = packages.find((p) => (p.frameId ?? 0) === 0);
+  if (!primary) throw new Error("verification capture missing top frame");
   return { browserState: primary.browserState, elements: packages.flatMap((p) => p.elements) };
 }
 
@@ -23,7 +23,12 @@ function targetMatches(element: ElementMeta, target: Target): boolean {
   if (target.ref) return element.element_id === target.ref.elementId && element.documentId === target.ref.documentId && (element.frameId ?? 0) === (target.ref.frameId ?? 0);
   if (target.role && element.role !== target.role) return false;
   if (target.name && !(element.label === target.name || element.text === target.name)) return false;
-  return Boolean(target.role || target.name);
+  if (target.bbox) {
+    const [x, y, w, h] = target.bbox;
+    const [ex, ey, ew, eh] = element.bbox;
+    if (x + w < ex || ex + ew < x || y + h < ey || ey + eh < y) return false;
+  }
+  return Boolean(target.role || target.name || target.bbox);
 }
 
 function textPresent(elements: ElementMeta[], needle: string): boolean {
@@ -54,8 +59,14 @@ function evaluate(check: VerificationCheck, before: Snapshot, after: Snapshot): 
       return { ok, evidence: ok ? "element disappeared" : "element did not disappear" };
     }
     case "url_matches": {
-      let ok = false;
-      try { ok = new RegExp(check.urlPattern).test(after.browserState.url); } catch { /* contract validation cannot make regex safe */ }
+      const parts = check.urlPattern.split("*");
+      let cursor = 0;
+      const ok = parts.every((part) => {
+        const index = after.browserState.url.indexOf(part, cursor);
+        if (index < 0) return false;
+        cursor = index + part.length;
+        return true;
+      });
       return { ok, evidence: ok ? "URL matched" : "URL did not match" };
     }
     case "state_changed": {

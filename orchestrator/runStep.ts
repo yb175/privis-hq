@@ -698,21 +698,16 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     const frameId = agentAction.actions[0]?.target.ref?.frameId ?? 0;
     const results = await applyActions(tabId, actions, frameId);
     await waitForTabSettled(tabId);
+    let verificationResult: ActionResult | undefined;
     if (agentAction.verification && results.every((result) => result.ok)) {
-      const verification = await verifyPostcondition(tabId, { browserState: pkg.browserState, elements: pkg.elements }, agentAction.verification);
-      if (!verification.ok) {
-        results[results.length - 1] = verification;
-        telemetry("verification", "uncertain", verification.code);
-      } else {
-        results.push(verification);
-        telemetry("verification", "ok");
-      }
+      verificationResult = await verifyPostcondition(tabId, { browserState: pkg.browserState, elements: pkg.elements }, agentAction.verification);
+      telemetry("verification", verificationResult.ok ? "ok" : "uncertain", verificationResult.code);
     }
-    const failed = results.find((result) => !result.ok);
+    const failed = results.find((result) => !result.ok) ?? (verificationResult?.ok === false ? verificationResult : undefined);
     const aggregate: ActionResult = {
       ok: !failed && results.length === actions.length,
       ...(failed?.error ? { error: failed.error } : {}),
-      detail: JSON.stringify(results),
+      detail: JSON.stringify({ results, verification: verificationResult?.detail }),
     };
     session.history.push({
       step: session.history.length + 1,
@@ -766,6 +761,21 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     if (result.ok && nextTabId !== undefined) {
       session.tabId = nextTabId;
     }
+    if (result.ok && agentAction.verification && nextTabId !== undefined) {
+      await waitForTabSettled(nextTabId);
+      const verification = await verifyPostcondition(
+        nextTabId,
+        { browserState: pkg.browserState, elements: pkg.elements },
+        agentAction.verification,
+      );
+      if (!verification.ok) {
+        result = verification;
+        telemetry("verification", "uncertain", verification.code);
+      } else {
+        telemetry("verification", "ok");
+      }
+    }
+    telemetry("execution", result.ok ? "ok" : "failed", result.code);
     session.history.push({ step: session.history.length + 1, url: pkg.browserState.url, action: agentAction, result, timestamp: Date.now() });
     session.step = session.history.length;
     if (!result.ok || ((agentAction.type === "open_tab" || agentAction.type === "switch_tab" || agentAction.type === "close_tab") && nextTabId === undefined)) {

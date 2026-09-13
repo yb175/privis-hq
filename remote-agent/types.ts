@@ -177,8 +177,32 @@ type AgentActionBody =
 
 export type AgentAction = AgentActionBody & { verification?: VerificationSpec };
 
+function isVerificationTarget(target: unknown): target is Target {
+  if (!isTarget(target)) return false;
+  const value = target as Target;
+  return Boolean(value.ref || value.role || value.name || value.bbox);
+}
+
+function findVerificationPii(value: unknown): string | null {
+  if (typeof value === "string") {
+    for (const { name, re } of PII_PATTERNS) {
+      re.lastIndex = 0;
+      if (re.test(value)) return name;
+    }
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) { const found = findVerificationPii(item); if (found) return found; }
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) { const found = findVerificationPii(item); if (found) return found; }
+  }
+  return null;
+}
+
 export function validateVerificationSpec(input: unknown): { ok: true; verification: VerificationSpec } | { ok: false; error: string } {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, error: "verification must be an object" };
+  const pii = findVerificationPii(input);
+  if (pii) return { ok: false, error: `Raw ${pii} detected in verification` };
   const v = input as Record<string, unknown>;
   if (!Array.isArray(v.checks) || v.checks.length < 1 || v.checks.length > 4) return { ok: false, error: "verification.checks must contain 1 to 4 checks" };
   if (v.mode !== undefined && v.mode !== "all" && v.mode !== "any") return { ok: false, error: "verification.mode must be all or any" };
@@ -189,11 +213,11 @@ export function validateVerificationSpec(input: unknown): { ok: true; verificati
     if (["text_appeared", "text_disappeared"].includes(c.type as string)) {
       if (typeof c.needle !== "string" || !c.needle.trim() || c.needle.length > 200) return { ok: false, error: `${c.type} requires a bounded needle` };
     } else if (["element_appeared", "element_disappeared"].includes(c.type as string)) {
-      if (!isTarget(c.target)) return { ok: false, error: `${c.type} requires a target` };
+      if (!isVerificationTarget(c.target)) return { ok: false, error: `${c.type} requires a role, name, bbox, or snapshot reference target` };
     } else if (c.type === "url_matches") {
-      if (typeof c.urlPattern !== "string" || !c.urlPattern.trim() || c.urlPattern.length > 300) return { ok: false, error: "url_matches requires a bounded urlPattern" };
+      if (typeof c.urlPattern !== "string" || !c.urlPattern.trim() || !c.urlPattern.replace(/\*/g, "").trim() || c.urlPattern.length > 300) return { ok: false, error: "url_matches requires a bounded urlPattern" };
     } else if (c.type === "state_changed") {
-      if (!isTarget(c.target) || !["disabled", "checked", "selected", "expanded", "focused"].includes(c.attribute as string)) return { ok: false, error: "state_changed requires a target and supported attribute" };
+      if (!isVerificationTarget(c.target) || !["disabled", "checked", "selected", "expanded", "focused"].includes(c.attribute as string)) return { ok: false, error: "state_changed requires a target and supported attribute" };
     } else if (c.type === "count_changed") {
       if (c.role !== undefined && (typeof c.role !== "string" || c.role.length > 100)) return { ok: false, error: "count_changed role is invalid" };
       if (c.name !== undefined && (typeof c.name !== "string" || c.name.length > 200)) return { ok: false, error: "count_changed name is invalid" };

@@ -10,7 +10,6 @@ import type {
   PolicyGateResult,
   StepResult,
 } from "../types/index.js";
-import { redactPii } from "../remote-agent/guard.js";
 
 // One pipeline pass reports its StepResult plus `stop`: whether the session
 // loop must end (done / ask_human / gate block / human reject).
@@ -25,21 +24,24 @@ export const MAX_SESSION_STEPS = 25;
 const sessionsByTab = new Map<number, AgentSession>();
 const SESSION_STORAGE_KEY = "privis_session_control_state_v1";
 
-type PersistedSessions = { version: 1; sessions: AgentSession[] };
-
-function controlSafe(value: unknown): unknown {
-  if (typeof value === "string") return redactPii(value);
-  if (Array.isArray(value)) return value.map(controlSafe);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).filter(([key]) => key !== "outboundPayload").map(([key, nested]) => [key, controlSafe(nested)]));
-  }
-  return value;
+interface PersistedSessionControl {
+  sessionId: string;
+  tabId: number;
+  step: number;
+  maxSteps: number;
+  status: "running" | "waiting_human";
+  gateDecision?: AgentSession["gateDecision"];
 }
 
+type PersistedSessions = { version: 1; sessions: PersistedSessionControl[] };
+let hydrationPromise: Promise<void> | undefined;
+
 export async function persistSessions(): Promise<void> {
-  const sessions = Array.from(sessionsByTab.values())
+  const sessions: PersistedSessionControl[] = Array.from(sessionsByTab.values())
     .filter((session) => session.status === "running" || session.status === "waiting_human")
-    .map((session) => controlSafe(session) as AgentSession);
+    .map(({ sessionId, tabId, step, maxSteps, status, gateDecision }) => ({
+      sessionId, tabId, step: step ?? 0, maxSteps: maxSteps ?? MAX_SESSION_STEPS, status: status as "running" | "waiting_human", gateDecision,
+    }));
   const value: PersistedSessions = { version: 1, sessions };
   try {
     const storage = chrome.storage?.session ?? chrome.storage?.local;
@@ -49,19 +51,35 @@ export async function persistSessions(): Promise<void> {
   }
 }
 
-export async function hydrateSessions(): Promise<void> {
+async function hydrateSessionsOnce(): Promise<void> {
   try {
     const storage = chrome.storage?.session ?? chrome.storage?.local;
     const stored = storage?.get ? (await storage.get(SESSION_STORAGE_KEY))[SESSION_STORAGE_KEY] as PersistedSessions | undefined : undefined;
     if (stored?.version !== 1 || !Array.isArray(stored.sessions)) return;
-    for (const session of stored.sessions) {
-      if (session && typeof session.tabId === "number" && typeof session.sessionId === "string" && !sessionsByTab.has(session.tabId)) {
-        sessionsByTab.set(session.tabId, session);
-      }
+    for (const control of stored.sessions) {
+      if (!control || typeof control.tabId !== "number" || typeof control.sessionId !== "string" || sessionsByTab.has(control.tabId)) continue;
+      // An action or approval may have been in flight when the worker stopped.
+      // Never replay it automatically; require a fresh human continuation.
+      sessionsByTab.set(control.tabId, {
+        sessionId: control.sessionId,
+        tabId: control.tabId,
+        goal: "[Recovered session: restate the goal to continue]",
+        step: control.step,
+        maxSteps: control.maxSteps,
+        status: "waiting_human",
+        gateDecision: control.gateDecision,
+        history: [],
+        error: "Service worker restarted; page state and any pending approval must be re-checked.",
+      });
     }
   } catch {
     // A missing or corrupt store must not prevent a fresh session.
   }
+}
+
+export function hydrateSessions(): Promise<void> {
+  hydrationPromise ??= hydrateSessionsOnce();
+  return hydrationPromise;
 }
 
 // Pending gate approvals, keyed by sessionId (resolved by the popup's

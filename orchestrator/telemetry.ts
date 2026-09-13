@@ -18,20 +18,26 @@ function id(): string {
   try { return crypto.randomUUID(); } catch { return `corr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; }
 }
 
-export async function recordStepTelemetry(input: Omit<StepTelemetry, "correlationId" | "timestamp"> & { correlationId?: string }): Promise<StepTelemetry> {
+let telemetryQueue: Promise<void> = Promise.resolve();
+
+export function recordStepTelemetry(input: Omit<StepTelemetry, "correlationId" | "timestamp"> & { correlationId?: string }): Promise<StepTelemetry> {
   const entry: StepTelemetry = { ...input, correlationId: input.correlationId ?? id(), timestamp: Date.now() };
-  try {
-    const storage = chrome.storage?.session ?? chrome.storage?.local;
-    if (storage?.get && storage?.set) {
-      const current = await storage.get(KEY);
-      const entries = Array.isArray(current?.[KEY]) ? current[KEY] as StepTelemetry[] : [];
-      entries.push(entry);
-      await storage.set({ [KEY]: entries.slice(-MAX_ENTRIES) });
+  const operation = async () => {
+    try {
+      const storage = chrome.storage?.session ?? chrome.storage?.local;
+      if (storage?.get && storage?.set) {
+        const current = await storage.get(KEY);
+        const entries = Array.isArray(current?.[KEY]) ? current[KEY] as StepTelemetry[] : [];
+        entries.push(entry);
+        await storage.set({ [KEY]: entries.slice(-MAX_ENTRIES) });
+      }
+    } catch {
+      // Telemetry must never block or fail the browser action.
     }
-  } catch {
-    // Telemetry must never block or fail the browser action.
-  }
-  return entry;
+  };
+  const result = telemetryQueue.then(operation, operation);
+  telemetryQueue = result.then(() => undefined, () => undefined);
+  return result.then(() => entry);
 }
 
 export function newCorrelationId(): string { return id(); }

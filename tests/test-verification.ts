@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { guardModelOutput } from "../remote-agent/guard.js";
-import { validateVerificationSpec } from "../remote-agent/types.js";
+import { parseAgentAction, validateVerificationSpec } from "../remote-agent/types.js";
 import { verifyPostcondition } from "../orchestrator/verification.js";
 import { persistSessions, hydrateSessions, sessionsByTab, startSession } from "../orchestrator/session.js";
 
@@ -38,6 +38,14 @@ assert.strictEqual(plan.ok, true);
 assert.strictEqual(plan.ok && plan.action.verification?.checks.length, 1);
 assert.strictEqual(validateVerificationSpec({ checks: [{ type: "count_changed", role: "button", delta: 1 }] }).ok, true);
 assert.strictEqual(validateVerificationSpec({ checks: [{ type: "execute", code: "alert(1)" }] }).ok, false);
+assert.throws(() => parseAgentAction({ type: "click", target: { name: "alice@example.com" }, verification: { checks: [{ type: "element_appeared", target: { name: "alice@example.com" } }] } }), /Raw EMAIL|Invalid/);
+assert.strictEqual(guardModelOutput({
+  action: { type: "batch", actions: [
+    { type: "click", target: { ref: { snapshotVersion: 1, documentId: "doc-1", elementId: "a" } } },
+    { type: "click", target: { ref: { snapshotVersion: 1, documentId: "doc-1", elementId: "b" } } },
+  ] },
+  verification: { checks: [{ type: "count_changed", role: "button" }] },
+}).ok, true, "same-snapshot batch verification should be accepted");
 
 const tab = 991;
 const session = startSession(tab, "fill email@example.com");
