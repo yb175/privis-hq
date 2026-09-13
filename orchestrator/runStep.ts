@@ -286,6 +286,24 @@ function sanitizedStateFingerprint(pkg: CapturePackage, elements: ElementMeta[])
   });
 }
 
+export function successfulActionFingerprint(action: AgentAction): string | null {
+  if (
+    !["click", "type", "select_option", "check", "uncheck"].includes(action.type) ||
+    !("target" in action)
+  ) return null;
+  const target = action.target;
+  if (!target) return null;
+  const locator = target.ref
+    ? { documentId: target.ref.documentId, frameId: target.ref.frameId ?? 0, elementId: target.ref.elementId }
+    : { css: target.css, role: target.role, name: target.name, bbox: target.bbox };
+  return JSON.stringify({
+    type: action.type,
+    target: locator,
+    ...(action.type === "type" ? { placeholder: action.placeholder } : {}),
+    ...(action.type === "select_option" ? { option: action.option } : {}),
+  });
+}
+
 function verificationActions(
   verify: DoneVerification,
   sanitized: ElementMeta[],
@@ -601,6 +619,28 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     return { decision: gate.decision, reason, stop: true };
   }
 
+  const actionFingerprint = successfulActionFingerprint(agentAction);
+  if (actionFingerprint && session.successfulActionFingerprints?.includes(actionFingerprint)) {
+    const result: ActionResult = {
+      ok: false,
+      code: "DUPLICATE_ACTION",
+      error: "This exact interaction already succeeded in this session; choose the next requested item or verify completion.",
+    };
+    session.history.push({
+      step: session.history.length + 1,
+      url: pkg.browserState.url,
+      action: agentAction,
+      result,
+      timestamp: Date.now(),
+    });
+    session.step = session.history.length;
+    session.lastFailureFingerprint = currentStateFingerprint;
+    session.lastFailureAction = JSON.stringify(agentAction);
+    broadcastHudStep(6, { actions: [], results: [result], outcome: "retry" });
+    notifySessionUpdate(session, gate);
+    return { decision: gate.decision, reason: result.error!, actions: [result] };
+  }
+
   // Terminal actions: done is terminal only after its optional configured
   // verification passes. A failed verification becomes planner feedback.
   if (agentAction.type === "done" || agentAction.type === "ask_human") {
@@ -814,6 +854,10 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   } else {
     delete session.lastFailureFingerprint;
     delete session.lastFailureAction;
+    if (actionFingerprint) {
+      const fingerprints = session.successfulActionFingerprints ??= [];
+      if (!fingerprints.includes(actionFingerprint)) fingerprints.push(actionFingerprint);
+    }
   }
   broadcastHudStep(6, {
     actions,

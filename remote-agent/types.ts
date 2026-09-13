@@ -187,6 +187,8 @@ export interface AgentSession {
   /** Redacted state/action fingerprints used to stop blind identical retries. */
   lastFailureFingerprint?: string;
   lastFailureAction?: string;
+  /** Successful local interactions, normalized without snapshot versions. */
+  successfulActionFingerprints?: string[];
   /** Exact redacted-only package view dispatched to the remote planner. */
   outboundPayload?: {
     sanitizedScreenshot: string;
