@@ -289,6 +289,29 @@ function sanitizedStateFingerprint(pkg: CapturePackage, elements: ElementMeta[])
   });
 }
 
+/** Same task + same page/risk can reuse an explicit human approval. */
+export function approvalFingerprint(pkg: CapturePackage): string {
+  let page = pkg.browserState.url;
+  try {
+    const url = new URL(page);
+    page = `${url.origin}${url.pathname}`;
+  } catch {
+    // Keep malformed URLs local; they still form a stable same-page key.
+  }
+  return JSON.stringify({
+    page,
+    detections: pkg.detections
+      .filter((d) => d.confidence < 0.6 || d.category === "PASSWORD" || d.category === "FACE")
+      .map((d) => ({
+        category: d.category,
+        source: d.source,
+        // Small detector jitter must not prompt again; a new region does.
+        bbox: d.bbox.map((n) => Math.round(n / 32)),
+      }))
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+  });
+}
+
 export function successfulActionFingerprint(action: AgentAction): string | null {
   if (
     !["click", "type", "compose", "select_option", "check", "uncheck"].includes(action.type) ||
@@ -427,8 +450,17 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   });
 
   // Policy Gate: never call the remote unless the package is allowed out.
-  const gate = decide({ detections: pkg.detections, browserState: pkg.browserState });
-  session.gateDecision = gate.decision;
+  const policyGate = decide({ detections: pkg.detections, browserState: pkg.browserState });
+  let gate = policyGate;
+  const gateFingerprint = gate.decision === "human_approval" ? approvalFingerprint(pkg) : undefined;
+  if (gateFingerprint && session.approvedGateFingerprints?.includes(gateFingerprint)) {
+    gate = {
+      decision: "allow",
+      reason: "Allowed under this task's prior approval for the unchanged page and detection.",
+    };
+  }
+  // Keep the underlying risk visible even when this task already approved it.
+  session.gateDecision = policyGate.decision;
   broadcastHudStep(4, {
     decision: gate.decision,
     reason: gate.reason,
@@ -504,6 +536,12 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       });
 
       return { decision: gate.decision, reason: "Human rejected action", stop: true };
+    }
+    if (gateFingerprint) {
+      session.approvedGateFingerprints ??= [];
+      if (!session.approvedGateFingerprints.includes(gateFingerprint)) {
+        session.approvedGateFingerprints.push(gateFingerprint);
+      }
     }
     session.status = "running";
     notifySessionUpdate(session, gate);

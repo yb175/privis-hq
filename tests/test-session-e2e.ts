@@ -21,12 +21,12 @@
 
 import assert from "node:assert";
 import { createServer, type Server } from "node:http";
-import type { CaptureResponseMessage } from "../types/index.js";
+import type { CapturePackage, CaptureResponseMessage } from "../types/index.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { installCanvasShims } from "../privacy/engine/vision/test-canvas-shim.js";
-import { captureStabilityFingerprint, runStep, successfulActionFingerprint } from "../orchestrator/runStep.js";
+import { approvalFingerprint, captureStabilityFingerprint, runStep, successfulActionFingerprint } from "../orchestrator/runStep.js";
 import { MAX_SESSION_STEPS, pendingHumanDecisions, sessionsByTab } from "../orchestrator/session.js";
 import { computeRequestDigest } from "../orchestrator/transparency-log.js";
 
@@ -56,6 +56,20 @@ assert.strictEqual(
   successfulActionFingerprint({ type: "type", target: { ref: { snapshotVersion: 2, documentId: "doc", elementId: "search" } }, placeholder: "milk" })
 );
 console.log("  ✔ Successful actions remain deduplicated across fresh snapshots");
+const approvalPage: CapturePackage = {
+  tabId: 1,
+  dataUrl: "data:image/png;base64,",
+  elements: [],
+  detections: [{ element_id: "vision-0", category: "FACE", confidence: 0.42, source: "vision", bbox: [96, 64, 128, 128] }],
+  browserState: { url: "https://open.spotify.com/search", title: "Spotify", viewport: { w: 640, h: 480 } },
+};
+const jitteredApprovalPage: CapturePackage = structuredClone(approvalPage);
+jitteredApprovalPage.detections[0].bbox = [104, 72, 128, 128];
+assert.strictEqual(approvalFingerprint(approvalPage), approvalFingerprint(jitteredApprovalPage));
+const changedApprovalPage: CapturePackage = structuredClone(approvalPage);
+changedApprovalPage.browserState.url = "https://open.spotify.com/album/new";
+assert.notStrictEqual(approvalFingerprint(approvalPage), approvalFingerprint(changedApprovalPage));
+console.log("  ✔ Approval fingerprint tolerates detector jitter but resets on a new page");
 import type { ElementMeta, TransparencyLogStore } from "../types/index.js";
 
 // ---------------------------------------------------------------------------
