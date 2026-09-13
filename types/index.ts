@@ -33,6 +33,7 @@ export interface ElementMeta {
   bbox: BoundingBox;
   snapshotVersion?: number;
   documentId?: string;
+  frameId?: number;
   disabled?: boolean;
   checked?: boolean;
   selected?: boolean;
@@ -144,6 +145,7 @@ export interface StepResult {
 
 export interface CaptureRequestMessage {
   type: "capture.request";
+  frameId?: number;
 }
 
 export interface CaptureResponseMessage {
@@ -153,6 +155,7 @@ export interface CaptureResponseMessage {
     browserState: BrowserState;
     snapshotVersion?: number;
     documentId?: string;
+    frameId?: number;
   };
 }
 

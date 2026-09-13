@@ -35,13 +35,21 @@ const documentId = typeof crypto !== "undefined" && typeof crypto.randomUUID ===
  * Capture Layer content-script half: visible elements + browser state.
  * No placeholders, no clicks — those live elsewhere (Sanitizer / Local Executor).
  */
-export function captureDom(): { elements: ElementMeta[]; browserState: BrowserState; snapshotVersion: number; documentId: string } {
+export function captureDom(frameId = 0): { elements: ElementMeta[]; browserState: BrowserState; snapshotVersion: number; documentId: string; frameId: number } {
   snapshotVersion += 1;
+  const frameRect = window.frameElement?.getBoundingClientRect();
+  const offsetX = frameRect?.x ?? 0;
+  const offsetY = frameRect?.y ?? 0;
   return {
-    elements: extractElements(snapshotVersion, documentId),
+    elements: extractElements(snapshotVersion, documentId).map((element) => ({
+      ...element,
+      frameId,
+      bbox: [element.bbox[0] + offsetX, element.bbox[1] + offsetY, element.bbox[2], element.bbox[3]] as ElementMeta["bbox"],
+    })),
     browserState: collectBrowserState(),
     snapshotVersion,
     documentId,
+    frameId,
   };
 }
 
@@ -402,7 +410,7 @@ function isCaptureRequest(message: unknown): message is CaptureRequestMessage {
 // the background half lives in background/service-worker.ts.
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   if (!isCaptureRequest(message)) return false;
-  sendResponse({ type: "capture.response", payload: captureDom() });
+  sendResponse({ type: "capture.response", payload: captureDom(message.frameId ?? 0) });
   return false;
 });
 

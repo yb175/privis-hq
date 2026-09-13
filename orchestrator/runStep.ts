@@ -71,19 +71,33 @@ import {
  * @param tabId Target tab ID
  */
 // Snapshot the content-script DOM package for a tab.
-function domPackage(tabId: number): Promise<CaptureResponseMessage> {
-  return sendToContent<CaptureResponseMessage>(tabId, { type: "capture.request" });
+async function frameIds(tabId: number): Promise<number[]> {
+  try {
+    const frames = await chrome.webNavigation?.getAllFrames?.({ tabId });
+    const ids = frames?.map((frame) => frame.frameId).filter((id): id is number => typeof id === "number");
+    return ids?.length ? ids : [0];
+  } catch {
+    return [0];
+  }
+}
+
+function domPackage(tabId: number, frameId = 0): Promise<CaptureResponseMessage> {
+  return sendToContent<CaptureResponseMessage>(tabId, { type: "capture.request", frameId }, frameId);
+}
+
+async function domPackages(tabId: number): Promise<CaptureResponseMessage[]> {
+  const packages = await Promise.all((await frameIds(tabId)).map((frameId) => domPackage(tabId, frameId)));
+  return packages.filter((pkg) => pkg.payload.elements.length > 0 || pkg.payload.frameId === 0);
 }
 
 // Cheap, deterministic fingerprint of the DOM package. Element ids are stable
 // across extractions (the content script keys them by DOM node), so equality
 // here means the page did not change between snapshots.
-function packageFingerprint(dom: CaptureResponseMessage): string {
-  const { elements, browserState } = dom.payload;
-  return JSON.stringify({
-    browserState,
-    elements: elements.map(({ snapshotVersion: _snapshotVersion, ...element }) => element),
-  });
+function packageFingerprint(packages: CaptureResponseMessage[]): string {
+  return JSON.stringify(packages.map(({ payload }) => ({
+    browserState: payload.browserState,
+    elements: payload.elements.map(({ snapshotVersion: _snapshotVersion, ...element }) => element),
+  })));
 }
 
 export async function capturePackage(tabId: number): Promise<CapturePackage> {
@@ -93,19 +107,21 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
     // re-snapshot the DOM and require it to be unchanged. This guarantees the
     // detections always describe the pixels we redact — never detections from
     // one page state applied to another state's screenshot.
-    const before = await domPackage(tabId);
+    const before = await domPackages(tabId);
     const { dataUrl } = await takeScreenshot(tabId);
-    const after = await domPackage(tabId);
+    const after = await domPackages(tabId);
     if (packageFingerprint(before) === packageFingerprint(after)) {
-      const { elements, browserState } = before.payload;
+      const primary = before.find((pkg) => pkg.payload.frameId === 0) ?? before[0];
+      const elements = before.flatMap((pkg) => pkg.payload.elements);
+      if (!primary) throw new Error("capturePackage: top-level frame is unavailable");
       return {
         tabId,
         dataUrl,
         elements,
         detections: detectSensitive(elements),
-        browserState,
-        snapshotVersion: before.payload.snapshotVersion,
-        documentId: before.payload.documentId,
+        browserState: primary.payload.browserState,
+        snapshotVersion: primary.payload.snapshotVersion,
+        documentId: primary.payload.documentId,
       };
     }
   }
@@ -122,6 +138,7 @@ function buildPlannerContext(session: AgentSession): PlannerContext {
           ok: step.result.ok,
           ...(step.result.code ? { code: step.result.code } : {}),
           ...(step.result.error ? { error: redactPii(step.result.error) } : {}),
+          ...(step.result.detail ? { detail: redactPii(step.result.detail) } : {}),
         }
       : undefined,
   }));
@@ -499,7 +516,8 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     if (agentAction.type === "done" && agentAction.verify) {
       result = (await applyActions(
         tabId,
-        verificationActions(agentAction.verify, sanitized, map, goal)
+        verificationActions(agentAction.verify, sanitized, map, goal),
+        agentAction.verify.target?.ref?.frameId ?? 0
       ))[0] ?? {
         ok: false,
         code: "EXECUTION_ERROR",
@@ -644,7 +662,9 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   const navigationWait = historyKind
     ? waitForTabTransition(tabId, pkg.browserState.url, historyKind)
     : undefined;
-  const results = await applyActions(tabId, actions);
+  const actionTarget = "target" in agentAction ? agentAction.target : undefined;
+  const frameId = actionTarget?.ref?.frameId ?? 0;
+  const results = await applyActions(tabId, actions, frameId);
   if (navigationWait) {
     if (results[0]?.ok) {
       const transition = await navigationWait.promise;
