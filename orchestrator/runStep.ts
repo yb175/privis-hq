@@ -101,6 +101,18 @@ function packageFingerprint(packages: CaptureResponseMessage[]): string {
 }
 
 export async function capturePackage(tabId: number): Promise<CapturePackage> {
+  // Capture DOM after making the same tab visible that captureVisibleTab will
+  // screenshot. Otherwise an inactive/recently-switched tab can report a zero
+  // viewport while the screenshot is valid.
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.active) {
+      await chrome.tabs.update(tabId, { active: true });
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+  } catch {
+    // The subsequent DOM/screenshot calls produce the useful failure.
+  }
   const MAX_TRIES = 3;
   for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
     // Snapshot the DOM first, capture the screenshot of that same state, then
