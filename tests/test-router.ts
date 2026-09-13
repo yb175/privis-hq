@@ -1209,6 +1209,18 @@ assert.deepStrictEqual(
 );
 assert.strictEqual(typeGen[0].value, "user@x.com");
 console.log("  ✔ Bridge passes css targets through with real values");
+const versionedElements: ElementMeta[] = [{ ...bridgeElements[0], snapshotVersion: 12 }];
+assert.deepStrictEqual(agentActionToExecutorActions(
+  { type: "click", target: { ref: { snapshotVersion: 12, elementId: versionedElements[0].element_id } } },
+  versionedElements,
+  bridgeMap
+), [{ type: "click", target: "#pan-input" }]);
+assert.deepStrictEqual(agentActionToExecutorActions(
+  { type: "click", target: { ref: { snapshotVersion: 11, elementId: versionedElements[0].element_id } } },
+  versionedElements,
+  bridgeMap
+), [{ type: "click", target: "__stale_reference" }]);
+console.log("  ✔ Snapshot references resolve and stale references are preserved");
 
 const focusAction = agentActionToExecutorActions(
   { type: "focus", target: { role: "textbox" } },

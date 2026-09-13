@@ -91,6 +91,7 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
         elements,
         detections: detectSensitive(elements),
         browserState,
+        snapshotVersion: before.payload.snapshotVersion,
       };
     }
   }
