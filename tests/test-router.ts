@@ -645,7 +645,7 @@ const afterNavigate = await routeAgentRequest(
   createValidSanitizedPackage({
     goal: "open zepto and add ice cream to my cart",
     plannerContext: {
-      step: 1, maxSteps: 25, phase: "continuing", progress: "navigation completed",
+      step: 1, maxSteps: 25, phase: "continuing", progress: "navigation completed", destinationResolved: true,
       lastStep: { action: { type: "navigate", url: "https://www.zeptonow.com/" }, result: { ok: true } },
       recentHistory: [],
     },

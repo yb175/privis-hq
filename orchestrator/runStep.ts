@@ -235,6 +235,7 @@ function buildPlannerContext(session: AgentSession): PlannerContext {
         ? "initial"
         : "continuing",
     progress: `${completed} completed action(s); ${failed} failed action(s); current page state was freshly captured`,
+    destinationResolved: session.history.some((entry) => entry.action.type === "navigate" && entry.result?.ok),
     lastStep: recentHistory.at(-1),
     recentHistory,
   };

@@ -250,11 +250,11 @@ export async function routeAgentRequest(
   assertSanitizedPackage(pkg);
 
   // 1b. User told us where to go — go there; don't ask.
-  // The previous successful navigation already fulfilled destination discovery.
-  // Do not re-run the goal's brand shortcut while the page is still loading or
-  // while a SPA reports a stale URL; let the page planner handle the new state.
-  const justNavigated = pkg.plannerContext?.lastStep?.action.type === "navigate" && pkg.plannerContext.lastStep.result?.ok === true;
-  const quickNav = justNavigated ? null : planQuickNavigate(pkg.goal, pkg.sanitizedContext.browserState.url);
+  // Destination discovery is once per session. SPAs can briefly report a
+  // transitional or stale URL after clicks; using that URL to re-run a goal's
+  // "open Zepto" shortcut causes a navigate/click loop.
+  const destinationResolved = pkg.plannerContext?.destinationResolved === true;
+  const quickNav = destinationResolved ? null : planQuickNavigate(pkg.goal, pkg.sanitizedContext.browserState.url);
   if (quickNav) {
     const guardRes = guardAction(quickNav, { sanitizedPackage: pkg });
     if (guardRes.ok) return guardRes.action;
