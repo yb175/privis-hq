@@ -964,6 +964,8 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     result: results[0] ?? { ok: true },
     timestamp: Date.now(),
   };
+  session.lastAction = agentAction;
+  session.lastStateFingerprint = currentStateFingerprint;
   session.history.push(stepRecord);
   session.step = session.history.length;
   const result = results[0];

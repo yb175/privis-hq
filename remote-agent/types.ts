@@ -298,6 +298,7 @@ export interface AgentSession {
   history: SessionStep[];
   lastAction?: AgentAction;
   /** Redacted state/action fingerprints used to stop blind identical retries. */
+  lastStateFingerprint?: string;
   lastFailureFingerprint?: string;
   lastFailureAction?: string;
   /** Successful local interactions, normalized without snapshot versions. */
