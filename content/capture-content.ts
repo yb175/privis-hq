@@ -107,6 +107,20 @@ function liveTarget(locator: LiveTarget): HTMLElement | null {
   }) ?? null;
 }
 
+function queryOpenShadow<T extends Element>(selector: string, root: ParentNode = document): T | null {
+  try {
+    const direct = root.querySelector<T>(selector);
+    if (direct) return direct;
+  } catch { /* invalid selector is handled by the caller */ }
+  for (const host of root.querySelectorAll<HTMLElement>("*")) {
+    if (host.shadowRoot) {
+      const found = queryOpenShadow<T>(selector, host.shadowRoot);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 export function resolveTarget(target: string, locator?: LiveTarget): HTMLElement | null {
   if (locator) return liveTarget(locator);
   const generatedPrefix = "__privis_generated:";
@@ -114,12 +128,12 @@ export function resolveTarget(target: string, locator?: LiveTarget): HTMLElement
     return resolveGeneratedElement(target.slice(generatedPrefix.length));
   }
 
-  const byId = document.getElementById(target);
+  const byId = document.getElementById(target) ?? queryOpenShadow<HTMLElement>(`#${CSS.escape(target)}`);
   if (byId) return byId;
 
   let bySelector: HTMLElement | null = null;
   try {
-    bySelector = document.querySelector<HTMLElement>(target);
+    bySelector = queryOpenShadow<HTMLElement>(target);
   } catch {
     // Invalid CSS selector: fall through to the attribute lookup instead of throwing.
   }

@@ -61,6 +61,7 @@ export type ActionErrorCode =
   | "UNSUPPORTED_CONTROL"
   | "TIMEOUT"
   | "INVALID_ACTION"
+  | "POLICY_BLOCKED"
   | "EXECUTION_ERROR";
 
 export interface Action {
@@ -79,6 +80,7 @@ export interface ActionResult {
   ok: boolean;
   error?: string;
   code?: ActionErrorCode;
+  detail?: string;
 }
 
 export type PolicyGateDecision = "allow" | "human_approval" | "block";

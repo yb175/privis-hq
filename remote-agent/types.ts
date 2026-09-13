@@ -21,6 +21,25 @@ export interface NavigateAction {
   url: string;
 }
 
+export interface OpenTabAction {
+  type: "open_tab";
+  url?: string;
+}
+
+export interface SwitchTabAction {
+  type: "switch_tab";
+  tabRef: string;
+}
+
+export interface CloseTabAction {
+  type: "close_tab";
+  tabRef?: string;
+}
+
+export interface ListTabsAction {
+  type: "list_tabs";
+}
+
 export interface ClickAction {
   type: "click";
   target: Target;
@@ -113,6 +132,10 @@ export interface AskHumanAction {
 
 export type AgentAction =
   | NavigateAction
+  | OpenTabAction
+  | SwitchTabAction
+  | CloseTabAction
+  | ListTabsAction
   | ClickAction
   | TypeAction
   | ScrollAction

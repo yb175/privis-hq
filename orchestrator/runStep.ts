@@ -18,6 +18,7 @@
 
 import type {
   Action,
+  ActionResult,
   AgentAction,
   AgentSession,
   CapturePackage,
@@ -40,7 +41,15 @@ import { queryServer, serverOptionsFromSettings } from "../remote-agent/client-s
 import { agentActionToExecutorActions } from "../executor/agent-action.js";
 import { redactPii } from "../remote-agent/guard.js";
 import { applyActions } from "../executor/local-executor.js";
-import { navigateTab, waitForTabTransition } from "../executor/navigate.js";
+import {
+  navigateTab,
+  waitForTabTransition,
+  openTab,
+  switchTab,
+  closeTab,
+  listTabs,
+  tabIdForRef,
+} from "../executor/navigate.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
 import {
   notifySessionUpdate,
@@ -519,6 +528,50 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     broadcastHudStep(6, { actions: [], results: [result] });
     notifySessionUpdate(session, gate);
     return { decision: gate.decision, reason: gate.reason, stop: true };
+  }
+
+  // Browser-context actions run in the background because content scripts do
+  // not have tabs access. A context change always loops into a fresh capture.
+  if (agentAction.type === "open_tab" || agentAction.type === "switch_tab" || agentAction.type === "close_tab" || agentAction.type === "list_tabs") {
+    let result: ActionResult;
+    let nextTabId: number | undefined;
+    if (agentAction.type === "open_tab") {
+      const opened = await openTab(agentAction.url);
+      result = opened.result;
+      nextTabId = opened.tabId;
+    } else if (agentAction.type === "switch_tab") {
+      nextTabId = tabIdForRef(agentAction.tabRef);
+      result = nextTabId === undefined
+        ? { ok: false, code: "EXECUTION_ERROR", error: "Unknown tab reference" }
+        : await switchTab(nextTabId);
+    } else if (agentAction.type === "close_tab") {
+      const target = agentAction.tabRef ? tabIdForRef(agentAction.tabRef) : tabId;
+      if (target === undefined) {
+        result = { ok: false, code: "EXECUTION_ERROR", error: "Unknown tab reference" };
+      } else {
+        result = await closeTab(target);
+      }
+      if (result.ok && target === tabId) {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        nextTabId = tabs[0]?.id;
+      }
+    } else {
+      result = await listTabs();
+    }
+    if (result.ok && nextTabId !== undefined) {
+      session.tabId = nextTabId;
+    }
+    session.history.push({ step: session.history.length + 1, url: pkg.browserState.url, action: agentAction, result, timestamp: Date.now() });
+    session.step = session.history.length;
+    if (!result.ok || ((agentAction.type === "open_tab" || agentAction.type === "switch_tab" || agentAction.type === "close_tab") && nextTabId === undefined)) {
+      session.status = "error";
+      session.error = result.error ?? "Browser context action did not produce a usable tab";
+      notifySessionUpdate(session, gate);
+      return { decision: gate.decision, reason: session.error, stop: true };
+    }
+    broadcastHudStep(6, { actions: [], results: [result], contextChanged: agentAction.type !== "list_tabs" });
+    notifySessionUpdate(session, gate);
+    return { decision: gate.decision, reason: gate.reason };
   }
 
   // CBA-5: navigate cannot run in the content-script executor (no chrome.tabs
