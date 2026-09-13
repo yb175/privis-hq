@@ -64,6 +64,7 @@ export interface TypeAction {
   placeholder: string; // e.g. "PAN_1", "EMAIL_1", "AADHAAR_1", "NAME_1", "AMOUNT_1", "PHONE_1", "SSN_1", "CARD_1"
 }
 
+/** Generated non-sensitive prose, typed locally into a visible composer. */
 export interface ComposeAction {
   type: "compose";
   target: Target;
@@ -566,14 +567,9 @@ function validateAgentActionBody(
         }
       }
 
-      // Category-token format is NOT enforced here: a literal phrase from the
-      // user's own goal is legal (see guard.ts 'type' — token-or-goal-substring
-      // — and the on-device re-check in executor/agent-action.ts, which is the
-      // real trust boundary). Keep a size cap so no prompt-scale blob arrives.
       if (trimmedPlaceholder.length > 300) {
         return { ok: false, error: "'placeholder' exceeds 300 characters" };
       }
-
       return {
         ok: true,
         action: {
