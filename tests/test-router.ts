@@ -641,7 +641,19 @@ const onBrand = await routeAgentRequest(
   { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
 );
 assert.strictEqual(onBrand.type, "scroll", "on-site brand mentions stay with the model");
-console.log("  ✔ Quick-navigate routes URL, domain, and brand destinations; falls back safely");
+const afterNavigate = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "open zepto and add ice cream to my cart",
+    plannerContext: {
+      step: 1, maxSteps: 25, phase: "continuing", progress: "navigation completed",
+      lastStep: { action: { type: "navigate", url: "https://www.zeptonow.com/" }, result: { ok: true } },
+      recentHistory: [],
+    },
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
+);
+assert.strictEqual(afterNavigate.type, "scroll", "successful navigation must not trigger the brand shortcut again");
+console.log("  ✔ Quick-navigate routes URL, URL state, and brand destinations without navigation loops");
 
 // --------------------------------------------------------------------------
 // 4c. Server-side 'search' tool: model searches, the SERVER runs SerpAPI and
