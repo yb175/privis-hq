@@ -291,7 +291,7 @@ function sanitizedStateFingerprint(pkg: CapturePackage, elements: ElementMeta[])
 
 export function successfulActionFingerprint(action: AgentAction): string | null {
   if (
-    !["click", "type", "select_option", "check", "uncheck"].includes(action.type) ||
+    !["click", "type", "compose", "select_option", "check", "uncheck"].includes(action.type) ||
     !("target" in action)
   ) return null;
   const target = action.target;
@@ -303,6 +303,7 @@ export function successfulActionFingerprint(action: AgentAction): string | null 
     type: action.type,
     target: locator,
     ...(action.type === "type" ? { placeholder: action.placeholder } : {}),
+    ...(action.type === "compose" ? { draft: action.draft } : {}),
     ...(action.type === "select_option" ? { option: action.option } : {}),
   });
 }
@@ -843,10 +844,12 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
 
   // A type action without a local mapping must never become a silent no-op or
   // type its placeholder. Escalate so the human can repair the mapping/page.
-  if (agentAction.type === "type" && actions.length === 0) {
+  if ((agentAction.type === "type" || agentAction.type === "compose") && actions.length === 0) {
     const escalation = {
       type: "ask_human" as const,
-      reason: `Cannot resolve local value for ${agentAction.placeholder}`,
+      reason: agentAction.type === "type"
+        ? `Cannot resolve local value for ${agentAction.placeholder}`
+        : "Cannot resolve the message composer target locally",
     };
     session.lastAction = escalation;
     session.history.push({

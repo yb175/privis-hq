@@ -402,6 +402,7 @@ function validateActionWithGuard(
       return { ok: true, action: { type: obj.type } as AgentAction };
 
     case "type": {
+      if ("draft" in obj || "generatedText" in obj) return { ok: false, error: "'type' cannot contain generated draft text; use 'compose'" };
       if (!isTarget(obj.target)) {
         return {
           ok: false,
@@ -469,6 +470,16 @@ function validateActionWithGuard(
           placeholder: trimmedPlaceholder,
         },
       };
+    }
+
+    case "compose": {
+      if (!isTarget(obj.target)) return { ok: false, error: "'compose' action requires a valid target" };
+      if (typeof obj.draft !== "string" || !obj.draft.trim() || obj.draft.length > 4000) return { ok: false, error: "'compose' draft must be 1–4000 characters" };
+      const targetText = JSON.stringify(obj.target).toLowerCase();
+      if (/password|otp|2fa|pin|captcha|secret/.test(targetText)) return { ok: false, error: "'compose' cannot target a secret field" };
+      const draftPii = findPiiInValue(obj.draft);
+      if (draftPii) return { ok: false, error: `Raw ${draftPii} detected in compose draft` };
+      return { ok: true, action: { type: "compose", target: obj.target as Target, draft: obj.draft.trim() } };
     }
 
     case "scroll": {

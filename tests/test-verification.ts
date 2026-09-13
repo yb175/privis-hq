@@ -42,6 +42,10 @@ assert.throws(() => parseAgentAction({ type: "click", target: { name: "alice@exa
 const withoutMalformedVerification = parseAgentAction({ type: "click", target: { role: "button", name: "Add" }, verification: { checks: [{ type: "element_appeared", target: { css: ".unsupported" } }] } });
 assert.strictEqual(withoutMalformedVerification.type, "click");
 assert.strictEqual(withoutMalformedVerification.verification, undefined, "invalid optional verification must not block a safe action");
+const composed = guardModelOutput({ type: "compose", target: { role: "textbox", name: "Message" }, draft: "I wanted to check in and let you know I am here to talk." });
+assert.strictEqual(composed.ok, true, "non-sensitive generated drafts should be allowed through compose");
+const secretDraft = guardModelOutput({ type: "compose", target: { role: "textbox", name: "Message" }, draft: "Email me at alice@example.com" });
+assert.strictEqual(secretDraft.ok, false, "generated drafts containing PII must fail closed");
 assert.strictEqual(guardModelOutput({
   action: { type: "batch", actions: [
     { type: "click", target: { ref: { snapshotVersion: 1, documentId: "doc-1", elementId: "a" } } },

@@ -160,6 +160,10 @@ export function agentActionToExecutorActions(
         ];
       return [{ type: "click", target: css }];
     }
+    case "compose": {
+      const css = cssTarget(action.target, sanitized);
+      return css ? [{ type: "type", target: css, value: action.draft }] : [];
+    }
     case "type": {
       const t = action.target;
       // The placeholder identifies the exact field. Prefer it over a broad

@@ -64,6 +64,12 @@ export interface TypeAction {
   placeholder: string; // e.g. "PAN_1", "EMAIL_1", "AADHAAR_1", "NAME_1", "AMOUNT_1", "PHONE_1", "SSN_1", "CARD_1"
 }
 
+export interface ComposeAction {
+  type: "compose";
+  target: Target;
+  draft: string;
+}
+
 export const ALLOWED_KEYS = [
   "Enter",
   "Tab",
@@ -165,6 +171,7 @@ type AgentActionBody =
   | BatchAction
   | ClickAction
   | TypeAction
+  | ComposeAction
   | ScrollAction
   | PressKeyAction
   | TargetAction
@@ -575,6 +582,18 @@ function validateAgentActionBody(
           placeholder: trimmedPlaceholder,
         },
       };
+    }
+
+    case "compose": {
+      if (!isTarget(obj.target)) return { ok: false, error: "'compose' action requires a valid target" };
+      if (typeof obj.draft !== "string" || !obj.draft.trim() || obj.draft.length > 4000) return { ok: false, error: "'compose' draft must be 1–4000 characters" };
+      const targetText = JSON.stringify(obj.target).toLowerCase();
+      if (/password|otp|2fa|pin|captcha|secret/.test(targetText)) return { ok: false, error: "'compose' cannot target a secret field" };
+      for (const { name, re } of PII_PATTERNS) {
+        re.lastIndex = 0;
+        if (re.test(obj.draft)) return { ok: false, error: `Raw ${name} detected in compose draft` };
+      }
+      return { ok: true, action: { type: "compose", target: obj.target, draft: obj.draft.trim() } };
     }
 
     case "scroll": {
