@@ -523,7 +523,6 @@ async function main(): Promise<void> {
       "extension/src/background/index.ts",
       "orchestrator/runGoal.ts",
       "orchestrator/runStep.ts",
-      "orchestrator/session.ts",
       "content/capture-content.ts",
       "utils/screenshot.ts",
       "utils/messaging.ts",

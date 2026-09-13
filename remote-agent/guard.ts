@@ -11,6 +11,7 @@ import {
   PII_PATTERNS,
   PLACEHOLDER_TOKEN_REGEX,
   isTarget,
+  validateVerificationSpec,
 } from "./types.js";
 
 export interface GuardOptions {
@@ -107,7 +108,7 @@ function normalizeRawOutput(input: unknown): unknown {
       if (Array.isArray(record.action)) {
         throw new Error("Multiple actions detected in 'action' wrapper — exactly one action allowed");
       }
-      val = record.action;
+      val = { ...(record.action as Record<string, unknown>), ...(record.verification !== undefined ? { verification: record.verification } : {}) };
     } else if (
       "agent_action" in record &&
       typeof record.agent_action === "object" &&
@@ -118,7 +119,7 @@ function normalizeRawOutput(input: unknown): unknown {
           "Multiple actions detected in 'agent_action' wrapper — exactly one action allowed"
         );
       }
-      val = record.agent_action;
+      val = { ...(record.agent_action as Record<string, unknown>), ...(record.verification !== undefined ? { verification: record.verification } : {}) };
     }
   }
 
@@ -177,6 +178,28 @@ function validateActionWithGuard(
   }
 
   const obj = candidate as Record<string, unknown>;
+
+  // Verification is a read-only postcondition attached to one action. Validate
+  // it before the action and preserve it without allowing nested actions.
+  if (obj.verification !== undefined) {
+    const checked = validateVerificationSpec(obj.verification);
+    if (!checked.ok) return checked;
+    const verificationPii = findPiiInValue(obj.verification);
+    if (verificationPii) return { ok: false, error: `Raw ${verificationPii} detected in verification contract` };
+    const actionOnly = { ...obj };
+    delete actionOnly.verification;
+    const actionResult = validateActionWithGuard(actionOnly, allowlist, goalText, allowBatch);
+    if (!actionResult.ok) return actionResult;
+    const actionRef = "target" in actionResult.action && actionResult.action.target ? actionResult.action.target.ref : undefined;
+    for (const check of checked.verification.checks) {
+      const target = "target" in check ? check.target : undefined;
+      const ref = target?.ref;
+      if (ref && (!actionRef || ref.snapshotVersion !== actionRef.snapshotVersion || ref.documentId !== actionRef.documentId || (ref.frameId ?? 0) !== (actionRef.frameId ?? 0))) {
+        return { ok: false, error: "Verification target must use the action's tab/frame/document snapshot" };
+      }
+    }
+    return { ok: true, action: { ...actionResult.action, verification: checked.verification } };
+  }
 
   if (typeof obj.type !== "string" || obj.type.trim().length === 0) {
     return { ok: false, error: "Missing or invalid 'type' property in action" };

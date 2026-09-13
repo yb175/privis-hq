@@ -1,15 +1,16 @@
 // orchestrator/session.ts
 // CBA-6: multi-page session state. One session per tab carrying tabId, step,
-// last action and goal. State lives in memory only (CONTRACT.md rule 1/2 —
-// raw captures and real values never written to disk or storage; sanitized
-// outbound wire packages logged separately under CBA-11). The Remote Agent
-// is stateless; the loop here IS the agent's memory.
+// last action and goal. Only sanitized control state is persisted to survive
+// MV3 service-worker suspension; raw captures, screenshots, real values, and
+// placeholder maps remain memory-only. The Remote Agent is stateless; the loop
+// here is the agent's memory.
 
 import type {
   AgentSession,
   PolicyGateResult,
   StepResult,
 } from "../types/index.js";
+import { redactPii } from "../remote-agent/guard.js";
 
 // One pipeline pass reports its StepResult plus `stop`: whether the session
 // loop must end (done / ask_human / gate block / human reject).
@@ -22,6 +23,46 @@ export const MAX_SESSION_STEPS = 25;
 
 // In-memory session registry, keyed by tabId.
 const sessionsByTab = new Map<number, AgentSession>();
+const SESSION_STORAGE_KEY = "privis_session_control_state_v1";
+
+type PersistedSessions = { version: 1; sessions: AgentSession[] };
+
+function controlSafe(value: unknown): unknown {
+  if (typeof value === "string") return redactPii(value);
+  if (Array.isArray(value)) return value.map(controlSafe);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).filter(([key]) => key !== "outboundPayload").map(([key, nested]) => [key, controlSafe(nested)]));
+  }
+  return value;
+}
+
+export async function persistSessions(): Promise<void> {
+  const sessions = Array.from(sessionsByTab.values())
+    .filter((session) => session.status === "running" || session.status === "waiting_human")
+    .map((session) => controlSafe(session) as AgentSession);
+  const value: PersistedSessions = { version: 1, sessions };
+  try {
+    const storage = chrome.storage?.session ?? chrome.storage?.local;
+    if (storage?.set) await storage.set({ [SESSION_STORAGE_KEY]: value });
+  } catch {
+    // Persistence is best effort; raw state remains memory-only on failure.
+  }
+}
+
+export async function hydrateSessions(): Promise<void> {
+  try {
+    const storage = chrome.storage?.session ?? chrome.storage?.local;
+    const stored = storage?.get ? (await storage.get(SESSION_STORAGE_KEY))[SESSION_STORAGE_KEY] as PersistedSessions | undefined : undefined;
+    if (stored?.version !== 1 || !Array.isArray(stored.sessions)) return;
+    for (const session of stored.sessions) {
+      if (session && typeof session.tabId === "number" && typeof session.sessionId === "string" && !sessionsByTab.has(session.tabId)) {
+        sessionsByTab.set(session.tabId, session);
+      }
+    }
+  } catch {
+    // A missing or corrupt store must not prevent a fresh session.
+  }
+}
 
 // Pending gate approvals, keyed by sessionId (resolved by the popup's
 // cba.humanDecision message handler in the service worker).
@@ -80,11 +121,13 @@ export function startSession(tabId: number, goal: string): AgentSession {
       history: [],
     };
     sessionsByTab.set(tabId, session);
+    void persistSessions();
   } else {
     // A live session keeps its original goal — a second message while the
     // loop runs must not hijack it (runStep rejects such calls anyway).
     session.status = "running";
   }
+  void persistSessions();
   return session;
 }
 
@@ -104,6 +147,7 @@ export function resumeSession(session: AgentSession, humanReply: string): void {
   delete session.lastFailureFingerprint;
   delete session.lastFailureAction;
   session.maxSteps = (session.step ?? 0) + MAX_SESSION_STEPS;
+  void persistSessions();
 }
 
 /** Broadcast session state (and optionally the latest gate result) to the chat popup. */
@@ -118,6 +162,7 @@ export function notifySessionUpdate(
   } catch {
     // No receiver — ignore.
   }
+  void persistSessions();
 }
 
 /** Resolve when the human approves/rejects this session's pending gate decision. */

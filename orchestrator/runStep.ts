@@ -51,6 +51,8 @@ import {
   tabIdForRef,
 } from "../executor/navigate.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
+import { verifyPostcondition } from "./verification.js";
+import { newCorrelationId, recordStepTelemetry } from "./telemetry.js";
 import {
   notifySessionUpdate,
   runSessionLoop,
@@ -356,15 +358,21 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
  */
 async function runOneStep(session: AgentSession): Promise<Outcome> {
   const { tabId, goal } = session;
+  const correlationId = newCorrelationId();
+  const telemetry = (phase: "capture" | "planner" | "execution" | "wait" | "verification" | "policy", outcome: "ok" | "failed" | "blocked" | "uncertain", code?: string) => {
+    void recordStepTelemetry({ correlationId, sessionId: session.sessionId, step: session.history.length + 1, phase, outcome, ...(code ? { code } : {}) });
+  };
   let pkg: CapturePackage;
   try {
     pkg = await capturePackage(tabId);
   } catch (err: unknown) {
     session.status = "error";
     session.error = err instanceof Error ? err.message : String(err);
+    telemetry("capture", "failed", "CAPTURE_ERROR");
     notifySessionUpdate(session);
     throw err;
   }
+  telemetry("capture", "ok");
 
   // M6-D vision path: browser-local YuNet FACE inference on the SAME in-memory
   // screenshot (no extra capture), fused with the DOM detections through the
@@ -426,6 +434,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   notifySessionUpdate(session, gate);
 
   if (gate.decision === "block") {
+    telemetry("policy", "blocked", "POLICY_BLOCKED");
     session.status = "blocked";
     session.error = gate.reason;
     notifySessionUpdate(session, gate);
@@ -458,6 +467,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   }
 
   if (gate.decision === "human_approval") {
+    telemetry("policy", "uncertain", "HUMAN_APPROVAL");
     session.status = "waiting_human";
     session.error = gate.reason;
     notifySessionUpdate(session, gate);
@@ -583,6 +593,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   });
 
   session.lastAction = agentAction;
+  telemetry("planner", "ok");
   broadcastHudStep(5, {
     goal,
     agentAction,
@@ -686,6 +697,17 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     );
     const frameId = agentAction.actions[0]?.target.ref?.frameId ?? 0;
     const results = await applyActions(tabId, actions, frameId);
+    await waitForTabSettled(tabId);
+    if (agentAction.verification && results.every((result) => result.ok)) {
+      const verification = await verifyPostcondition(tabId, { browserState: pkg.browserState, elements: pkg.elements }, agentAction.verification);
+      if (!verification.ok) {
+        results[results.length - 1] = verification;
+        telemetry("verification", "uncertain", verification.code);
+      } else {
+        results.push(verification);
+        telemetry("verification", "ok");
+      }
+    }
     const failed = results.find((result) => !result.ok);
     const aggregate: ActionResult = {
       ok: !failed && results.length === actions.length,
@@ -700,6 +722,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       timestamp: Date.now(),
     });
     session.step = session.history.length;
+    telemetry("execution", aggregate.ok ? "ok" : "failed", failed?.code);
     if (!aggregate.ok) {
       session.lastFailureFingerprint = currentStateFingerprint;
       session.lastFailureAction = JSON.stringify(agentAction);
@@ -709,7 +732,6 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     }
     broadcastHudStep(6, { actions, results, outcome: aggregate.ok ? "ok" : "failure" });
     notifySessionUpdate(session, gate);
-    await waitForTabSettled(tabId);
     return { decision: gate.decision, reason: gate.reason, actions: results };
   }
 
@@ -770,6 +792,23 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       result,
       timestamp: Date.now(),
     };
+    if (result.ok && agentAction.verification) {
+      await waitForTabSettled(tabId);
+      const verification = await verifyPostcondition(
+        tabId,
+        { browserState: pkg.browserState, elements: pkg.elements },
+        agentAction.verification,
+      );
+      if (!verification.ok) {
+        result.ok = false;
+        result.code = verification.code;
+        result.error = verification.error;
+        result.detail = verification.detail;
+        telemetry("verification", "uncertain", verification.code);
+      } else {
+        telemetry("verification", "ok");
+      }
+    }
     session.history.push(stepRecord);
     session.step = session.history.length;
     broadcastHudStep(6, { actions: [], results: [result] });
@@ -838,6 +877,21 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       navigationWait.cancel();
     }
   }
+  if (agentAction.verification && results.every((result) => result.ok)) {
+    await waitForTabSettled(tabId);
+    const verification = await verifyPostcondition(
+      tabId,
+      { browserState: pkg.browserState, elements: pkg.elements },
+      agentAction.verification,
+    );
+    if (!verification.ok) {
+      results[0] = verification;
+      telemetry("verification", "uncertain", verification.code);
+    } else {
+      results.push(verification);
+      telemetry("verification", "ok");
+    }
+  }
   const stepRecord = {
     step: session.history.length + 1,
     url: pkg.browserState.url,
@@ -848,6 +902,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   session.history.push(stepRecord);
   session.step = session.history.length;
   const result = results[0];
+  telemetry("execution", result?.ok ? "ok" : "failed", result?.code);
   if (result && !result.ok) {
     session.lastFailureFingerprint = currentStateFingerprint;
     session.lastFailureAction = JSON.stringify(agentAction);

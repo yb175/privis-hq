@@ -136,7 +136,11 @@ export function resolveTarget(target: string, locator?: LiveTarget): HTMLElement
     return resolveGeneratedElement(target.slice(generatedPrefix.length));
   }
 
-  const byId = document.getElementById(target) ?? queryOpenShadow<HTMLElement>(`#${CSS.escape(target)}`);
+  const escapeCss = (value: string) => {
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(value);
+    return value.replace(/^[0-9]|[^a-zA-Z0-9_-]/g, (ch) => `\\${ch.charCodeAt(0).toString(16).toUpperCase()} `);
+  };
+  const byId = document.getElementById(target) ?? queryOpenShadow<HTMLElement>(`#${escapeCss(target)}`);
   if (byId) return byId;
 
   let bySelector: HTMLElement | null = null;

@@ -12,7 +12,10 @@ import { runGoal } from "../orchestrator/runGoal.js";
 import {
   sessionsByTab,
   pendingHumanDecisions,
+  hydrateSessions,
 } from "../orchestrator/session.js";
+
+void hydrateSessions();
 
 // Toolbar clicks carry no typed goal; run with the demo default.
 const DEFAULT_GOAL = "Submit the employee portal form";
