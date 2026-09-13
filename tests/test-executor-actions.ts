@@ -54,6 +54,7 @@ button.tagName = "BUTTON";
 for (const element of [select, checkbox, input, button]) elements.set(element.id, element);
 
 (globalThis as any).chrome = { runtime: { onMessage: { addListener() {} } } };
+(globalThis as any).CSS = { escape: (value: string) => value };
 (globalThis as any).document = {
   getElementById: (id: string) => elements.get(id) ?? null,
   querySelector: (selector: string) => {

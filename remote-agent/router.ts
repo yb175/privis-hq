@@ -149,6 +149,7 @@ const BRAND_URLS: Record<string, string> = {
   gmail: "https://mail.google.com/",
   google: "https://www.google.com/",
   youtube: "https://www.youtube.com/",
+  spotify: "https://open.spotify.com/",
 };
 
 function hostOverlap(a: string, b: string): boolean {

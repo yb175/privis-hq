@@ -1242,7 +1242,15 @@ assert.deepStrictEqual(
   []
 );
 assert.strictEqual(typeGen[0].value, "user@x.com");
-console.log("  ✔ Bridge passes css targets through with real values");
+assert.deepStrictEqual(
+  agentActionToExecutorActions(
+    { type: "compose", target: { css: "#message" }, draft: "A concise, non-sensitive draft." },
+    bridgeElements,
+    bridgeMap
+  ),
+  [{ type: "type", target: "#message", value: "A concise, non-sensitive draft." }]
+);
+console.log("  ✔ Bridge passes css targets through with real values and composes drafts locally");
 const versionedElements: ElementMeta[] = [{ ...bridgeElements[0], snapshotVersion: 12, documentId: "doc-a" }];
 assert.deepStrictEqual(agentActionToExecutorActions(
   { type: "click", target: { ref: { snapshotVersion: 12, documentId: "doc-a", elementId: versionedElements[0].element_id } } },
