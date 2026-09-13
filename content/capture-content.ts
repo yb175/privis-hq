@@ -23,17 +23,27 @@ import {
 } from "../utils/dom-extractor.js";
 import { isPrivisMessage } from "../utils/messaging.js";
 
+// In-memory real value store for placeholder resolution (never sent upstream).
+// The Sanitizer writes element_id -> real value; this executor only reads it.
+const localValues: Record<string, string> = {};
+let snapshotVersion = 0;
+const documentId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+  ? crypto.randomUUID()
+  : `doc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 /**
  * Capture Layer content-script half: visible elements + browser state.
  * No placeholders, no clicks — those live elsewhere (Sanitizer / Local Executor).
  */
-export function captureDom(): { elements: ElementMeta[]; browserState: BrowserState } {
-  return { elements: extractElements(), browserState: collectBrowserState() };
+export function captureDom(): { elements: ElementMeta[]; browserState: BrowserState; snapshotVersion: number; documentId: string } {
+  snapshotVersion += 1;
+  return {
+    elements: extractElements(snapshotVersion, documentId),
+    browserState: collectBrowserState(),
+    snapshotVersion,
+    documentId,
+  };
 }
-
-// In-memory real value store for placeholder resolution (never sent upstream).
-// The Sanitizer writes element_id -> real value; this executor only reads it.
-const localValues: Record<string, string> = {};
 
 /**
  * Resolves a target selector or element id to a live DOM element.
@@ -190,6 +200,9 @@ export async function executeAction(action: Action): Promise<ActionResult> {
     return { ok: true };
   }
 
+  if (action.target === "__stale_reference") {
+    return failure("STALE_REFERENCE", "Action references an older page snapshot");
+  }
   if (action.type === "wait_for") return waitFor(action);
   if (action.type === "go_back" || action.type === "go_forward") {
     const direction = action.type === "go_back" ? "back" : "forward";

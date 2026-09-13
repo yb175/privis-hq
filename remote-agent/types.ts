@@ -2,11 +2,18 @@
 // CBA-1: AgentAction contract + session types for Cloud Browser Agent
 import type { ActionErrorCode } from "../types/index.js";
 
+export interface ElementReference {
+  snapshotVersion: number;
+  documentId: string;
+  elementId: string;
+}
+
 export interface Target {
   css?: string;
   role?: string;
   name?: string;
   bbox?: [number, number, number, number];
+  ref?: ElementReference;
 }
 
 export interface NavigateAction {
@@ -246,8 +253,16 @@ export function isTarget(target: unknown): target is Target {
     t.bbox.every((n) => typeof n === "number" && Number.isFinite(n)) &&
     (t.bbox as number[])[2] >= 0 &&
     (t.bbox as number[])[3] >= 0;
+  const ref = t.ref as Record<string, unknown> | undefined;
+  const hasRef = typeof ref === "object" && ref !== null &&
+    Number.isInteger(ref.snapshotVersion) &&
+    (ref.snapshotVersion as number) > 0 &&
+    typeof ref.documentId === "string" &&
+    ref.documentId.trim().length > 0 &&
+    typeof ref.elementId === "string" &&
+    ref.elementId.trim().length > 0;
 
-  return hasCss || hasRole || hasName || hasBbox;
+  return hasCss || hasRole || hasName || hasBbox || hasRef;
 }
 
 /**

@@ -123,6 +123,11 @@ assert.deepStrictEqual(await executeAction({ type: "click", target: "#missing" }
   code: "TARGET_NOT_FOUND",
   error: "Target not found: #missing",
 });
+assert.deepStrictEqual(await executeAction({ type: "click", target: "__stale_reference" }), {
+  ok: false,
+  code: "STALE_REFERENCE",
+  error: "Action references an older page snapshot",
+});
 assert.deepStrictEqual(await executeAction({ type: "select_option", target: "#search", value: "India" }), {
   ok: false,
   code: "UNSUPPORTED_CONTROL",

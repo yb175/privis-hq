@@ -56,6 +56,14 @@ function resolveTarget(
   target: Target | undefined,
   sanitized: ElementMeta[]
 ): ElementMeta | undefined {
+  if (target?.ref) {
+    const ref = target.ref;
+    return sanitized.find((el) =>
+      el.snapshotVersion === ref.snapshotVersion &&
+      el.documentId === ref.documentId &&
+      el.element_id === ref.elementId
+    );
+  }
   if (typeof target?.css === "string" && target.css.trim()) return undefined; // css used directly
   if (!target?.role && !target?.name && !target?.bbox) return undefined;
   const candidates = sanitized.filter((el) => {
@@ -80,6 +88,10 @@ function resolveTarget(
 }
 
 function cssTarget(target: Target | undefined, sanitized: ElementMeta[]): string | undefined {
+  if (target?.ref) {
+    const el = resolveTarget(target, sanitized);
+    return el ? selectorFor(el) : "__stale_reference";
+  }
   if (typeof target?.css === "string" && target.css.trim()) return target.css.trim();
   const el = resolveTarget(target, sanitized);
   return el ? selectorFor(el) : undefined;
@@ -116,30 +128,26 @@ export function agentActionToExecutorActions(
       const css = cssTarget(action.target, sanitized);
       return [{ type: "select_option", target: css ?? `__unresolved:${JSON.stringify(action.target)}`, value: action.option }];
     }
-    case "wait_for":
+    case "wait_for": {
+      const refTarget = action.target?.ref ? cssTarget(action.target, sanitized) : undefined;
       return [{
         type: "wait_for",
-        target: "",
-        ...(action.target ? { targetLocator: action.target } : {}),
+        target: refTarget ?? "",
+        ...(!action.target?.ref && action.target ? { targetLocator: action.target } : {}),
         condition: action.condition,
         ...((action.needle ?? action.urlPattern) !== undefined
           ? { value: action.needle ?? action.urlPattern }
           : {}),
         timeoutMs: action.timeoutMs,
       }];
+    }
     case "go_back":
     case "go_forward":
     case "reload":
       return [{ type: action.type, target: "" }];
     case "click": {
       const t = action.target;
-      const css =
-        typeof t?.css === "string" && t.css.trim()
-          ? t.css.trim()
-          : (() => {
-              const el = resolveTarget(t, sanitized);
-              return el ? selectorFor(el) : undefined;
-            })();
+      const css = cssTarget(t, sanitized);
       // Unresolvable click must surface as a FAILURE, not a silent no-op —
       // callers must not record it as ok (runStep turns this into ok:false).
       if (!css)
@@ -155,15 +163,21 @@ export function agentActionToExecutorActions(
       const t = action.target;
       // The placeholder identifies the exact field. Prefer it over a broad
       // role/name target so EMAIL_1 and EMAIL_2 cannot land in the same box.
-      const valueEl = sanitized.find((e) => e.text === action.placeholder);
-      const explicitCss = typeof t?.css === "string" && t.css.trim() ? t.css.trim() : undefined;
-      const css = valueEl
-        ? selectorFor(valueEl)
-        : explicitCss ??
-          (() => {
-            const el = resolveTarget(t, sanitized);
-            return el ? selectorFor(el) : undefined;
-          })();
+      const referencedEl = t?.ref ? resolveTarget(t, sanitized) : undefined;
+      if (t?.ref && !referencedEl) {
+        return [{ type: "type", target: "__stale_reference", value: "" }];
+      }
+      const valueEl = sanitized.find((e) => e.text === action.placeholder && (!t?.ref || e === referencedEl));
+      const css = t?.ref
+        ? cssTarget(t, sanitized)
+        : valueEl
+          ? selectorFor(valueEl)
+          : typeof t?.css === "string" && t.css.trim()
+            ? t.css.trim()
+            : (() => {
+                const el = resolveTarget(t, sanitized);
+                return el ? selectorFor(el) : undefined;
+              })();
       const real = valueEl ? map[valueEl.element_id] : undefined;
       if (css && real !== undefined) return [{ type: "type", target: css, value: real }];
       // Non-token placeholder: a literal phrase (e.g. a search query). The

@@ -31,6 +31,14 @@ export interface ElementMeta {
   label: string | null;
   text: string;
   bbox: BoundingBox;
+  snapshotVersion?: number;
+  documentId?: string;
+  disabled?: boolean;
+  checked?: boolean;
+  selected?: boolean;
+  expanded?: boolean;
+  focused?: boolean;
+  parentElementId?: string;
   /** True when element_id is an in-memory generated id, not a DOM id. */
   generated?: boolean;
 }
@@ -48,6 +56,7 @@ export interface BrowserState {
 
 export type ActionErrorCode =
   | "TARGET_NOT_FOUND"
+  | "STALE_REFERENCE"
   | "NOT_INTERACTABLE"
   | "UNSUPPORTED_CONTROL"
   | "TIMEOUT"
@@ -85,6 +94,8 @@ export interface CapturePackage {
   elements: ElementMeta[];
   detections: Detection[];
   browserState: BrowserState;
+  snapshotVersion?: number;
+  documentId?: string;
 }
 
 export interface SanitizedContext {
@@ -138,6 +149,8 @@ export interface CaptureResponseMessage {
   payload: {
     elements: ElementMeta[];
     browserState: BrowserState;
+    snapshotVersion?: number;
+    documentId?: string;
   };
 }
 

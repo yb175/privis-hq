@@ -8,7 +8,7 @@
 import type { BrowserState, ElementMeta } from "../types/index.js";
 
 const INTERACTIVE_SELECTOR =
-  "input, textarea, select, button, [role='button'], img";
+  "a, input, textarea, select, button, img, [role], [contenteditable]";
 
 // Stable per-element ids: an element keeps the same generated id across
 // repeated extractions within the page's lifetime.
@@ -30,6 +30,25 @@ function isVisible(el: Element): boolean {
   if (rect.width === 0 || rect.height === 0) return false;
   const style = getComputedStyle(el);
   return style.display !== "none" && style.visibility !== "hidden";
+}
+
+export function implicitRole(el: HTMLElement): string | null {
+  const explicit = el.getAttribute("role");
+  if (explicit) return explicit;
+  switch (el.tagName) {
+    case "A": return "link";
+    case "BUTTON": return "button";
+    case "TEXTAREA": return "textbox";
+    case "SELECT": return "combobox";
+    case "INPUT": {
+      const type = (el as HTMLInputElement).type;
+      if (type === "checkbox" || type === "radio") return type;
+      if (["button", "submit", "reset", "image"].includes(type)) return "button";
+      return "textbox";
+    }
+    default:
+      return el.isContentEditable ? "textbox" : null;
+  }
 }
 
 function roundBBox(rect: DOMRect): ElementMeta["bbox"] {
@@ -81,9 +100,10 @@ export function resolveGeneratedElement(id: string): HTMLElement | null {
   return null;
 }
 
-export function extractElements(): ElementMeta[] {
+export function extractElements(snapshotVersion?: number, documentId?: string): ElementMeta[] {
   const out: ElementMeta[] = [];
   for (const el of document.querySelectorAll<HTMLElement>(INTERACTIVE_SELECTOR)) {
+    if (el.hasAttribute("contenteditable") && !el.isContentEditable) continue;
     if (!isVisible(el)) continue;
     const id = elementId(el);
     const rect = el.getBoundingClientRect();
@@ -98,18 +118,44 @@ export function extractElements(): ElementMeta[] {
         : isControl
           ? (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
           : (el.textContent ?? "").trim();
+    const parent = el.parentElement?.matches(INTERACTIVE_SELECTOR) ? el.parentElement : undefined;
+    const ariaChecked = el.getAttribute("aria-checked");
+    const ariaSelected = el.getAttribute("aria-selected");
+    const ariaExpanded = el.getAttribute("aria-expanded");
     out.push({
       element_id: id,
       tag: el.tagName.toLowerCase(),
       type: el.tagName === "INPUT" ? (input.type || null) : null,
-      role: el.getAttribute("role"),
+      role: implicitRole(el),
       label: labelFor(el),
       text,
       bbox: roundBBox(rect),
+      ...(snapshotVersion !== undefined ? { snapshotVersion } : {}),
+      ...(documentId !== undefined ? { documentId } : {}),
+      disabled: ("disabled" in el && Boolean((el as HTMLInputElement).disabled)) || ariaDisabled(el),
+      ...(ariaChecked !== null || ["checkbox", "radio"].includes(input.type)
+        ? { checked: ariaChecked !== null ? ariaChecked === "true" : input.checked }
+        : {}),
+      ...(ariaSelected !== null || el.tagName === "OPTION" || el.tagName === "SELECT"
+        ? {
+            selected: ariaSelected !== null
+              ? ariaSelected === "true"
+              : el.tagName === "SELECT"
+                ? (el as HTMLSelectElement).selectedIndex >= 0
+                : (el as HTMLOptionElement).selected,
+          }
+        : {}),
+      ...(ariaExpanded !== null ? { expanded: ariaExpanded === "true" } : {}),
+      focused: document.activeElement === el,
+      ...(parent ? { parentElementId: elementId(parent) } : {}),
       generated: !el.id,
     });
   }
   return out;
+}
+
+function ariaDisabled(el: HTMLElement): boolean {
+  return el.getAttribute("aria-disabled") === "true";
 }
 
 /**
