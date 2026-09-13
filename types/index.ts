@@ -117,6 +117,8 @@ export interface PlannerContext {
   maxSteps: number;
   phase: "initial" | "continuing" | "human_follow_up";
   progress: string;
+  /** A goal destination has already been navigated to in this session. */
+  destinationResolved?: boolean;
   lastStep?: PlannerStep;
   recentHistory: PlannerStep[];
 }

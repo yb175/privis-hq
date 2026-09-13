@@ -11,6 +11,7 @@ import {
   PII_PATTERNS,
   PLACEHOLDER_TOKEN_REGEX,
   isTarget,
+  validateVerificationSpec,
 } from "./types.js";
 
 export interface GuardOptions {
@@ -107,7 +108,7 @@ function normalizeRawOutput(input: unknown): unknown {
       if (Array.isArray(record.action)) {
         throw new Error("Multiple actions detected in 'action' wrapper — exactly one action allowed");
       }
-      val = record.action;
+      val = { ...(record.action as Record<string, unknown>), ...(record.verification !== undefined ? { verification: record.verification } : {}) };
     } else if (
       "agent_action" in record &&
       typeof record.agent_action === "object" &&
@@ -118,7 +119,7 @@ function normalizeRawOutput(input: unknown): unknown {
           "Multiple actions detected in 'agent_action' wrapper — exactly one action allowed"
         );
       }
-      val = record.agent_action;
+      val = { ...(record.agent_action as Record<string, unknown>), ...(record.verification !== undefined ? { verification: record.verification } : {}) };
     }
   }
 
@@ -177,6 +178,34 @@ function validateActionWithGuard(
   }
 
   const obj = candidate as Record<string, unknown>;
+
+  // Verification is a read-only postcondition attached to one action. Validate
+  // it before the action and preserve it without allowing nested actions.
+  if (obj.verification !== undefined) {
+    const checked = validateVerificationSpec(obj.verification);
+    if (!checked.ok) return checked;
+    const verificationPii = findPiiInValue(obj.verification);
+    if (verificationPii) return { ok: false, error: `Raw ${verificationPii} detected in verification contract` };
+    const actionOnly = { ...obj };
+    delete actionOnly.verification;
+    const actionResult = validateActionWithGuard(actionOnly, allowlist, goalText, allowBatch);
+    if (!actionResult.ok) return actionResult;
+    if (["list_tabs", "close_tab"].includes(actionResult.action.type)) {
+      return { ok: false, error: `Verification is not supported for '${actionResult.action.type}'` };
+    }
+    const actionRefs = actionResult.action.type === "batch"
+      ? actionResult.action.actions.map((subAction) => subAction.target.ref).filter((ref): ref is NonNullable<typeof ref> => Boolean(ref))
+      : ["target" in actionResult.action && actionResult.action.target ? actionResult.action.target.ref : undefined].filter((ref): ref is NonNullable<typeof ref> => Boolean(ref));
+    const actionRef = actionRefs[0];
+    for (const check of checked.verification.checks) {
+      const target = "target" in check ? check.target : undefined;
+      const ref = target?.ref;
+      if (ref && (!actionRef || ref.snapshotVersion !== actionRef.snapshotVersion || ref.documentId !== actionRef.documentId || (ref.frameId ?? 0) !== (actionRef.frameId ?? 0) || actionRefs.some((candidate) => candidate.snapshotVersion !== ref.snapshotVersion || candidate.documentId !== ref.documentId || (candidate.frameId ?? 0) !== (ref.frameId ?? 0)))) {
+        return { ok: false, error: "Verification target must use the action's tab/frame/document snapshot" };
+      }
+    }
+    return { ok: true, action: { ...actionResult.action, verification: checked.verification } };
+  }
 
   if (typeof obj.type !== "string" || obj.type.trim().length === 0) {
     return { ok: false, error: "Missing or invalid 'type' property in action" };
@@ -373,6 +402,7 @@ function validateActionWithGuard(
       return { ok: true, action: { type: obj.type } as AgentAction };
 
     case "type": {
+      if ("draft" in obj || "generatedText" in obj) return { ok: false, error: "'type' cannot contain generated draft text; use 'compose'" };
       if (!isTarget(obj.target)) {
         return {
           ok: false,
@@ -440,6 +470,16 @@ function validateActionWithGuard(
           placeholder: trimmedPlaceholder,
         },
       };
+    }
+
+    case "compose": {
+      if (!isTarget(obj.target)) return { ok: false, error: "'compose' action requires a valid target" };
+      if (typeof obj.draft !== "string" || !obj.draft.trim() || obj.draft.length > 4000) return { ok: false, error: "'compose' draft must be 1–4000 characters" };
+      const targetText = JSON.stringify(obj.target).toLowerCase();
+      if (/password|otp|2fa|pin|captcha|secret/.test(targetText)) return { ok: false, error: "'compose' cannot target a secret field" };
+      const draftPii = findPiiInValue(obj.draft);
+      if (draftPii) return { ok: false, error: `Raw ${draftPii} detected in compose draft` };
+      return { ok: true, action: { type: "compose", target: obj.target as Target, draft: obj.draft.trim() } };
     }
 
     case "scroll": {

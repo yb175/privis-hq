@@ -98,6 +98,19 @@ function cssTarget(target: Target | undefined, sanitized: ElementMeta[]): string
   return el ? selectorFor(el) : undefined;
 }
 
+function composerCssTarget(target: Target | undefined, sanitized: ElementMeta[]): string | undefined {
+  const exact = cssTarget(target, sanitized);
+  if (exact) return exact;
+  if (target?.ref || target?.css) return undefined;
+  const candidates = sanitized.filter((el) => {
+    const role = effectiveRole(el);
+    return role === "textbox" && !["input", "textarea"].includes(el.tag.toLowerCase());
+  });
+  const named = candidates.find((el) => /message|body|compose|content/i.test(`${el.label ?? ""} ${el.text}`));
+  const fallback = [...candidates].sort((a, b) => (b.bbox[2] * b.bbox[3]) - (a.bbox[2] * a.bbox[3]))[0];
+  return named || fallback ? selectorFor(named ?? fallback!) : undefined;
+}
+
 /**
  * Converts a validated AgentAction into Local-Executor Actions.
  * - click: css selector, or name/role/bbox resolved against the sanitized
@@ -159,6 +172,10 @@ export function agentActionToExecutorActions(
           },
         ];
       return [{ type: "click", target: css }];
+    }
+    case "compose": {
+      const css = composerCssTarget(action.target, sanitized);
+      return css ? [{ type: "type", target: css, value: action.draft }] : [];
     }
     case "type": {
       const t = action.target;

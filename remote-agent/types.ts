@@ -64,6 +64,12 @@ export interface TypeAction {
   placeholder: string; // e.g. "PAN_1", "EMAIL_1", "AADHAAR_1", "NAME_1", "AMOUNT_1", "PHONE_1", "SSN_1", "CARD_1"
 }
 
+export interface ComposeAction {
+  type: "compose";
+  target: Target;
+  draft: string;
+}
+
 export const ALLOWED_KEYS = [
   "Enter",
   "Tab",
@@ -124,6 +130,19 @@ export interface SearchAction {
   query: string;
 }
 
+export type VerificationCheck =
+  | { type: "text_appeared" | "text_disappeared"; needle: string }
+  | { type: "element_appeared" | "element_disappeared"; target: Target }
+  | { type: "url_matches"; urlPattern: string }
+  | { type: "state_changed"; target: Target; attribute: "disabled" | "checked" | "selected" | "expanded" | "focused" }
+  | { type: "count_changed"; role?: string; name?: string; delta?: number };
+
+export interface VerificationSpec {
+  mode?: "all" | "any";
+  checks: VerificationCheck[];
+  timeoutMs?: number;
+}
+
 export interface DoneVerification {
   condition: "element" | "text" | "url" | "gone";
   target?: Target;
@@ -143,7 +162,7 @@ export interface AskHumanAction {
   reason: string;
 }
 
-export type AgentAction =
+type AgentActionBody =
   | NavigateAction
   | OpenTabAction
   | SwitchTabAction
@@ -152,6 +171,7 @@ export type AgentAction =
   | BatchAction
   | ClickAction
   | TypeAction
+  | ComposeAction
   | ScrollAction
   | PressKeyAction
   | TargetAction
@@ -162,11 +182,101 @@ export type AgentAction =
   | DoneAction
   | AskHumanAction;
 
+export type AgentAction = AgentActionBody & { verification?: VerificationSpec };
+
+function isVerificationTarget(target: unknown): target is Target {
+  if (!isTarget(target)) return false;
+  const value = target as Target;
+  const simpleId = typeof value.css === "string" && /^#[A-Za-z_][A-Za-z0-9_-]*$/.test(value.css);
+  return Boolean(value.ref || value.role || value.name || value.bbox || simpleId);
+}
+
+function normalizeVerificationCheck(input: unknown): unknown {
+  if (typeof input === "string") return { type: "text_appeared", needle: input };
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const check = { ...(input as Record<string, unknown>) };
+  const condition = typeof check.condition === "string" ? check.condition : check.type;
+  if (condition === "text") return { ...check, type: "text_appeared", needle: check.needle ?? check.value ?? check.expected };
+  if (condition === "url") return { ...check, type: "url_matches", urlPattern: check.urlPattern ?? check.value ?? check.expected };
+  if (condition === "element") return { ...check, type: "element_appeared" };
+  if (condition === "gone") return { ...check, type: "element_disappeared" };
+  return check;
+}
+
+function findVerificationPii(value: unknown): string | null {
+  if (typeof value === "string") {
+    for (const { name, re } of PII_PATTERNS) {
+      re.lastIndex = 0;
+      if (re.test(value)) return name;
+    }
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) { const found = findVerificationPii(item); if (found) return found; }
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) { const found = findVerificationPii(item); if (found) return found; }
+  }
+  return null;
+}
+
+export function validateVerificationSpec(input: unknown): { ok: true; verification: VerificationSpec } | { ok: false; error: string } {
+  if (!input || typeof input !== "object") return { ok: false, error: "verification must be an object" };
+  const pii = findVerificationPii(input);
+  if (pii) return { ok: false, error: `Raw ${pii} detected in verification` };
+  let v: Record<string, unknown> = Array.isArray(input) ? { checks: input } : input as Record<string, unknown>;
+  if (v.checks !== undefined) {
+    const checks = Array.isArray(v.checks) ? v.checks : [v.checks];
+    v = { ...v, checks: checks.map(normalizeVerificationCheck) };
+  }
+  // Backward-compatible repair for models that reuse the older done.verify
+  // shape. It stays read-only and bounded; malformed contracts still fail closed.
+  if (!Array.isArray(v.checks) && typeof v.condition === "string") {
+    const check = v.condition === "text" && typeof v.needle === "string"
+      ? { type: "text_appeared", needle: v.needle }
+      : v.condition === "url" && typeof v.urlPattern === "string"
+        ? { type: "url_matches", urlPattern: v.urlPattern }
+        : ["element", "gone"].includes(v.condition) && isVerificationTarget(v.target)
+          ? { type: v.condition === "gone" ? "element_disappeared" : "element_appeared", target: v.target }
+          : undefined;
+    if (check) v = { checks: [check], timeoutMs: v.timeoutMs };
+  }
+  if (!Array.isArray(v.checks) || v.checks.length < 1 || v.checks.length > 4) return { ok: false, error: "verification.checks must contain 1 to 4 checks" };
+  if (v.mode !== undefined && v.mode !== "all" && v.mode !== "any") return { ok: false, error: "verification.mode must be all or any" };
+  if (v.timeoutMs !== undefined && (typeof v.timeoutMs !== "number" || !Number.isFinite(v.timeoutMs) || v.timeoutMs < 100 || v.timeoutMs > 10000)) return { ok: false, error: "verification.timeoutMs must be between 100 and 10000" };
+  for (const check of v.checks) {
+    if (!check || typeof check !== "object" || Array.isArray(check) || typeof (check as Record<string, unknown>).type !== "string") return { ok: false, error: "invalid verification check" };
+    const c = check as Record<string, unknown>;
+    if (["text_appeared", "text_disappeared"].includes(c.type as string)) {
+      if (typeof c.needle !== "string" || !c.needle.trim() || c.needle.length > 200) return { ok: false, error: `${c.type} requires a bounded needle` };
+    } else if (["element_appeared", "element_disappeared"].includes(c.type as string)) {
+      if (!isVerificationTarget(c.target)) return { ok: false, error: `${c.type} requires a role, name, bbox, or snapshot reference target` };
+    } else if (c.type === "url_matches") {
+      if (typeof c.urlPattern !== "string" || !c.urlPattern.trim() || !c.urlPattern.replace(/\*/g, "").trim() || c.urlPattern.length > 300) return { ok: false, error: "url_matches requires a bounded urlPattern" };
+    } else if (c.type === "state_changed") {
+      if (!isVerificationTarget(c.target) || !["disabled", "checked", "selected", "expanded", "focused"].includes(c.attribute as string)) return { ok: false, error: "state_changed requires a target and supported attribute" };
+    } else if (c.type === "count_changed") {
+      if (c.role !== undefined && (typeof c.role !== "string" || c.role.length > 100)) return { ok: false, error: "count_changed role is invalid" };
+      if (c.name !== undefined && (typeof c.name !== "string" || c.name.length > 200)) return { ok: false, error: "count_changed name is invalid" };
+      if (c.delta !== undefined && (typeof c.delta !== "number" || !Number.isInteger(c.delta) || Math.abs(c.delta) > 100)) return { ok: false, error: "count_changed delta is invalid" };
+    } else return { ok: false, error: `unsupported verification check: ${String(c.type)}` };
+    for (const value of [c.needle, c.urlPattern]) {
+      if (typeof value === "string") {
+        for (const { name, re } of PII_PATTERNS) {
+          re.lastIndex = 0;
+          if (re.test(value)) return { ok: false, error: `Raw ${name} detected in verification` };
+        }
+      }
+    }
+  }
+  return { ok: true, verification: { mode: v.mode as "all" | "any" | undefined, checks: v.checks as VerificationCheck[], timeoutMs: v.timeoutMs as number | undefined } };
+}
+
 export type AgentActionType = AgentAction["type"];
 
 export type SessionStatus = "idle" | "running" | "waiting_human" | "done" | "error" | "blocked";
 
 export interface SessionStep {
+  correlationId?: string;
   step: number;
   url: string;
   action: AgentAction;
@@ -309,7 +419,7 @@ export function isTarget(target: unknown): target is Target {
  * Validates whether an unknown value conforms to the AgentAction schema.
  * Rejects raw values, dangerous URL schemes, or malformed targets.
  */
-export function validateAgentAction(
+function validateAgentActionBody(
   input: unknown
 ): { ok: true; action: AgentAction } | { ok: false; error: string } {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
@@ -474,6 +584,18 @@ export function validateAgentAction(
       };
     }
 
+    case "compose": {
+      if (!isTarget(obj.target)) return { ok: false, error: "'compose' action requires a valid target" };
+      if (typeof obj.draft !== "string" || !obj.draft.trim() || obj.draft.length > 4000) return { ok: false, error: "'compose' draft must be 1–4000 characters" };
+      const targetText = JSON.stringify(obj.target).toLowerCase();
+      if (/password|otp|2fa|pin|captcha|secret/.test(targetText)) return { ok: false, error: "'compose' cannot target a secret field" };
+      for (const { name, re } of PII_PATTERNS) {
+        re.lastIndex = 0;
+        if (re.test(obj.draft)) return { ok: false, error: `Raw ${name} detected in compose draft` };
+      }
+      return { ok: true, action: { type: "compose", target: obj.target, draft: obj.draft.trim() } };
+    }
+
     case "scroll": {
       if (typeof obj.dy !== "number" || !Number.isFinite(obj.dy)) {
         return { ok: false, error: "'scroll' action requires a finite number 'dy'" };
@@ -547,6 +669,31 @@ export function validateAgentAction(
   }
 }
 
+export function validateAgentAction(
+  input: unknown
+): { ok: true; action: AgentAction } | { ok: false; error: string } {
+  if (typeof input === "object" && input !== null && !Array.isArray(input)) {
+    const verification = (input as Record<string, unknown>).verification;
+    if (verification !== undefined) {
+      const checked = validateVerificationSpec(verification);
+      const withoutVerification = { ...(input as Record<string, unknown>) };
+      delete withoutVerification.verification;
+      const action = validateAgentActionBody(withoutVerification);
+      // Verification is optional. Invalid planner syntax must not turn an
+      // otherwise safe action into an ask-human loop; raw PII still fails
+      // closed because retaining it in action history is unsafe.
+      if (!checked.ok) {
+        if (checked.error.startsWith("Raw ")) return checked;
+        return action;
+      }
+      return action.ok
+        ? { ok: true, action: { ...action.action, verification: checked.verification } }
+        : action;
+    }
+  }
+  return validateAgentActionBody(input);
+}
+
 /**
  * Type guard for AgentAction.
  */
@@ -574,13 +721,13 @@ function normalizePayload(input: unknown): unknown {
   if (typeof val === "object" && val !== null && !Array.isArray(val)) {
     const record = val as Record<string, unknown>;
     if ("action" in record && typeof record.action === "object" && record.action !== null) {
-      val = record.action;
+      val = { ...(record.action as Record<string, unknown>), ...(record.verification !== undefined ? { verification: record.verification } : {}) };
     } else if (
       "agent_action" in record &&
       typeof record.agent_action === "object" &&
       record.agent_action !== null
     ) {
-      val = record.agent_action;
+      val = { ...(record.agent_action as Record<string, unknown>), ...(record.verification !== undefined ? { verification: record.verification } : {}) };
     }
   }
 
@@ -591,11 +738,15 @@ function normalizePayload(input: unknown): unknown {
  * Parses a JSON string or raw object into a validated AgentAction.
  * Throws a descriptive Error on validation failure, dangerous input, or raw PII detection.
  */
-export function parseAgentAction(input: unknown): AgentAction {
+export function parseAgentAction(input: unknown, goalText = ""): AgentAction {
   const normalized = normalizePayload(input);
   const result = validateAgentAction(normalized);
-  if (!result.ok) {
-    throw new Error(result.error);
+  if (!result.ok) throw new Error(result.error);
+  if (result.action.type === "type" && !PLACEHOLDER_TOKEN_REGEX.test(result.action.placeholder)) {
+    const phrase = result.action.placeholder.toLowerCase();
+    if (!goalText || !goalText.toLowerCase().includes(phrase)) {
+      throw new Error(`Invalid placeholder token format: "${result.action.placeholder}"`);
+    }
   }
   return result.action;
 }

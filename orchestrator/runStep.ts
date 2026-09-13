@@ -51,6 +51,8 @@ import {
   tabIdForRef,
 } from "../executor/navigate.js";
 import { runVisionPath } from "../privacy/engine/vision/face-pipeline.js";
+import { verifyPostcondition } from "./verification.js";
+import { newCorrelationId, recordStepTelemetry } from "./telemetry.js";
 import {
   notifySessionUpdate,
   runSessionLoop,
@@ -233,6 +235,7 @@ function buildPlannerContext(session: AgentSession): PlannerContext {
         ? "initial"
         : "continuing",
     progress: `${completed} completed action(s); ${failed} failed action(s); current page state was freshly captured`,
+    destinationResolved: session.history.some((entry) => entry.action.type === "navigate" && entry.result?.ok),
     lastStep: recentHistory.at(-1),
     recentHistory,
   };
@@ -288,7 +291,7 @@ function sanitizedStateFingerprint(pkg: CapturePackage, elements: ElementMeta[])
 
 export function successfulActionFingerprint(action: AgentAction): string | null {
   if (
-    !["click", "type", "select_option", "check", "uncheck"].includes(action.type) ||
+    !["click", "type", "compose", "select_option", "check", "uncheck"].includes(action.type) ||
     !("target" in action)
   ) return null;
   const target = action.target;
@@ -300,6 +303,7 @@ export function successfulActionFingerprint(action: AgentAction): string | null 
     type: action.type,
     target: locator,
     ...(action.type === "type" ? { placeholder: action.placeholder } : {}),
+    ...(action.type === "compose" ? { draft: action.draft } : {}),
     ...(action.type === "select_option" ? { option: action.option } : {}),
   });
 }
@@ -356,15 +360,21 @@ export async function runStep(tabId: number, goal: string): Promise<StepResult> 
  */
 async function runOneStep(session: AgentSession): Promise<Outcome> {
   const { tabId, goal } = session;
+  const correlationId = newCorrelationId();
+  const telemetry = (phase: "capture" | "planner" | "execution" | "wait" | "verification" | "policy", outcome: "ok" | "failed" | "blocked" | "uncertain", code?: string) => {
+    void recordStepTelemetry({ correlationId, sessionId: session.sessionId, step: session.history.length + 1, phase, outcome, ...(code ? { code } : {}) });
+  };
   let pkg: CapturePackage;
   try {
     pkg = await capturePackage(tabId);
   } catch (err: unknown) {
     session.status = "error";
     session.error = err instanceof Error ? err.message : String(err);
+    telemetry("capture", "failed", "CAPTURE_ERROR");
     notifySessionUpdate(session);
     throw err;
   }
+  telemetry("capture", "ok");
 
   // M6-D vision path: browser-local YuNet FACE inference on the SAME in-memory
   // screenshot (no extra capture), fused with the DOM detections through the
@@ -426,6 +436,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   notifySessionUpdate(session, gate);
 
   if (gate.decision === "block") {
+    telemetry("policy", "blocked", "POLICY_BLOCKED");
     session.status = "blocked";
     session.error = gate.reason;
     notifySessionUpdate(session, gate);
@@ -458,6 +469,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   }
 
   if (gate.decision === "human_approval") {
+    telemetry("policy", "uncertain", "HUMAN_APPROVAL");
     session.status = "waiting_human";
     session.error = gate.reason;
     notifySessionUpdate(session, gate);
@@ -583,6 +595,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   });
 
   session.lastAction = agentAction;
+  telemetry("planner", "ok");
   broadcastHudStep(5, {
     goal,
     agentAction,
@@ -686,11 +699,17 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     );
     const frameId = agentAction.actions[0]?.target.ref?.frameId ?? 0;
     const results = await applyActions(tabId, actions, frameId);
-    const failed = results.find((result) => !result.ok);
+    await waitForTabSettled(tabId);
+    let verificationResult: ActionResult | undefined;
+    if (agentAction.verification && results.every((result) => result.ok)) {
+      verificationResult = await verifyPostcondition(tabId, { browserState: pkg.browserState, elements: pkg.elements }, agentAction.verification);
+      telemetry("verification", verificationResult.ok ? "ok" : "uncertain", verificationResult.code);
+    }
+    const failed = results.find((result) => !result.ok) ?? (verificationResult?.ok === false ? verificationResult : undefined);
     const aggregate: ActionResult = {
       ok: !failed && results.length === actions.length,
       ...(failed?.error ? { error: failed.error } : {}),
-      detail: JSON.stringify(results),
+      detail: JSON.stringify({ results, verification: verificationResult?.detail }),
     };
     session.history.push({
       step: session.history.length + 1,
@@ -700,6 +719,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       timestamp: Date.now(),
     });
     session.step = session.history.length;
+    telemetry("execution", aggregate.ok ? "ok" : "failed", failed?.code);
     if (!aggregate.ok) {
       session.lastFailureFingerprint = currentStateFingerprint;
       session.lastFailureAction = JSON.stringify(agentAction);
@@ -709,7 +729,6 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     }
     broadcastHudStep(6, { actions, results, outcome: aggregate.ok ? "ok" : "failure" });
     notifySessionUpdate(session, gate);
-    await waitForTabSettled(tabId);
     return { decision: gate.decision, reason: gate.reason, actions: results };
   }
 
@@ -744,6 +763,21 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     if (result.ok && nextTabId !== undefined) {
       session.tabId = nextTabId;
     }
+    if (result.ok && agentAction.verification && nextTabId !== undefined) {
+      await waitForTabSettled(nextTabId);
+      const verification = await verifyPostcondition(
+        nextTabId,
+        { browserState: pkg.browserState, elements: pkg.elements },
+        agentAction.verification,
+      );
+      if (!verification.ok) {
+        result = verification;
+        telemetry("verification", "uncertain", verification.code);
+      } else {
+        telemetry("verification", "ok");
+      }
+    }
+    telemetry("execution", result.ok ? "ok" : "failed", result.code);
     session.history.push({ step: session.history.length + 1, url: pkg.browserState.url, action: agentAction, result, timestamp: Date.now() });
     session.step = session.history.length;
     if (!result.ok || ((agentAction.type === "open_tab" || agentAction.type === "switch_tab" || agentAction.type === "close_tab") && nextTabId === undefined)) {
@@ -770,6 +804,23 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       result,
       timestamp: Date.now(),
     };
+    if (result.ok && agentAction.verification) {
+      await waitForTabSettled(tabId);
+      const verification = await verifyPostcondition(
+        tabId,
+        { browserState: pkg.browserState, elements: pkg.elements },
+        agentAction.verification,
+      );
+      if (!verification.ok) {
+        result.ok = false;
+        result.code = verification.code;
+        result.error = verification.error;
+        result.detail = verification.detail;
+        telemetry("verification", "uncertain", verification.code);
+      } else {
+        telemetry("verification", "ok");
+      }
+    }
     session.history.push(stepRecord);
     session.step = session.history.length;
     broadcastHudStep(6, { actions: [], results: [result] });
@@ -793,10 +844,12 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
 
   // A type action without a local mapping must never become a silent no-op or
   // type its placeholder. Escalate so the human can repair the mapping/page.
-  if (agentAction.type === "type" && actions.length === 0) {
+  if ((agentAction.type === "type" || agentAction.type === "compose") && actions.length === 0) {
     const escalation = {
       type: "ask_human" as const,
-      reason: `Cannot resolve local value for ${agentAction.placeholder}`,
+      reason: agentAction.type === "type"
+        ? `Cannot resolve local value for ${agentAction.placeholder}`
+        : "Cannot resolve the message composer target locally",
     };
     session.lastAction = escalation;
     session.history.push({
@@ -838,6 +891,21 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
       navigationWait.cancel();
     }
   }
+  if (agentAction.verification && results.every((result) => result.ok)) {
+    await waitForTabSettled(tabId);
+    const verification = await verifyPostcondition(
+      tabId,
+      { browserState: pkg.browserState, elements: pkg.elements },
+      agentAction.verification,
+    );
+    if (!verification.ok) {
+      results[0] = verification;
+      telemetry("verification", "uncertain", verification.code);
+    } else {
+      results.push(verification);
+      telemetry("verification", "ok");
+    }
+  }
   const stepRecord = {
     step: session.history.length + 1,
     url: pkg.browserState.url,
@@ -848,6 +916,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   session.history.push(stepRecord);
   session.step = session.history.length;
   const result = results[0];
+  telemetry("execution", result?.ok ? "ok" : "failed", result?.code);
   if (result && !result.ok) {
     session.lastFailureFingerprint = currentStateFingerprint;
     session.lastFailureAction = JSON.stringify(agentAction);

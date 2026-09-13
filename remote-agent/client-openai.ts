@@ -95,5 +95,5 @@ export async function queryOpenAI(
   }
 
   // Parse and validate strictly against AgentAction schema and PII guard
-  return parseAgentAction(rawContent);
+  return parseAgentAction(rawContent, pkg.goal);
 }

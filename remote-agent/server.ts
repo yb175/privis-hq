@@ -163,7 +163,7 @@ if (
   }
 
   const PORT = Number(process.env.PORT || process.env.AGENT_PORT || 3201);
-  const HOST = process.env.HOST || "0.0.0.0";
+  const HOST = process.env.HOST || "127.0.0.1";
   serve(
     {
       fetch: app.fetch,

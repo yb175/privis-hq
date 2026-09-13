@@ -144,6 +144,7 @@ const BRAND_URLS: Record<string, string> = {
   flipkart: "https://www.flipkart.com/",
   amazon: "https://www.amazon.in/",
   myntra: "https://www.myntra.com/",
+  zepto: "https://www.zeptonow.com/",
   irctc: "https://www.irctc.co.in/",
   gmail: "https://mail.google.com/",
   google: "https://www.google.com/",
@@ -214,7 +215,7 @@ async function resolveSearchToNavigate(
   endpoint.searchParams.set("api_key", apiKey);
   try {
     const res = await (fetchFn ?? fetch)(endpoint.toString(), {
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) {
       return { type: "ask_human", reason: `Search for "${query}" failed (HTTP ${res.status})` };
@@ -249,7 +250,11 @@ export async function routeAgentRequest(
   assertSanitizedPackage(pkg);
 
   // 1b. User told us where to go — go there; don't ask.
-  const quickNav = planQuickNavigate(pkg.goal, pkg.sanitizedContext.browserState.url);
+  // Destination discovery is once per session. SPAs can briefly report a
+  // transitional or stale URL after clicks; using that URL to re-run a goal's
+  // "open Zepto" shortcut causes a navigate/click loop.
+  const destinationResolved = pkg.plannerContext?.destinationResolved === true;
+  const quickNav = destinationResolved ? null : planQuickNavigate(pkg.goal, pkg.sanitizedContext.browserState.url);
   if (quickNav) {
     const guardRes = guardAction(quickNav, { sanitizedPackage: pkg });
     if (guardRes.ok) return guardRes.action;
@@ -300,10 +305,18 @@ export async function routeAgentRequest(
     return guardRes.action;
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    // If an unhandled remote error occurs, return ask_human action so the agent loop doesn't crash
+    // A model may invent prose for a type action. Do not echo that prose back
+    // into history/UI; ask for user-supplied wording instead.
+    if (errorMsg.startsWith("Invalid placeholder token format")) {
+      return {
+        type: "ask_human",
+        reason: "Please provide the exact message text you want typed or sent.",
+      };
+    }
+    // Keep untrusted provider/parser errors out of the next prompt and UI.
     return {
       type: "ask_human",
-      reason: `Remote model error (${settings.model}): ${errorMsg}`,
+      reason: `Remote model error (${settings.model}); please retry or provide guidance.`,
     };
   }
 }

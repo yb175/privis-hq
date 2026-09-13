@@ -12,7 +12,10 @@ import { runGoal } from "../orchestrator/runGoal.js";
 import {
   sessionsByTab,
   pendingHumanDecisions,
+  hydrateSessions,
 } from "../orchestrator/session.js";
+
+void hydrateSessions();
 
 // Toolbar clicks carry no typed goal; run with the demo default.
 const DEFAULT_GOAL = "Submit the employee portal form";
@@ -52,17 +55,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   if (msg?.type === "cba.getSession") {
     const tabId = typeof msg.tabId === "number" ? msg.tabId : undefined;
-    const sendSession = (id: number) => {
+    const sendSession = async (id: number) => {
+      await hydrateSessions();
       sendResponse({ session: sessionsByTab.get(id) || null });
     };
     if (typeof tabId === "number") {
-      sendSession(tabId);
-      return false;
+      void sendSession(tabId);
+      return true;
     } else {
-      chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+      chrome.tabs.query({ active: true, currentWindow: true }).then(async (tabs) => {
         const activeTabId = tabs[0]?.id;
         if (typeof activeTabId === "number") {
-          sendSession(activeTabId);
+          await sendSession(activeTabId);
         } else {
           sendResponse({ session: null });
         }

@@ -6,7 +6,7 @@
 // Bypassing Policy Gate by directly invoking the remote agent is forbidden.
 
 import type { StepResult } from "../types/index.js";
-import { getSession, pendingHumanDecisions, resumeSession } from "./session.js";
+import { getSession, hydrateSessions, pendingHumanDecisions, resumeSession } from "./session.js";
 import { runStep } from "./runStep.js";
 
 /**
@@ -38,6 +38,7 @@ export async function runGoal(text: string, tabId?: number): Promise<StepResult>
   }
 
   const targetTabId = typeof tabId === "number" ? tabId : await resolveActiveTabId();
+  await hydrateSessions();
 
   // A session parked on an escalation (remote ask_human / step cap) is resumed
   // by the human's chat reply — same session, same history, fresh step budget.

@@ -1,0 +1,66 @@
+import assert from "node:assert";
+import { guardModelOutput } from "../remote-agent/guard.js";
+import { parseAgentAction, validateVerificationSpec } from "../remote-agent/types.js";
+import { verifyPostcondition } from "../orchestrator/verification.js";
+import { persistSessions, hydrateSessions, sessionsByTab, startSession } from "../orchestrator/session.js";
+
+const element = (text: string, id = "status"): any => ({
+  element_id: id, tag: "div", type: null, role: "status", label: null, text,
+  bbox: [0, 0, 10, 10], documentId: "doc-1", frameId: 0,
+});
+let current = { text: "Saving", url: "https://example.test/form" };
+(globalThis as any).chrome = {
+  tabs: { sendMessage: async () => ({ type: "capture.response", payload: {
+    elements: [element(current.text)], frameId: 0,
+    browserState: { url: current.url, title: "Test", viewport: { w: 100, h: 100 } },
+  } }) },
+  storage: { session: {
+    data: {} as Record<string, unknown>,
+    async get(key: string) { return { [key]: this.data[key] }; },
+    async set(value: Record<string, unknown>) { Object.assign(this.data, value); },
+  } },
+};
+
+const before = { browserState: { url: current.url, title: "Test", viewport: { w: 100, h: 100 } }, elements: [element("Saving")] };
+current = { text: "Saved", url: current.url };
+const verified = await verifyPostcondition(1, before, { checks: [{ type: "text_appeared", needle: "Saved" }], timeoutMs: 100 });
+assert.strictEqual(verified.ok, true, "text postcondition should pass");
+
+const bad = await verifyPostcondition(1, before, { checks: [{ type: "text_appeared", needle: "Never appears" }], timeoutMs: 100 });
+assert.strictEqual(bad.ok, false, "missing postcondition must fail closed");
+assert.strictEqual(bad.code, "TIMEOUT");
+
+const plan = guardModelOutput({
+  action: { type: "click", target: { ref: { snapshotVersion: 1, documentId: "doc-1", elementId: "save" } } },
+  verification: { mode: "all", checks: [{ type: "text_appeared", needle: "Saved" }], timeoutMs: 1000 },
+});
+assert.strictEqual(plan.ok, true);
+assert.strictEqual(plan.ok && plan.action.verification?.checks.length, 1);
+assert.strictEqual(validateVerificationSpec({ checks: [{ type: "count_changed", role: "button", delta: 1 }] }).ok, true);
+assert.strictEqual(validateVerificationSpec({ checks: [{ type: "execute", code: "alert(1)" }] }).ok, false);
+assert.throws(() => parseAgentAction({ type: "click", target: { name: "alice@example.com" }, verification: { checks: [{ type: "element_appeared", target: { name: "alice@example.com" } }] } }), /Raw EMAIL|Invalid/);
+const withoutMalformedVerification = parseAgentAction({ type: "click", target: { role: "button", name: "Add" }, verification: { checks: [{ type: "element_appeared", target: { css: ".unsupported" } }] } });
+assert.strictEqual(withoutMalformedVerification.type, "click");
+assert.strictEqual(withoutMalformedVerification.verification, undefined, "invalid optional verification must not block a safe action");
+const composed = guardModelOutput({ type: "compose", target: { role: "textbox", name: "Message" }, draft: "I wanted to check in and let you know I am here to talk." });
+assert.strictEqual(composed.ok, true, "non-sensitive generated drafts should be allowed through compose");
+const secretDraft = guardModelOutput({ type: "compose", target: { role: "textbox", name: "Message" }, draft: "Email me at alice@example.com" });
+assert.strictEqual(secretDraft.ok, false, "generated drafts containing PII must fail closed");
+assert.strictEqual(guardModelOutput({
+  action: { type: "batch", actions: [
+    { type: "click", target: { ref: { snapshotVersion: 1, documentId: "doc-1", elementId: "a" } } },
+    { type: "click", target: { ref: { snapshotVersion: 1, documentId: "doc-1", elementId: "b" } } },
+  ] },
+  verification: { checks: [{ type: "count_changed", role: "button" }] },
+}).ok, true, "same-snapshot batch verification should be accepted");
+
+const tab = 991;
+const session = startSession(tab, "fill email@example.com");
+await persistSessions();
+sessionsByTab.delete(tab);
+await hydrateSessions();
+const restored = sessionsByTab.get(tab);
+assert.ok(restored, "paused control state should restore");
+assert.ok(!JSON.stringify((globalThis as any).chrome.storage.session.data).includes("email@example.com"), "PII must not persist");
+assert.ok(!JSON.stringify((globalThis as any).chrome.storage.session.data).includes("outboundPayload"), "screenshots must not persist");
+console.log("verification, fail-closed timeout, planner contract, and session persistence tests passed");

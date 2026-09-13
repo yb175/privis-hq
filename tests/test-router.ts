@@ -641,7 +641,19 @@ const onBrand = await routeAgentRequest(
   { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
 );
 assert.strictEqual(onBrand.type, "scroll", "on-site brand mentions stay with the model");
-console.log("  ✔ Quick-navigate routes URL, domain, and brand destinations; falls back safely");
+const afterNavigate = await routeAgentRequest(
+  createValidSanitizedPackage({
+    goal: "open zepto and add ice cream to my cart",
+    plannerContext: {
+      step: 1, maxSteps: 25, phase: "continuing", progress: "navigation completed", destinationResolved: true,
+      lastStep: { action: { type: "navigate", url: "https://www.zeptonow.com/" }, result: { ok: true } },
+      recentHistory: [],
+    },
+  }),
+  { settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: passThroughFetch }
+);
+assert.strictEqual(afterNavigate.type, "scroll", "successful navigation must not trigger the brand shortcut again");
+console.log("  ✔ Quick-navigate routes URL, URL state, and brand destinations without navigation loops");
 
 // --------------------------------------------------------------------------
 // 4c. Server-side 'search' tool: model searches, the SERVER runs SerpAPI and
@@ -789,7 +801,15 @@ assert.strictEqual(routerErrorAction.type, "ask_human");
 assert.ok(
   (routerErrorAction as { type: "ask_human"; reason: string }).reason.includes("Remote model error")
 );
-console.log("  ✔ Router catches remote model errors and returns safe ask_human action");
+const inventedProseFetch: typeof fetch = async () => ({
+  ok: true, status: 200,
+  json: async () => ({ choices: [{ message: { content: JSON.stringify({ type: "type", target: { role: "textbox", name: "Message" }, placeholder: "Hey friend, I hope you are well." }) } }] }),
+} as Response);
+const proseAction = await routeAgentRequest(pkg, {
+  settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: inventedProseFetch,
+});
+assert.deepStrictEqual(proseAction, { type: "ask_human", reason: "Please provide the exact message text you want typed or sent." });
+console.log("  ✔ Router catches remote model errors and never echoes invented prose");
 
 // 5. Navigate, Scroll, Done actions verification through router
 const mockDoneFetch: typeof fetch = async () =>

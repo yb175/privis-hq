@@ -82,7 +82,7 @@ export async function queryServer(
   }
 
   // Validate server response against the same AgentAction schema + PII guard
-  return parseAgentAction(data.action);
+  return parseAgentAction(data.action, pkg.goal);
 }
 
 /**

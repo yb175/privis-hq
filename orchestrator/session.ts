@@ -1,9 +1,9 @@
 // orchestrator/session.ts
 // CBA-6: multi-page session state. One session per tab carrying tabId, step,
-// last action and goal. State lives in memory only (CONTRACT.md rule 1/2 —
-// raw captures and real values never written to disk or storage; sanitized
-// outbound wire packages logged separately under CBA-11). The Remote Agent
-// is stateless; the loop here IS the agent's memory.
+// last action and goal. Only sanitized control state is persisted to survive
+// MV3 service-worker suspension; raw captures, screenshots, real values, and
+// placeholder maps remain memory-only. The Remote Agent is stateless; the loop
+// here is the agent's memory.
 
 import type {
   AgentSession,
@@ -22,6 +22,65 @@ export const MAX_SESSION_STEPS = 25;
 
 // In-memory session registry, keyed by tabId.
 const sessionsByTab = new Map<number, AgentSession>();
+const SESSION_STORAGE_KEY = "privis_session_control_state_v1";
+
+interface PersistedSessionControl {
+  sessionId: string;
+  tabId: number;
+  step: number;
+  maxSteps: number;
+  status: "running" | "waiting_human";
+  gateDecision?: AgentSession["gateDecision"];
+}
+
+type PersistedSessions = { version: 1; sessions: PersistedSessionControl[] };
+let hydrationPromise: Promise<void> | undefined;
+
+export async function persistSessions(): Promise<void> {
+  const sessions: PersistedSessionControl[] = Array.from(sessionsByTab.values())
+    .filter((session) => session.status === "running" || session.status === "waiting_human")
+    .map(({ sessionId, tabId, step, maxSteps, status, gateDecision }) => ({
+      sessionId, tabId, step: step ?? 0, maxSteps: maxSteps ?? MAX_SESSION_STEPS, status: status as "running" | "waiting_human", gateDecision,
+    }));
+  const value: PersistedSessions = { version: 1, sessions };
+  try {
+    const storage = chrome.storage?.session ?? chrome.storage?.local;
+    if (storage?.set) await storage.set({ [SESSION_STORAGE_KEY]: value });
+  } catch {
+    // Persistence is best effort; raw state remains memory-only on failure.
+  }
+}
+
+async function hydrateSessionsOnce(): Promise<void> {
+  try {
+    const storage = chrome.storage?.session ?? chrome.storage?.local;
+    const stored = storage?.get ? (await storage.get(SESSION_STORAGE_KEY))[SESSION_STORAGE_KEY] as PersistedSessions | undefined : undefined;
+    if (stored?.version !== 1 || !Array.isArray(stored.sessions)) return;
+    for (const control of stored.sessions) {
+      if (!control || typeof control.tabId !== "number" || typeof control.sessionId !== "string" || sessionsByTab.has(control.tabId)) continue;
+      // An action or approval may have been in flight when the worker stopped.
+      // Never replay it automatically; require a fresh human continuation.
+      sessionsByTab.set(control.tabId, {
+        sessionId: control.sessionId,
+        tabId: control.tabId,
+        goal: "[Recovered session: restate the goal to continue]",
+        step: control.step,
+        maxSteps: control.maxSteps,
+        status: "waiting_human",
+        gateDecision: control.gateDecision,
+        history: [],
+        error: "Service worker restarted; page state and any pending approval must be re-checked.",
+      });
+    }
+  } catch {
+    // A missing or corrupt store must not prevent a fresh session.
+  }
+}
+
+export function hydrateSessions(): Promise<void> {
+  hydrationPromise ??= hydrateSessionsOnce();
+  return hydrationPromise;
+}
 
 // Pending gate approvals, keyed by sessionId (resolved by the popup's
 // cba.humanDecision message handler in the service worker).
@@ -80,11 +139,13 @@ export function startSession(tabId: number, goal: string): AgentSession {
       history: [],
     };
     sessionsByTab.set(tabId, session);
+    void persistSessions();
   } else {
     // A live session keeps its original goal — a second message while the
     // loop runs must not hijack it (runStep rejects such calls anyway).
     session.status = "running";
   }
+  void persistSessions();
   return session;
 }
 
@@ -104,6 +165,7 @@ export function resumeSession(session: AgentSession, humanReply: string): void {
   delete session.lastFailureFingerprint;
   delete session.lastFailureAction;
   session.maxSteps = (session.step ?? 0) + MAX_SESSION_STEPS;
+  void persistSessions();
 }
 
 /** Broadcast session state (and optionally the latest gate result) to the chat popup. */
@@ -118,6 +180,7 @@ export function notifySessionUpdate(
   } catch {
     // No receiver — ignore.
   }
+  void persistSessions();
 }
 
 /** Resolve when the human approves/rejects this session's pending gate decision. */
