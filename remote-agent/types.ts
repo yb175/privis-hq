@@ -570,11 +570,6 @@ function validateAgentActionBody(
       if (trimmedPlaceholder.length > 300) {
         return { ok: false, error: "'placeholder' exceeds 300 characters" };
       }
-      const isToken = PLACEHOLDER_TOKEN_REGEX.test(trimmedPlaceholder);
-      if (!isToken && !goalText.toLowerCase().includes(trimmedPlaceholder.toLowerCase())) {
-        return { ok: false, error: `Invalid placeholder token format: "${obj.placeholder}"` };
-      }
-
       return {
         ok: true,
         action: {
