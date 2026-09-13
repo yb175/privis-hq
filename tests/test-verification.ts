@@ -39,6 +39,9 @@ assert.strictEqual(plan.ok && plan.action.verification?.checks.length, 1);
 assert.strictEqual(validateVerificationSpec({ checks: [{ type: "count_changed", role: "button", delta: 1 }] }).ok, true);
 assert.strictEqual(validateVerificationSpec({ checks: [{ type: "execute", code: "alert(1)" }] }).ok, false);
 assert.throws(() => parseAgentAction({ type: "click", target: { name: "alice@example.com" }, verification: { checks: [{ type: "element_appeared", target: { name: "alice@example.com" } }] } }), /Raw EMAIL|Invalid/);
+const withoutMalformedVerification = parseAgentAction({ type: "click", target: { role: "button", name: "Add" }, verification: { checks: [{ type: "element_appeared", target: { css: ".unsupported" } }] } });
+assert.strictEqual(withoutMalformedVerification.type, "click");
+assert.strictEqual(withoutMalformedVerification.verification, undefined, "invalid optional verification must not block a safe action");
 assert.strictEqual(guardModelOutput({
   action: { type: "batch", actions: [
     { type: "click", target: { ref: { snapshotVersion: 1, documentId: "doc-1", elementId: "a" } } },

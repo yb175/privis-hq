@@ -657,10 +657,16 @@ export function validateAgentAction(
     const verification = (input as Record<string, unknown>).verification;
     if (verification !== undefined) {
       const checked = validateVerificationSpec(verification);
-      if (!checked.ok) return checked;
       const withoutVerification = { ...(input as Record<string, unknown>) };
       delete withoutVerification.verification;
       const action = validateAgentActionBody(withoutVerification);
+      // Verification is optional. Invalid planner syntax must not turn an
+      // otherwise safe action into an ask-human loop; raw PII still fails
+      // closed because retaining it in action history is unsafe.
+      if (!checked.ok) {
+        if (checked.error.startsWith("Raw ")) return checked;
+        return action;
+      }
       return action.ok
         ? { ok: true, action: { ...action.action, verification: checked.verification } }
         : action;
