@@ -21,13 +21,36 @@
 
 import assert from "node:assert";
 import { createServer, type Server } from "node:http";
+import type { CaptureResponseMessage } from "../types/index.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { installCanvasShims } from "../privacy/engine/vision/test-canvas-shim.js";
-import { runStep } from "../orchestrator/runStep.js";
+import { captureStabilityFingerprint, runStep } from "../orchestrator/runStep.js";
 import { MAX_SESSION_STEPS, pendingHumanDecisions, sessionsByTab } from "../orchestrator/session.js";
 import { computeRequestDigest } from "../orchestrator/transparency-log.js";
+
+const stableCompose: CaptureResponseMessage[] = [{
+  type: "capture.response" as const,
+  payload: {
+    frameId: 0,
+    documentId: "doc-compose",
+    snapshotVersion: 1,
+    browserState: { url: "https://mail.example/", title: "Inbox", viewport: { w: 640, h: 480 } },
+    elements: [
+      { element_id: "recipient", tag: "input", type: "email", role: "textbox", label: null, text: "EMAIL_1", bbox: [0, 0, 100, 20], focused: false },
+      { element_id: "inbox-link", tag: "a", type: null, role: "link", label: null, text: "Inbox (1)", bbox: [0, 30, 100, 20], expanded: false },
+    ],
+  },
+}];
+const volatileGmailChrome: CaptureResponseMessage[] = structuredClone(stableCompose);
+volatileGmailChrome[0].payload.elements[1].text = "Inbox (2)";
+volatileGmailChrome[0].payload.elements[1].expanded = true;
+assert.strictEqual(captureStabilityFingerprint(stableCompose), captureStabilityFingerprint(volatileGmailChrome));
+const movedRecipient: CaptureResponseMessage[] = structuredClone(stableCompose);
+movedRecipient[0].payload.elements[0].bbox = [0, 10, 100, 20];
+assert.notStrictEqual(captureStabilityFingerprint(stableCompose), captureStabilityFingerprint(movedRecipient));
+console.log("  ✔ Capture stability ignores Gmail chrome but protects compose controls");
 import type { ElementMeta, TransparencyLogStore } from "../types/index.js";
 
 // ---------------------------------------------------------------------------

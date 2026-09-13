@@ -95,14 +95,35 @@ async function domPackages(tabId: number): Promise<CaptureResponseMessage[]> {
   return packages;
 }
 
-// Cheap, deterministic fingerprint of the DOM package. Element ids are stable
-// across extractions (the content script keys them by DOM node), so equality
-// here means the page did not change between snapshots.
-function packageFingerprint(packages: CaptureResponseMessage[]): string {
-  return JSON.stringify(packages.map(({ payload }) => ({
-    browserState: payload.browserState,
-    elements: payload.elements.map(({ snapshotVersion: _snapshotVersion, ...element }) => element),
-  })));
+// Gmail changes inbox/sidebar ARIA state continuously. A full-DOM equality
+// check therefore rejects a stable compose form. Keep the invariant that
+// redaction regions and executable form controls did not move/change, while
+// ignoring volatile navigation chrome (focus, expansion, link counts, title).
+export function captureStabilityFingerprint(packages: CaptureResponseMessage[]): string {
+  const isActionable = (element: ElementMeta) =>
+    ["input", "textarea", "select", "button"].includes(element.tag) ||
+    ["textbox", "combobox", "checkbox", "radio", "button"].includes(element.role ?? "");
+  return JSON.stringify(
+    packages
+      .map(({ payload }) => {
+        const elements = payload.elements;
+        return {
+          frameId: payload.frameId ?? 0,
+          documentId: payload.documentId,
+          url: payload.browserState.url,
+          viewport: payload.browserState.viewport,
+          actionable: elements
+            .filter(isActionable)
+            .map(({ element_id, tag, type, role, text, bbox, documentId, frameId }) =>
+              ({ element_id, tag, type, role, text, bbox, documentId, frameId }))
+            .sort((a, b) => a.element_id.localeCompare(b.element_id)),
+          sensitive: detectSensitive(elements)
+            .map(({ element_id, category, bbox }) => ({ element_id, category, bbox }))
+            .sort((a, b) => `${a.element_id}:${a.category}`.localeCompare(`${b.element_id}:${b.category}`)),
+        };
+      })
+      .sort((a, b) => a.frameId - b.frameId)
+  );
 }
 
 export async function capturePackage(tabId: number): Promise<CapturePackage> {
@@ -127,8 +148,8 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
     const before = await domPackages(tabId);
     const { dataUrl } = await takeScreenshot(tabId);
     const after = await domPackages(tabId);
-    if (packageFingerprint(before) === packageFingerprint(after)) {
-      const primary = before.find((pkg) => pkg.payload.frameId === 0) ?? before[0];
+    if (captureStabilityFingerprint(before) === captureStabilityFingerprint(after)) {
+      const primary = before.find((pkg) => (pkg.payload.frameId ?? 0) === 0);
       const elements = before.flatMap((pkg) => pkg.payload.elements);
       if (!primary) throw new Error("capturePackage: top-level frame is unavailable");
       // Guard: iframes can report zero viewport; always use the top frame's
