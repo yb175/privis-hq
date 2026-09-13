@@ -386,6 +386,11 @@ export async function executeAction(action: Action): Promise<ActionResult> {
           return failure("INVALID_ACTION", `Missing local value for placeholder: ${value}`);
         }
       }
+      if (el.isContentEditable || el.getAttribute("contenteditable") === "true") {
+        el.textContent = value;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        return { ok: true };
+      }
       if (!("value" in el)) return failure("NOT_INTERACTABLE", `Cannot type into non-form element: ${action.target}`);
       const field = el as HTMLInputElement;
       field.value = value;
