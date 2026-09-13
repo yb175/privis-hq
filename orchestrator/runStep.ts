@@ -126,6 +126,23 @@ export function captureStabilityFingerprint(packages: CaptureResponseMessage[]):
   );
 }
 
+async function waitForStableDom(
+  tabId: number,
+  intervalMs = 150,
+  maxPolls = 10
+): Promise<CaptureResponseMessage[] | null> {
+  let previous = await domPackages(tabId);
+  for (let poll = 0; poll < maxPolls; poll++) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    const current = await domPackages(tabId);
+    if (captureStabilityFingerprint(previous) === captureStabilityFingerprint(current)) {
+      return current;
+    }
+    previous = current;
+  }
+  return null;
+}
+
 export async function capturePackage(tabId: number): Promise<CapturePackage> {
   // Capture DOM after making the same tab visible that captureVisibleTab will
   // screenshot. Otherwise an inactive/recently-switched tab can report a zero
@@ -140,12 +157,21 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
     // The subsequent DOM/screenshot calls produce the useful failure.
   }
   const MAX_TRIES = 3;
+  let sawUnstableDom = false;
   for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
     // Snapshot the DOM first, capture the screenshot of that same state, then
     // re-snapshot the DOM and require it to be unchanged. This guarantees the
     // detections always describe the pixels we redact — never detections from
     // one page state applied to another state's screenshot.
-    const before = await domPackages(tabId);
+    // SPAs such as Zepto continue rendering product cards after Enter. Wait
+    // for two identical safety-relevant DOM samples before taking the costly
+    // screenshot; retrying only after a screenshot is too late and repeatedly
+    // races the same render wave.
+    const before = await waitForStableDom(tabId);
+    if (!before) {
+      sawUnstableDom = true;
+      continue;
+    }
     const { dataUrl } = await takeScreenshot(tabId);
     const after = await domPackages(tabId);
     if (captureStabilityFingerprint(before) === captureStabilityFingerprint(after)) {
@@ -177,7 +203,9 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
     }
   }
   throw new Error(
-    "capturePackage: page state kept changing between DOM snapshot and screenshot"
+    sawUnstableDom
+      ? "capturePackage: page did not reach a stable actionable state; wait for the SPA results to finish loading and retry"
+      : "capturePackage: actionable state changed between DOM snapshot and screenshot"
   );
 }
 
