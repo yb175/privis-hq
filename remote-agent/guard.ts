@@ -44,7 +44,8 @@ const FORBIDDEN_RAW_KEYS = ["value", "text", "input", "val", "content", "passwor
 export function redactPii(text: string): string {
   let out = text;
   for (const { name, re } of PII_PATTERNS) {
-    out = out.replace(re, `[REDACTED_${name}]`);
+    const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
+    out = out.replace(new RegExp(re.source, flags), `[REDACTED_${name}]`);
   }
   return out;
 }

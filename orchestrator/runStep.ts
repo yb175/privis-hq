@@ -436,7 +436,16 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   // placeholder / title) to keep any raw value out of the remote context.
   // Privacy-first: NO LLM keys on this device — the package goes to the
   // operator's remote-agent server, which holds the keys and picks the brain.
-  const remoteElements: ElementMeta[] = sanitized.map((el) => ({ ...el, label: null }));
+  const remoteElements: ElementMeta[] = sanitized.map((el) => ({
+    ...el,
+    text: redactPii(el.text),
+    label: null,
+  }));
+  const remoteBrowserState = {
+    ...pkg.browserState,
+    url: redactPii(pkg.browserState.url),
+    title: redactPii(pkg.browserState.title),
+  };
   const settings = await loadModelSettings();
   session.outboundPayload = {
     sanitizedScreenshot,
@@ -444,7 +453,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
     placeholders: remoteElements
       .map((element) => element.text)
       .filter((text) => /^[A-Z]+_\d+$/.test(text)),
-    url: pkg.browserState.url,
+    url: remoteBrowserState.url,
     model: settings.model,
   };
   notifySessionUpdate(session, gate);
@@ -456,7 +465,7 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   const outboundPkg = {
     goal: remoteGoal,
     sanitizedScreenshot,
-    sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
+    sanitizedContext: { elements: remoteElements, browserState: remoteBrowserState },
     plannerContext: buildPlannerContext(session),
     redacted: true as const, // sanitizer provenance: structural + visual redaction applied above
   };
