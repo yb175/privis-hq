@@ -419,8 +419,12 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   };
   notifySessionUpdate(session, gate);
 
+  // The goal is user-controlled text too. Keep the full goal on-device, but
+  // redact PII before the planner sees it; sensitive form values are available
+  // remotely only as sanitizer-issued placeholders.
+  const remoteGoal = redactPii(goal);
   const outboundPkg = {
-    goal,
+    goal: remoteGoal,
     sanitizedScreenshot,
     sanitizedContext: { elements: remoteElements, browserState: pkg.browserState },
     plannerContext: buildPlannerContext(session),
