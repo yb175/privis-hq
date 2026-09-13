@@ -86,8 +86,13 @@ function domPackage(tabId: number, frameId = 0): Promise<CaptureResponseMessage>
 }
 
 async function domPackages(tabId: number): Promise<CaptureResponseMessage[]> {
-  const packages = await Promise.all((await frameIds(tabId)).map((frameId) => domPackage(tabId, frameId)));
-  return packages.filter((pkg) => pkg.payload.elements.length > 0 || pkg.payload.frameId === 0);
+  const ids = await frameIds(tabId);
+  const results = await Promise.allSettled(ids.map((frameId) => domPackage(tabId, frameId)));
+  const packages = results
+    .filter((r): r is PromiseFulfilledResult<CaptureResponseMessage> => r.status === "fulfilled")
+    .map((r) => r.value)
+    .filter((pkg) => pkg.payload.elements.length > 0 || pkg.payload.frameId === 0);
+  return packages;
 }
 
 // Cheap, deterministic fingerprint of the DOM package. Element ids are stable
@@ -126,6 +131,19 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
       const primary = before.find((pkg) => pkg.payload.frameId === 0) ?? before[0];
       const elements = before.flatMap((pkg) => pkg.payload.elements);
       if (!primary) throw new Error("capturePackage: top-level frame is unavailable");
+      // Guard: iframes can report zero viewport; always use the top frame's
+      // viewport for fusion. If even frame 0 reports zero (minimised tab,
+      // restricted page), fall back to the screenshot dimensions later.
+      const viewport = primary.payload.browserState.viewport;
+      if (viewport.w <= 0 || viewport.h <= 0) {
+        // Estimate from screenshot: data URL → base64 PNG header contains IHDR
+        // with width/height, but decoding is expensive. Instead, retry — the
+        // tab was just activated above, so transient zero should resolve.
+        if (attempt < MAX_TRIES - 1) continue;
+        throw new Error(
+          `capturePackage: viewport is ${viewport.w}x${viewport.h} after ${MAX_TRIES} attempts — tab may be minimised or restricted`
+        );
+      }
       return {
         tabId,
         dataUrl,
