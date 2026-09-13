@@ -104,6 +104,15 @@ export function buildUserPrompt(
       if (el.element_id) parts.push(`id="${el.element_id}"`);
       if (el.type) parts.push(`type="${el.type}"`);
       if (el.role) parts.push(`role="${el.role}"`);
+      if (el.snapshotVersion !== undefined) {
+        parts.push(`ref={snapshotVersion:${el.snapshotVersion},elementId:"${el.element_id}"}`);
+      }
+      for (const [key, value] of [
+        ["disabled", el.disabled], ["checked", el.checked], ["selected", el.selected],
+        ["expanded", el.expanded], ["focused", el.focused],
+      ] as const) {
+        if (value !== undefined) parts.push(`${key}=${value}`);
+      }
       // `label` is intentionally omitted: the sanitizer only swaps `text`, so a
       // label can still carry raw page/user data (same boundary the extension
       // service-worker applies before dispatching to the remote agent).
