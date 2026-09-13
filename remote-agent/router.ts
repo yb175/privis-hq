@@ -305,10 +305,18 @@ export async function routeAgentRequest(
     return guardRes.action;
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    // If an unhandled remote error occurs, return ask_human action so the agent loop doesn't crash
+    // A model may invent prose for a type action. Do not echo that prose back
+    // into history/UI; ask for user-supplied wording instead.
+    if (errorMsg.startsWith("Invalid placeholder token format")) {
+      return {
+        type: "ask_human",
+        reason: "Please provide the exact message text you want typed or sent.",
+      };
+    }
+    // Keep untrusted provider/parser errors out of the next prompt and UI.
     return {
       type: "ask_human",
-      reason: `Remote model error (${settings.model}): ${errorMsg}`,
+      reason: `Remote model error (${settings.model}); please retry or provide guidance.`,
     };
   }
 }

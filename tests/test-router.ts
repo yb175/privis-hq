@@ -801,7 +801,15 @@ assert.strictEqual(routerErrorAction.type, "ask_human");
 assert.ok(
   (routerErrorAction as { type: "ask_human"; reason: string }).reason.includes("Remote model error")
 );
-console.log("  ✔ Router catches remote model errors and returns safe ask_human action");
+const inventedProseFetch: typeof fetch = async () => ({
+  ok: true, status: 200,
+  json: async () => ({ choices: [{ message: { content: JSON.stringify({ type: "type", target: { role: "textbox", name: "Message" }, placeholder: "Hey friend, I hope you are well." }) } }] }),
+} as Response);
+const proseAction = await routeAgentRequest(pkg, {
+  settings: { model: "chatgpt", openaiApiKey: "sk-key" }, fetchFn: inventedProseFetch,
+});
+assert.deepStrictEqual(proseAction, { type: "ask_human", reason: "Please provide the exact message text you want typed or sent." });
+console.log("  ✔ Router catches remote model errors and never echoes invented prose");
 
 // 5. Navigate, Scroll, Done actions verification through router
 const mockDoneFetch: typeof fetch = async () =>
