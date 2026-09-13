@@ -4,6 +4,7 @@ import type { ActionErrorCode } from "../types/index.js";
 
 export interface ElementReference {
   snapshotVersion: number;
+  documentId: string;
   elementId: string;
 }
 
@@ -256,6 +257,8 @@ export function isTarget(target: unknown): target is Target {
   const hasRef = typeof ref === "object" && ref !== null &&
     Number.isInteger(ref.snapshotVersion) &&
     (ref.snapshotVersion as number) > 0 &&
+    typeof ref.documentId === "string" &&
+    ref.documentId.trim().length > 0 &&
     typeof ref.elementId === "string" &&
     ref.elementId.trim().length > 0;
 

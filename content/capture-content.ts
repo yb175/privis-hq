@@ -27,17 +27,21 @@ import { isPrivisMessage } from "../utils/messaging.js";
 // The Sanitizer writes element_id -> real value; this executor only reads it.
 const localValues: Record<string, string> = {};
 let snapshotVersion = 0;
+const documentId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+  ? crypto.randomUUID()
+  : `doc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 /**
  * Capture Layer content-script half: visible elements + browser state.
  * No placeholders, no clicks — those live elsewhere (Sanitizer / Local Executor).
  */
-export function captureDom(): { elements: ElementMeta[]; browserState: BrowserState; snapshotVersion: number } {
+export function captureDom(): { elements: ElementMeta[]; browserState: BrowserState; snapshotVersion: number; documentId: string } {
   snapshotVersion += 1;
   return {
-    elements: extractElements(snapshotVersion),
+    elements: extractElements(snapshotVersion, documentId),
     browserState: collectBrowserState(),
     snapshotVersion,
+    documentId,
   };
 }
 

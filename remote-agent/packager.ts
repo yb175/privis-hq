@@ -105,8 +105,9 @@ export function buildUserPrompt(
       if (el.type) parts.push(`type="${el.type}"`);
       if (el.role) parts.push(`role="${el.role}"`);
       if (el.snapshotVersion !== undefined) {
-        parts.push(`ref={snapshotVersion:${el.snapshotVersion},elementId:"${el.element_id}"}`);
+        parts.push(`ref={snapshotVersion:${el.snapshotVersion},documentId:"${el.documentId ?? ""}",elementId:"${el.element_id}"}`);
       }
+      if (el.parentElementId) parts.push(`parentElementId="${el.parentElementId}"`);
       for (const [key, value] of [
         ["disabled", el.disabled], ["checked", el.checked], ["selected", el.selected],
         ["expanded", el.expanded], ["focused", el.focused],

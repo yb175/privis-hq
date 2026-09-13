@@ -8,7 +8,7 @@
 import type { BrowserState, ElementMeta } from "../types/index.js";
 
 const INTERACTIVE_SELECTOR =
-  "a, input, textarea, select, button, img, [role], [contenteditable='true']";
+  "a, input, textarea, select, button, img, [role], [contenteditable]";
 
 // Stable per-element ids: an element keeps the same generated id across
 // repeated extractions within the page's lifetime.
@@ -100,9 +100,10 @@ export function resolveGeneratedElement(id: string): HTMLElement | null {
   return null;
 }
 
-export function extractElements(snapshotVersion?: number): ElementMeta[] {
+export function extractElements(snapshotVersion?: number, documentId?: string): ElementMeta[] {
   const out: ElementMeta[] = [];
   for (const el of document.querySelectorAll<HTMLElement>(INTERACTIVE_SELECTOR)) {
+    if (el.hasAttribute("contenteditable") && !el.isContentEditable) continue;
     if (!isVisible(el)) continue;
     const id = elementId(el);
     const rect = el.getBoundingClientRect();
@@ -130,7 +131,8 @@ export function extractElements(snapshotVersion?: number): ElementMeta[] {
       text,
       bbox: roundBBox(rect),
       ...(snapshotVersion !== undefined ? { snapshotVersion } : {}),
-      disabled: "disabled" in el ? Boolean((el as HTMLInputElement).disabled) : ariaDisabled(el),
+      ...(documentId !== undefined ? { documentId } : {}),
+      disabled: ("disabled" in el && Boolean((el as HTMLInputElement).disabled)) || ariaDisabled(el),
       ...(ariaChecked !== null || ["checkbox", "radio"].includes(input.type)
         ? { checked: ariaChecked !== null ? ariaChecked === "true" : input.checked }
         : {}),

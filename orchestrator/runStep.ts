@@ -96,6 +96,7 @@ export async function capturePackage(tabId: number): Promise<CapturePackage> {
         detections: detectSensitive(elements),
         browserState,
         snapshotVersion: before.payload.snapshotVersion,
+        documentId: before.payload.documentId,
       };
     }
   }
@@ -180,17 +181,25 @@ function sanitizedStateFingerprint(pkg: CapturePackage, elements: ElementMeta[])
   });
 }
 
-function verificationAction(verify: DoneVerification): Action {
-  return {
-    type: "wait_for",
-    target: "",
-    condition: verify.condition,
-    ...(verify.target ? { targetLocator: verify.target } : {}),
-    ...(verify.needle ?? verify.urlPattern
-      ? { value: verify.needle ?? verify.urlPattern }
-      : {}),
-    timeoutMs: verify.timeoutMs,
-  };
+function verificationActions(
+  verify: DoneVerification,
+  sanitized: ElementMeta[],
+  map: Record<string, string>,
+  goal: string
+): Action[] {
+  return agentActionToExecutorActions(
+    {
+      type: "wait_for",
+      condition: verify.condition,
+      ...(verify.target ? { target: verify.target } : {}),
+      ...(verify.needle ? { needle: verify.needle } : {}),
+      ...(verify.urlPattern ? { urlPattern: verify.urlPattern } : {}),
+      timeoutMs: verify.timeoutMs,
+    },
+    sanitized,
+    map,
+    goal
+  );
 }
 
 /**
@@ -479,7 +488,10 @@ async function runOneStep(session: AgentSession): Promise<Outcome> {
   if (agentAction.type === "done" || agentAction.type === "ask_human") {
     let result = { ok: true } as import("../types/index.js").ActionResult;
     if (agentAction.type === "done" && agentAction.verify) {
-      result = (await applyActions(tabId, [verificationAction(agentAction.verify)]))[0] ?? {
+      result = (await applyActions(
+        tabId,
+        verificationActions(agentAction.verify, sanitized, map, goal)
+      ))[0] ?? {
         ok: false,
         code: "EXECUTION_ERROR",
         error: "Completion verification returned no result",

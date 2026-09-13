@@ -16,7 +16,7 @@ STRICT RULES:
 2. Available action formats:
    - {"type": "navigate", "url": "https://..."}
    - {"type": "click", "target": {"css": "#id", "role": "button", "name": "Submit", "bbox": [x, y, w, h]}}
-   - {"type": "click", "target": {"ref": {"snapshotVersion": 12, "elementId": "el-button-4"}}}
+   - {"type": "click", "target": {"ref": {"snapshotVersion": 12, "documentId": "doc-abc", "elementId": "el-button-4"}}}
    - {"type": "type", "target": {"css": "#input"}, "placeholder": "PAN_1"}
    - {"type": "scroll", "dy": 250}
    - {"type": "press_key", "target": {"css": "#search"}, "key": "Enter"}

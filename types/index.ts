@@ -32,6 +32,7 @@ export interface ElementMeta {
   text: string;
   bbox: BoundingBox;
   snapshotVersion?: number;
+  documentId?: string;
   disabled?: boolean;
   checked?: boolean;
   selected?: boolean;
@@ -94,6 +95,7 @@ export interface CapturePackage {
   detections: Detection[];
   browserState: BrowserState;
   snapshotVersion?: number;
+  documentId?: string;
 }
 
 export interface SanitizedContext {
@@ -148,6 +150,7 @@ export interface CaptureResponseMessage {
     elements: ElementMeta[];
     browserState: BrowserState;
     snapshotVersion?: number;
+    documentId?: string;
   };
 }
 
