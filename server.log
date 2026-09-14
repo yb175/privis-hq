@@ -1,0 +1,99 @@
+[PRIVIS Remote Agent (Hono)] listening on http://0.0.0.0:3201 (auth: OFF — set AGENT_AUTH_TOKEN before exposing)
+[agent] /plan request goal=test model=gemini redacted=true elements=0 screenshotChars=118
+[agent] /plan OK after 5433ms action=done detail=Goal achieved successfully
+[agent] POST /plan -> 200 (5440ms)
+[agent] /plan request goal=test model=chatgpt redacted=true elements=0 screenshotChars=118
+[agent] /plan OK after 847ms action=ask_human detail=Remote model error (chatgpt): OpenAI API error (401): {
+    "error": {
+        "…
+[agent] POST /plan -> 200 (848ms)
+[agent] GET /health -> 200 (1ms)
+[agent] /plan request goal=Click the login button model=gemini redacted=true elements=1 screenshotChars=118
+[agent] /plan OK after 4306ms action=click detail=Login
+[agent] POST /plan -> 200 (4313ms)
+[agent] /plan request goal=hide sensetive data model=gemini redacted=true elements=7 screenshotChars=87006
+[agent] /plan OK after 7842ms action=type detail=#name
+[agent] POST /plan -> 200 (7844ms)
+[agent] /plan request goal=hide sensetive data model=gemini redacted=true elements=7 screenshotChars=87006
+[agent] /plan OK after 5901ms action=type detail=#name
+[agent] POST /plan -> 200 (5903ms)
+[agent] /plan request goal=hide sensetive data model=gemini redacted=true elements=7 screenshotChars=87006
+[agent] /plan OK after 8921ms action=type detail=#name
+[agent] POST /plan -> 200 (8922ms)
+[agent] /plan request goal=hide sensetive data model=gemini redacted=true elements=7 screenshotChars=87006
+[agent] /plan OK after 8834ms action=type detail=#name
+[agent] POST /plan -> 200 (8835ms)
+[agent] /plan request goal=hide sensetive data model=gemini redacted=true elements=7 screenshotChars=87006
+[agent] /plan OK after 9157ms action=type detail=#name
+[agent] POST /plan -> 200 (9159ms)
+[agent] /plan request goal=hide sensetive data model=gemini redacted=true elements=7 screenshotChars=87006
+[agent] /plan OK after 7237ms action=type detail=#name
+[agent] POST /plan -> 200 (7238ms)
+[agent] /plan request goal=hide sensetive data model=gemini redacted=true elements=7 screenshotChars=87006
+[agent] /plan OK after 514ms action=ask_human detail=Remote model error (gemini): Gemini API error (429): {
+  "error": {
+    "code": …
+[agent] POST /plan -> 200 (514ms)
+[agent] /plan request goal=fill the form with my details model=gemini redacted=true elements=7 screenshotChars=83146
+[agent] /plan OK after 40937ms action=click detail=Submit
+[agent] POST /plan -> 200 (40938ms)
+[agent] /plan request goal=fill the form with my details model=gemini redacted=true elements=7 screenshotChars=84534
+[agent] /plan OK after 6121ms action=type detail=#amount
+[agent] POST /plan -> 200 (6122ms)
+[agent] /plan request goal=fill the form with my details model=gemini redacted=true elements=7 screenshotChars=84534
+[agent] /plan OK after 6014ms action=type detail=#amount
+[agent] POST /plan -> 200 (6014ms)
+[agent] /plan request goal=fill the form with my details model=gemini redacted=true elements=7 screenshotChars=84550
+[agent] /plan OK after 3548ms action=type detail=#amount
+[agent] POST /plan -> 200 (3549ms)
+[agent] /plan request goal=fill the form with my details model=gemini redacted=true elements=7 screenshotChars=84534
+[agent] /plan OK after 22030ms action=type detail=#amount
+[agent] POST /plan -> 200 (22030ms)
+[agent] /plan request goal=fill the form with my details model=gemini redacted=true elements=7 screenshotChars=84534
+[agent] /plan OK after 7980ms action=type detail=#amount
+[agent] POST /plan -> 200 (7981ms)
+[agent] /plan request goal=fill the form with my details model=gemini redacted=true elements=7 screenshotChars=84534
+[agent] /plan OK after 6277ms action=type detail=#amount
+[agent] POST /plan -> 200 (6278ms)
+[agent] /plan request goal=fill the form with my details model=gemini redacted=true elements=7 screenshotChars=84534
+[agent] /plan OK after 8605ms action=type detail=#amount
+[agent] POST /plan -> 200 (8606ms)
+[agent] /plan request goal=help me fill the form model=gemini redacted=true elements=7 screenshotChars=87006
+[agent] /plan OK after 5279ms action=type detail=#name
+[agent] POST /plan -> 200 (5280ms)
+[agent] /plan request goal=help me fill the form model=gemini redacted=true elements=7 screenshotChars=87006
+[agent] /plan OK after 8636ms action=type detail=#name
+[agent] POST /plan -> 200 (8637ms)
+[agent] /plan request goal=help me fill the form model=gemini redacted=true elements=7 screenshotChars=87006
+[agent] /plan OK after 5882ms action=type detail=#name
+[agent] POST /plan -> 200 (5885ms)
+[agent] /plan request goal=help me fill the form model=gemini redacted=true elements=7 screenshotChars=88794
+[agent] /plan OK after 476ms action=ask_human detail=Remote model error (gemini): Gemini API error (429): {
+  "error": {
+    "code": …
+[agent] POST /plan -> 200 (477ms)
+[agent] /plan request goal=help me fill the form model=gemini redacted=true elements=7 screenshotChars=86986
+[agent] /plan OK after 869ms action=ask_human detail=Remote model error (gemini): Gemini API error (429): {
+  "error": {
+    "code": …
+[agent] POST /plan -> 200 (871ms)
+[agent] /plan request goal=help me fill this form model=gemini redacted=true elements=7 screenshotChars=86986
+[agent] /plan OK after 1479ms action=ask_human detail=Remote model error (gemini): Gemini API error (429): {
+  "error": {
+    "code": …
+[agent] POST /plan -> 200 (1479ms)
+[agent] /plan request goal=help me fill the form model=gemini redacted=true elements=7 screenshotChars=86986
+[agent] /plan OK after 1128ms action=ask_human detail=Remote model error (gemini): Gemini API error (429): {
+  "error": {
+    "code": …
+[agent] POST /plan -> 200 (1129ms)
+[agent] /plan request goal=help me fill this form model=gemini redacted=true elements=7 screenshotChars=86986
+[agent] /plan OK after 1225ms action=ask_human detail=Remote model error (gemini): Gemini API error (429): {
+  "error": {
+    "code": …
+[agent] POST /plan -> 200 (1226ms)
+[agent] /plan request goal=help me fill this form model=gemini redacted=true elements=7 screenshotChars=86986
+[agent] /plan OK after 1146ms action=ask_human detail=Remote model error (gemini): Gemini API error (429): {
+  "error": {
+    "code": …
+[agent] POST /plan -> 200 (1148ms)

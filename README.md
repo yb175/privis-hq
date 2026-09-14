@@ -169,7 +169,7 @@ npm run serve:agent
 
 Point out: all LLM keys live **here**, on the operator server — the extension
 ships with zero keys.
-
+# testing
 ### Step 2 — Point the extension at the server (once)
 
 `chrome://extensions` → **PRIVIS** → **service worker** → DevTools console:
