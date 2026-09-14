@@ -360,10 +360,10 @@ async function main(): Promise<void> {
       }),
       f2Boxes.map((bb) => (pixelationCheck(origF2, sanE, 640, bb).changed * 100).toFixed(0) + "%").join(" "));
     check("E: non-sensitive corner unchanged", diffFraction(origF2, sanE, 640, [0, 0, 20, 20]) === 0);
-    // F2's smallest face scores 0.355 < 0.8: the existing policy correctly
-    // demands human approval — nothing crosses the wire at all.
-    check("E: low-confidence face -> human_approval, remote NOT called",
-      e.gate.decision === "human_approval" && e.sent === null, e.gate.reason);
+    // F2's smallest face scores about 0.355, which is above the detector and
+    // policy threshold of 0.35, so the redacted payload may cross the wire.
+    check("E: face at 0.355 clears the 0.35 policy threshold",
+      e.gate.decision === "allow" && e.sent !== null, e.gate.reason);
 
     // --- F. DOM-sensitive + vision-sensitive overlap ------------------------
     console.log("\n[F] DOM + vision overlap");

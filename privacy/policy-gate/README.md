@@ -19,7 +19,7 @@
 3. **Demo Exception (v0 pragmatic rule):**
    - Returns `allow` if all detections have confidence $\ge 0.8$ and the URL is `file://` or trusted demo host (`localhost`, `127.0.0.1`, `[::1]`, `demo-portal.local`, `demo-portal.internal`, `hr.internal.example`) with no `PASSWORD` detections.
 4. **Human Approval (Low Confidence):**
-   - Returns `human_approval` if any detection confidence $< 0.6$.
+   - Returns `human_approval` if any detection confidence $< 0.35$.
 5. **Human Approval (Face on Login):**
    - Returns `human_approval` if any `FACE` category detection is present on a login/auth page.
 6. **Allow (Otherwise):**

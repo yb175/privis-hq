@@ -55,17 +55,9 @@ export function validateSanitizedForLog(
       }
     }
 
-    // Verify all element labels are stripped/null
-    if (pkg.sanitizedContext?.elements) {
-      for (const el of pkg.sanitizedContext.elements) {
-        if (el.label !== null && el.label !== undefined && el.label !== "") {
-          return {
-            ok: false,
-            error: `Element "${el.element_id}" has non-null label "${el.label}"`,
-          };
-        }
-      }
-    }
+    // Labels may carry safe control semantics (for example, pickup vs
+    // dropoff). runStep PII-redacts them before creating the package; the
+    // full serialized request scan below remains the final leak tripwire.
 
     // Tripwire: regex scan across full serialized request
     const serialized = JSON.stringify(pkg);

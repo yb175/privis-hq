@@ -293,9 +293,12 @@ export interface AgentSession {
   maxSteps?: number;
   status: SessionStatus;
   gateDecision?: "allow" | "human_approval" | "block";
+  /** In-memory consent for the same unchanged risk on this task only. */
+  approvedGateFingerprints?: string[];
   history: SessionStep[];
   lastAction?: AgentAction;
   /** Redacted state/action fingerprints used to stop blind identical retries. */
+  lastStateFingerprint?: string;
   lastFailureFingerprint?: string;
   lastFailureAction?: string;
   /** Successful local interactions, normalized without snapshot versions. */
